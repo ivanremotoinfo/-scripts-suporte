@@ -300,8 +300,8 @@ if (Test-Path $miniDumpDir) {
         Write-Ok "$($dumpsMini.Count) arquivo(s) de minidump encontrado(s) em $miniDumpDir"
         $totalDumps += $dumpsMini.Count
         $dumpsMini | Select-Object -First 10 | ForEach-Object {
-            $tamanho = '{0:N0} KB' -f ($_.Length / 1KB)
-            Write-Dest ("   {0}  {1,8}  {2}" -f $_.LastWriteTime.ToString('dd/MM/yyyy HH:mm'), $tamanho, $_.Name)
+            $tamanho = [math]::Round($_.Length / 1KB, 0).ToString('N0') + ' KB'
+            Write-Dest ("   " + $_.LastWriteTime.ToString('dd/MM/yyyy HH:mm') + "  " + $tamanho.PadLeft(8) + "  " + $_.Name)
         }
         if ($dumpsMini.Count -gt 10) {
             Write-Info "   ... e mais $($dumpsMini.Count - 10) arquivo(s) mais antigos."
@@ -316,7 +316,7 @@ if (Test-Path $miniDumpDir) {
 $memDmpPath = 'C:\Windows\MEMORY.DMP'
 if (Test-Path $memDmpPath) {
     $memDmpInfo = Get-Item $memDmpPath
-    $tamanhoGB  = '{0:N2} GB' -f ($memDmpInfo.Length / 1GB)
+    $tamanhoGB  = [math]::Round($memDmpInfo.Length / 1GB, 2).ToString('N2') + ' GB'
     Write-Ok "Dump completo encontrado: MEMORY.DMP  ($tamanhoGB)  -  $($memDmpInfo.LastWriteTime.ToString('dd/MM/yyyy HH:mm'))"
     $dumpMemoria = $memDmpInfo
     $totalDumps++
@@ -499,8 +499,7 @@ if ($codigosOrdenados.Count -eq 0) {
         $nomeCode = Get-NomeBSOD -Codigo $g.Name
         $ultimaVez = ($g.Group | Sort-Object Data -Descending | Select-Object -First 1).Data
         $cor = if ($g.Count -ge 3) { 'Red' } elseif ($g.Count -ge 2) { 'Yellow' } else { 'White' }
-        Write-Host ("   {0}  x{1,-3}  {2}  ultima: {3}" -f `
-            $g.Name, $g.Count, $nomeCode, $ultimaVez.ToString('dd/MM/yyyy HH:mm')) -ForegroundColor $cor
+        Write-Host ("   " + $g.Name + "  x" + ([string]$g.Count).PadRight(3) + "  " + $nomeCode + "  ultima: " + $ultimaVez.ToString('dd/MM/yyyy HH:mm')) -ForegroundColor $cor
     }
 }
 
@@ -588,7 +587,7 @@ if ($driversSuspeitos.Count -gt 0) {
         Write-Host ''
         Write-Info 'Drivers mais recentes instalados (60 dias):'
         $driversRecentes | Select-Object -First 8 | ForEach-Object {
-            Write-Dest ("   {0}  {1}" -f $_.DataDriver.ToString('dd/MM/yyyy'), $_.Dispositivo)
+            Write-Dest ("   " + $_.DataDriver.ToString('dd/MM/yyyy') + "  " + $_.Dispositivo)
         }
     } else {
         Write-Info 'Nenhum dado de driver recente disponivel via WMI.'
@@ -605,7 +604,7 @@ Write-Host ''
 $discos = Get-WmiObject -Class Win32_DiskDrive -ErrorAction SilentlyContinue
 
 foreach ($disco in $discos) {
-    $tamanhoGB = if ($disco.Size) { '{0:N0} GB' -f ($disco.Size / 1GB) } else { 'desconhecido' }
+    $tamanhoGB = if ($disco.Size) { [math]::Round($disco.Size / 1GB, 0).ToString('N0') + ' GB' } else { 'desconhecido' }
     $cor = if ($disco.Status -eq 'OK') { 'Green' } else { 'Yellow' }
     Write-Host ("   $($disco.Model)  [$tamanhoGB]  Status: $($disco.Status)") -ForegroundColor $cor
     if ($disco.Partitions) { Write-Info "   Particoes : $($disco.Partitions)  |  Interface: $($disco.InterfaceType)" }
@@ -717,7 +716,7 @@ if ($ramInfo) {
         $veloc   = if ($m.Speed) { "$($m.Speed) MHz" } else { 'velocidade desconhecida' }
         $slot    = if ($m.DeviceLocator) { $m.DeviceLocator } else { 'slot desconhecido' }
         $fabric  = if ($m.Manufacturer) { $m.Manufacturer } else { '' }
-        Write-Dest ("   {0,-10}  {1,4} GB  {2}  {3}" -f $slot, $capGB, $veloc, $fabric)
+        Write-Dest ("   " + $slot.PadRight(10) + "  " + ([string]$capGB).PadLeft(4) + " GB  " + $veloc + "  " + $fabric)
     }
 }
 
@@ -817,14 +816,10 @@ foreach ($ev in $eventosShutdown) {
 $linhaOrdenada = $linhaDoTempo | Sort-Object Data -Descending
 
 if ($linhaOrdenada.Count -gt 0) {
-    Write-Host ("   {'Data/Hora',-20}  {'Tipo',-18}  {'Codigo',-14}  Nome" -f @{}) -ForegroundColor Cyan
-    Write-Host ("   {0,-20}  {1,-18}  {2,-14}  {3}" -f ('-'*19), ('-'*17), ('-'*13), ('-'*30)) -ForegroundColor DarkGray
+    Write-Host ("   " + "Data/Hora".PadRight(20) + "  " + "Tipo".PadRight(18) + "  " + "Codigo".PadRight(14) + "  Nome") -ForegroundColor Cyan
+    Write-Host ("   " + ('-' * 20) + "  " + ('-' * 18) + "  " + ('-' * 14) + "  " + ('-' * 30)) -ForegroundColor DarkGray
     foreach ($item in $linhaOrdenada) {
-        Write-Host ("   {0,-20}  {1,-18}  {2,-14}  {3}" -f `
-            $item.Data.ToString('dd/MM/yyyy HH:mm:ss'),
-            $item.Tipo,
-            $item.Codigo,
-            $item.Nome) -ForegroundColor $item.Cor
+        Write-Host ("   " + $item.Data.ToString('dd/MM/yyyy HH:mm:ss').PadRight(20) + "  " + $item.Tipo.PadRight(18) + "  " + $item.Codigo.PadRight(14) + "  " + $item.Nome) -ForegroundColor $item.Cor
     }
     Write-Host ''
     Write-Host ("   Total de eventos de crash nos ultimos 30 dias: $($linhaOrdenada.Count)") -ForegroundColor White
@@ -836,7 +831,7 @@ if ($linhaOrdenada.Count -gt 0) {
         Write-Info 'Distribuicao por semana:'
         foreach ($semana in ($porSemana | Sort-Object Name -Descending)) {
             $primeiraData = ($semana.Group | Sort-Object Data | Select-Object -First 1).Data
-            Write-Dest ("   Semana de {0,-12}: {1} evento(s)" -f $primeiraData.ToString('dd/MM/yyyy'), $semana.Count)
+            Write-Dest ("   Semana de " + $primeiraData.ToString('dd/MM/yyyy').PadRight(12) + ": " + $semana.Count + " evento(s)")
         }
     }
 } else {
