@@ -74,13 +74,3 @@ foreach ($item in $lista) {
 }
 
 Write-Host "`nTotal encontrado: $($lista.Count) certificado(s)" -ForegroundColor Cyan
-
-# Exporta para CSV se quiser
-$exportar = ""
-try { $exportar = Read-Host "`nDeseja exportar para CSV? (s/N)" } catch {}
-if ($exportar -match "^[sS]$") {
-    $arquivo = ".\certificados_$(Get-Date -Format 'yyyyMMdd_HHmm').csv"
-    $lista | Select-Object Nome, Emissor, ValidoDe, ValidoAte, DiasRestantes, Status, Thumbprint |
-        Export-Csv -Path $arquivo -NoTypeInformation -Encoding UTF8
-    Write-Host "Exportado para: $arquivo" -ForegroundColor Green
-}
