@@ -403,6 +403,240 @@ if (-not $encontrouAtalho) {
 }
 
 # =========================================================================
+# ETAPA 8 - LIMPEZA DO REGISTRO (CAMINHOS INVALIDOS)
+# =========================================================================
+
+Write-Titulo 'ETAPA 8 - Limpeza do Registro'
+
+# Extrai o caminho do executavel de uma string de registro (remove aspas e argumentos)
+function Get-CaminhoImagePath {
+    param([string]$Valor)
+    $v = $Valor.Trim()
+    if ($v -eq '') { return '' }
+    if ($v -match '^"([^"]+)"') {
+        return [System.Environment]::ExpandEnvironmentVariables($Matches[1].Trim())
+    }
+    if ($v -match '(?i)^(.+?\.(exe|dll|sys|ocx|cpl|drv))(\s|$)') {
+        return [System.Environment]::ExpandEnvironmentVariables($Matches[1].Trim())
+    }
+    $parte = ($v -split '\s+')[0]
+    return [System.Environment]::ExpandEnvironmentVariables($parte.Trim('"'))
+}
+
+# ---- 8.1 Servicos com ImagePath invalido --------------------------------
+
+Write-Etapa '8.1  Servicos com ImagePath apontando para arquivo inexistente...'
+
+$svcVer = 0
+$svcRem = 0
+$svcKey = 'HKLM:\SYSTEM\CurrentControlSet\Services'
+
+Get-ChildItem -Path $svcKey -ErrorAction SilentlyContinue | ForEach-Object {
+    $p = Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue
+    if (-not $p) { return }
+    $imgPath = [string]$p.ImagePath
+    if ($imgPath -eq '') { return }
+    # Pula servicos nativos do Windows (system32, syswow64, \SystemRoot, drivers, \??\)
+    if ($imgPath -match '(?i)(\\SystemRoot\\|\\Windows\\|system32|syswow64|\\drivers\\|\\?\?\\|^system)') { return }
+    # Pula servicos de boot e sistema criticos (Start 0 ou 1)
+    if ($null -ne $p.Start -and [int]$p.Start -le 1) { return }
+    $caminho = Get-CaminhoImagePath -Valor $imgPath
+    if ($caminho.Length -lt 5) { return }
+    $svcVer++
+    if (-not (Test-Path $caminho -ErrorAction SilentlyContinue)) {
+        try {
+            Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+            $svcRem++
+            Write-Ok "Servico orfao removido: $($_.PSChildName)  [$caminho]"
+            Add-Relatorio "Servico orfao: $($_.PSChildName)"
+        } catch {
+            Write-Aviso "Sem permissao para remover servico: $($_.PSChildName)"
+        }
+    }
+}
+Write-Info "Servicos verificados: $svcVer  |  Removidos: $svcRem"
+
+# ---- 8.2 SharedDLLs com caminhos inexistentes ---------------------------
+
+Write-Etapa '8.2  SharedDLLs com caminho de arquivo inexistente...'
+
+$sdllVer    = 0
+$sdllRem    = 0
+$sdllKey    = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\SharedDLLs'
+$psExclude  = @('PSPath', 'PSParentPath', 'PSChildName', 'PSProvider')
+
+if (Test-Path $sdllKey) {
+    $sdllProps = Get-ItemProperty -Path $sdllKey -ErrorAction SilentlyContinue
+    if ($sdllProps) {
+        $sdllProps.PSObject.Properties |
+            Where-Object { $_.Name -notin $psExclude } |
+            ForEach-Object {
+                $caminho = [System.Environment]::ExpandEnvironmentVariables($_.Name)
+                $sdllVer++
+                if (-not (Test-Path $caminho -ErrorAction SilentlyContinue)) {
+                    try {
+                        Remove-ItemProperty -Path $sdllKey -Name $_.Name -Force -ErrorAction SilentlyContinue
+                        $sdllRem++
+                        Write-Ok "SharedDLL removida: $caminho"
+                        Add-Relatorio "SharedDLL orfao: $caminho"
+                    } catch {
+                        Write-Aviso "Sem permissao para remover SharedDLL: $($_.Name)"
+                    }
+                }
+            }
+    }
+}
+Write-Info "SharedDLLs verificadas: $sdllVer  |  Removidas: $sdllRem"
+
+# ---- Resumo ---------------------------------------------------------------
+
+$totalEtapa8 = $svcRem + $sdllRem
+Write-Host ''
+Write-Ok "Limpeza do registro concluida. Entradas removidas: $totalEtapa8"
+Add-Relatorio ''
+Add-Relatorio "Etapa 8 - Registro: $svcRem servico(s) orfao(s), $sdllRem SharedDLL(s) orfao(s)"
+
+# =========================================================================
+# ETAPA 9 - LIMPEZA DO CACHE E REGISTRO MSI
+# =========================================================================
+
+Write-Titulo 'ETAPA 9 - Cache e Registro MSI'
+
+# ---- 9.1 Arquivos .msi e .msp em C:\Windows\Installer ------------------
+
+Write-Etapa '9.1  Arquivos em C:\Windows\Installer com nome do produto...'
+
+$msiCacheDir = 'C:\Windows\Installer'
+$msiVer      = 0
+$msiRem      = 0
+$msiBytes    = [long]0
+
+if (Test-Path $msiCacheDir) {
+    $installerCom = $null
+    try {
+        $installerCom = New-Object -ComObject WindowsInstaller.Installer -ErrorAction Stop
+
+        Get-ChildItem -Path $msiCacheDir -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -eq '.msi' -or $_.Extension -eq '.msp' } |
+            ForEach-Object {
+                $arquivo  = $_
+                $prodName = ''
+
+                try {
+                    if ($arquivo.Extension -eq '.msi') {
+                        $db = $null
+                        try {
+                            $db = $installerCom.OpenDatabase($arquivo.FullName, 0)
+                            $vw = $db.OpenView("SELECT Value FROM Property WHERE Property = 'ProductName'")
+                            $vw.Execute()
+                            $rec = $vw.Fetch()
+                            if ($rec) {
+                                $prodName = [string]$rec.StringData(1)
+                                [System.Runtime.InteropServices.Marshal]::ReleaseComObject($rec) | Out-Null
+                            }
+                            [System.Runtime.InteropServices.Marshal]::ReleaseComObject($vw) | Out-Null
+                        } finally {
+                            if ($db) { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($db) | Out-Null }
+                        }
+                    } elseif ($arquivo.Extension -eq '.msp') {
+                        $sum = $null
+                        try {
+                            $sum = $installerCom.SummaryInformation($arquivo.FullName, 0)
+                            $prodName = [string]$sum.Property(3)
+                        } finally {
+                            if ($sum) { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($sum) | Out-Null }
+                        }
+                    }
+                } catch { $prodName = '' }
+
+                if ($prodName -eq '') { return }
+                $msiVer++
+
+                if ($prodName -like "*$nomeBusca*") {
+                    $tamanho = $arquivo.Length
+                    try {
+                        Remove-Item -Path $arquivo.FullName -Force -ErrorAction SilentlyContinue
+                        $msiRem++
+                        $msiBytes += $tamanho
+                        Write-Ok "Cache MSI removido: $($arquivo.Name)  [$prodName]"
+                        Add-Relatorio "Cache MSI: $($arquivo.Name) ($prodName)"
+                    } catch {
+                        Write-Aviso "Sem permissao para remover: $($arquivo.Name)"
+                    }
+                }
+            }
+    } catch {
+        Write-Aviso "WindowsInstaller.Installer nao disponivel: $_"
+    } finally {
+        if ($installerCom) { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($installerCom) | Out-Null }
+    }
+}
+
+$msiMB = if ($msiBytes -ge 1MB) { '{0:N1} MB' -f ($msiBytes / 1MB) } else { "$([int]($msiBytes / 1KB)) KB" }
+Write-Info "Arquivos MSI/MSP com produto legivel: $msiVer  |  Removidos: $msiRem  ($msiMB liberados)"
+
+# ---- 9.2 Entradas de registro MsiExec com nome do programa -------------
+
+Write-Etapa '9.2  Registro MsiExec com nome do programa...'
+
+$regMsiVer = 0
+$regMsiRem = 0
+
+# UserData: ...Installer\UserData\{SID}\Products\{GUID}\InstallProperties (DisplayName)
+$userDataKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData'
+if (Test-Path $userDataKey) {
+    Get-ChildItem -Path $userDataKey -ErrorAction SilentlyContinue | ForEach-Object {
+        $productsPath = "$($_.PSPath)\Products"
+        if (-not (Test-Path $productsPath)) { return }
+        Get-ChildItem -Path $productsPath -ErrorAction SilentlyContinue | ForEach-Object {
+            $installPropsPath = "$($_.PSPath)\InstallProperties"
+            if (-not (Test-Path $installPropsPath)) { return }
+            $props = Get-ItemProperty -Path $installPropsPath -ErrorAction SilentlyContinue
+            $displayName = [string]$props.DisplayName
+            if ($displayName -eq '') { return }
+            $regMsiVer++
+            if ($displayName -like "*$nomeBusca*") {
+                $prodPath = $_.PSPath
+                try {
+                    Remove-Item -Path $prodPath -Recurse -Force -ErrorAction SilentlyContinue
+                    $regMsiRem++
+                    Write-Ok "UserData MSI removido: $displayName"
+                    Add-Relatorio "Registro MSI UserData: $displayName"
+                } catch {
+                    Write-Aviso "Sem permissao para remover UserData: $displayName"
+                }
+            }
+        }
+    }
+}
+
+# Classes: HKLM\SOFTWARE\Classes\Installer\Products\{PackedGUID} (ProductName)
+$classesProductsKey = 'HKLM:\SOFTWARE\Classes\Installer\Products'
+if (Test-Path $classesProductsKey) {
+    Get-ChildItem -Path $classesProductsKey -ErrorAction SilentlyContinue | ForEach-Object {
+        $props = Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue
+        $prodName = [string]$props.ProductName
+        if ($prodName -eq '') { return }
+        $regMsiVer++
+        if ($prodName -like "*$nomeBusca*") {
+            try {
+                Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+                $regMsiRem++
+                Write-Ok "Classes MSI removido: $prodName"
+                Add-Relatorio "Registro MSI Classes: $prodName"
+            } catch {
+                Write-Aviso "Sem permissao para remover Classes: $prodName"
+            }
+        }
+    }
+}
+
+Write-Info "Entradas de registro MSI verificadas: $regMsiVer  |  Removidas: $regMsiRem"
+Write-Host ''
+Add-Relatorio ''
+Add-Relatorio "Etapa 9 - MSI: $msiRem arquivo(s) de cache, $regMsiRem entrada(s) de registro removidos"
+
+# =========================================================================
 # RELATORIO FINAL
 # =========================================================================
 
