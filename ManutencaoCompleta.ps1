@@ -3865,17 +3865,24 @@ if ($Ferramenta) {
                 if ($progs.Count -eq 0) { Write-Aviso 'Nenhum programa listavel.' }
                 else {
                     Write-Host ''
-                    # Mostra TODOS de uma vez, em 2 colunas (coluna esq. 1..N/2)
-                    $meio = [math]::Ceiling($progs.Count / 2)
+                    # Mostra TODOS de uma vez, em 3 colunas (preenchidas por coluna)
+                    $cols = 3
+                    $rows = [math]::Ceiling($progs.Count / $cols)
                     function Fmt-Item($idx) {
                         $nm = $progs[$idx].Nome
-                        if ($nm.Length -gt 33) { $nm = $nm.Substring(0, 31) + '..' }
+                        if ($nm.Length -gt 25) { $nm = $nm.Substring(0, 23) + '..' }
                         '{0,3}) {1}' -f ($idx + 1), $nm
                     }
-                    for ($r = 0; $r -lt $meio; $r++) {
-                        $linha = '  ' + (Fmt-Item $r).PadRight(43)
-                        $j = $r + $meio
-                        if ($j -lt $progs.Count) { $linha += (Fmt-Item $j) }
+                    for ($r = 0; $r -lt $rows; $r++) {
+                        $linha = '  '
+                        for ($c = 0; $c -lt $cols; $c++) {
+                            $idx = $r + ($c * $rows)
+                            if ($idx -lt $progs.Count) {
+                                $cel = Fmt-Item $idx
+                                if ($c -lt ($cols - 1)) { $cel = $cel.PadRight(34) }
+                                $linha += $cel
+                            }
+                        }
                         Write-Host $linha -ForegroundColor White
                     }
                     Write-Host ''
