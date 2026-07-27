@@ -9161,6 +9161,368 @@ function Repair-SistemaAvancado {
     return [long]0
 }
 
+# =========================================================================
+# REGIAO: RELATORIO DE ATENDIMENTO, DESFAZER E TESTE DE MEMORIA
+# =========================================================================
+
+function New-RelatorioAtendimento {
+    <#
+      Documento para ENTREGAR AO ESCRITORIO - nao e o log tecnico.
+      Resume o que foi feito no atendimento, como a maquina esta e o que
+      precisa de atencao. Serve de comprovante do servico e, quando o disco
+      morre dois meses depois, prova que o alerta foi dado.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Geraria o relatorio de atendimento para o cliente.'; return [long]0 }
+
+    Write-Etapa 'Relatorio de atendimento para o cliente'
+
+    $linhas = [System.Collections.Generic.List[string]]::new()
+    $add = { param([string]$t) $linhas.Add($t) }
+
+    & $add ('=' * 78)
+    & $add '                      RELATORIO DE ATENDIMENTO TECNICO'
+    & $add '                        SuporteADV - suporte.adv.br'
+    & $add ('=' * 78)
+    & $add ''
+    & $add ("Computador : $env:COMPUTERNAME")
+    & $add ("Usuario    : $env:USERNAME")
+    & $add ("Data       : " + (Get-Date -Format 'dd/MM/yyyy HH:mm'))
+    & $add ''
+
+    # --- Identificacao da maquina ---
+    & $add ('-' * 78)
+    & $add 'EQUIPAMENTO'
+    & $add ('-' * 78)
+    try {
+        $cs  = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+        $os  = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+        $cpu = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($cs)  { & $add ("  Modelo          : $($cs.Manufacturer) $($cs.Model)") }
+        if ($cpu) { & $add ("  Processador     : $($cpu.Name.Trim())") }
+        if ($cs)  { & $add ("  Memoria RAM     : " + [math]::Round($cs.TotalPhysicalMemory / 1GB, 1) + " GB") }
+        if ($os)  {
+            & $add ("  Sistema         : $($os.Caption) ($($os.OSArchitecture))")
+            $boot = $os.LastBootUpTime
+            if ($boot) { & $add ("  Ligado desde    : " + $boot.ToString('dd/MM/yyyy HH:mm')) }
+        }
+    } catch { }
+
+    # --- Discos ---
+    & $add ''
+    & $add ('-' * 78)
+    & $add 'ARMAZENAMENTO'
+    & $add ('-' * 78)
+    # Espaco cheio e disco com defeito sao problemas diferentes: o primeiro se
+    # resolve liberando espaco, o segundo exige trocar o disco. Nao misturar.
+    $espacoCritico = $false
+    $falhaSMART    = $false
+    try {
+        foreach ($v in @(Get-Volume -ErrorAction SilentlyContinue |
+                         Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter })) {
+            $tot = [math]::Round($v.Size / 1GB, 1)
+            $liv = [math]::Round($v.SizeRemaining / 1GB, 1)
+            $pct = if ($v.Size -gt 0) { [math]::Round(($v.SizeRemaining / $v.Size) * 100) } else { 0 }
+            $obs = if ($pct -lt 10) { '   ATENCAO: espaco critico' } elseif ($pct -lt 20) { '   pouco espaco' } else { '' }
+            & $add ("  Disco $($v.DriveLetter): $liv GB livres de $tot GB ($pct%)$obs")
+            if ($pct -lt 10) { $espacoCritico = $true }
+        }
+        foreach ($d in @(Get-CimInstance -ClassName MSStorageDriver_FailurePredictStatus -Namespace root\wmi -ErrorAction SilentlyContinue)) {
+            if ($d.PredictFailure) {
+                & $add '  ALERTA: o proprio disco esta prevendo falha (SMART).'
+                & $add '          Recomendamos backup imediato e substituicao.'
+                $falhaSMART = $true
+            }
+        }
+        if (-not $falhaSMART) { & $add '  Saude dos discos (SMART): sem alerta de falha.' }
+    } catch { }
+
+    # --- Seguranca ---
+    & $add ''
+    & $add ('-' * 78)
+    & $add 'SEGURANCA'
+    & $add ('-' * 78)
+    try {
+        $mp = Get-MpComputerStatus -ErrorAction SilentlyContinue
+        if ($mp) {
+            & $add ("  Antivirus ativo        : " + $(if ($mp.AMServiceEnabled) { 'sim' } else { 'NAO' }))
+            & $add ("  Protecao em tempo real : " + $(if ($mp.RealTimeProtectionEnabled) { 'sim' } else { 'NAO' }))
+            if ($mp.AntivirusSignatureLastUpdated) {
+                & $add ("  Assinaturas de         : " + $mp.AntivirusSignatureLastUpdated.ToString('dd/MM/yyyy'))
+            }
+            if (-not $mp.RealTimeProtectionEnabled) {
+                & $add '  ATENCAO: a protecao em tempo real esta desligada.'
+            }
+        }
+        $fw = @(Get-NetFirewallProfile -ErrorAction SilentlyContinue | Where-Object { -not $_.Enabled })
+        if ($fw.Count -gt 0) { & $add ("  ATENCAO: firewall desligado em: " + (($fw | ForEach-Object { $_.Name }) -join ', ')) }
+        else { & $add '  Firewall               : ativo' }
+    } catch { }
+
+    # --- Certificados que vencem ---
+    try {
+        $hoje = Get-Date
+        $venc = @(Get-ChildItem 'Cert:\CurrentUser\My' -ErrorAction SilentlyContinue |
+                  Where-Object { $_.NotAfter -lt $hoje.AddDays(60) })
+        if ($venc.Count -gt 0) {
+            & $add ''
+            & $add ('-' * 78)
+            & $add 'CERTIFICADO DIGITAL'
+            & $add ('-' * 78)
+            foreach ($c in $venc) {
+                $nome = if ($c.Subject -match 'CN=([^,]+)') { $Matches[1] } else { $c.Subject }
+                $dias = ($c.NotAfter - $hoje).Days
+                $situacao = if ($dias -lt 0) { "VENCIDO ha $([math]::Abs($dias)) dias" } else { "vence em $dias dias" }
+                & $add ("  $nome")
+                & $add ("     $situacao (em " + $c.NotAfter.ToString('dd/MM/yyyy') + ")")
+            }
+            & $add '  Providencie a renovacao junto a Autoridade Certificadora.'
+        }
+    } catch { }
+
+    # --- O que foi feito hoje ---
+    & $add ''
+    & $add ('-' * 78)
+    & $add 'SERVICOS EXECUTADOS NESTE ATENDIMENTO'
+    & $add ('-' * 78)
+    $fezAlgo = $false
+    try {
+        $baseLogs = 'C:\ProgramData\SuporteTI\Logs'
+        if (Test-Path -LiteralPath $baseLogs) {
+            $hojeStr = Get-Date -Format 'yyyy-MM-dd'
+            $pastas = @(Get-ChildItem -LiteralPath $baseLogs -Directory -ErrorAction SilentlyContinue |
+                        Where-Object { $_.Name -like "*$hojeStr*" } | Sort-Object CreationTime)
+            foreach ($p in $pastas) {
+                $log = Join-Path $p.FullName 'manutencao.log'
+                $hora = $p.CreationTime.ToString('HH:mm')
+                $desc = 'Manutencao'
+                if (Test-Path -LiteralPath $log) {
+                    $cab = @(Get-Content -LiteralPath $log -TotalCount 40 -ErrorAction SilentlyContinue |
+                             Where-Object { $_ -match 'FERRAMENTA:' })
+                    if ($cab.Count -gt 0) { $desc = ($cab[0] -replace '.*FERRAMENTA:\s*', '').Trim() }
+                    else { $desc = 'Manutencao completa' }
+                }
+                & $add ("  $hora  -  $desc")
+                $fezAlgo = $true
+            }
+        }
+    } catch { }
+    if (-not $fezAlgo) {
+        & $add '  (nenhuma execucao registrada hoje nesta maquina)'
+    }
+
+    # --- Recomendacoes ---
+    & $add ''
+    & $add ('-' * 78)
+    & $add 'RECOMENDACOES'
+    & $add ('-' * 78)
+    $rec = [System.Collections.Generic.List[string]]::new()
+    if ($falhaSMART) {
+        $rec.Add('URGENTE: o disco esta prevendo falha. Fazer backup dos dados e substituir o disco.')
+    }
+    if ($espacoCritico) {
+        $rec.Add('Liberar espaco em disco (abaixo de 10% livre o Windows fica lento e pode falhar ao atualizar).')
+    }
+    try {
+        $mp2 = Get-MpComputerStatus -ErrorAction SilentlyContinue
+        if ($mp2 -and -not $mp2.RealTimeProtectionEnabled) { $rec.Add('Religar a protecao em tempo real do antivirus.') }
+    } catch { }
+    if ($script:precisaReiniciar) { $rec.Add('Reiniciar o computador para concluir as alteracoes.') }
+    if ($rec.Count -eq 0) { $rec.Add('Nenhuma pendencia. Manter as atualizacoes do Windows em dia.') }
+    foreach ($r in $rec) { & $add ("  - $r") }
+
+    & $add ''
+    & $add ('=' * 78)
+    & $add '  Documento gerado automaticamente pelo sistema de manutencao SuporteADV.'
+    & $add ('=' * 78)
+
+    # --- Salvar ---
+    $nomeArq = 'Atendimento_' + $env:COMPUTERNAME + '_' + (Get-Date -Format 'yyyy-MM-dd_HHmm') + '.txt'
+    $destino = Join-Path ([Environment]::GetFolderPath('Desktop')) $nomeArq
+    try {
+        [System.IO.File]::WriteAllLines($destino, $linhas.ToArray(), (New-Object System.Text.UTF8Encoding($true)))
+        Write-Ok "Relatorio salvo na Area de Trabalho:"
+        Write-Info "   $destino"
+        try { Start-Process 'notepad.exe' -ArgumentList $destino -ErrorAction SilentlyContinue } catch { }
+        Write-Info 'Este arquivo pode ser entregue ao cliente por e-mail ou impresso.'
+    } catch {
+        Write-Falha "Nao foi possivel salvar: $($_.Exception.Message)"
+        foreach ($l in $linhas) { Write-Host "     $l" -ForegroundColor Gray }
+    }
+    return [long]0
+}
+
+function Undo-UltimaManutencao {
+    <#
+      Caminho de volta guiado. Os backups ja existiam (ponto de restauracao,
+      .reg, RESTAURAR.cmd, quarentena, AnyDesk), mas espalhados: era preciso
+      saber onde procurar. Aqui tudo aparece numa lista so.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Listaria os backups disponiveis para reverter.'; return [long]0 }
+
+    Write-Etapa 'Desfazer alteracoes de um atendimento'
+
+    $baseLogs = 'C:\ProgramData\SuporteTI\Logs'
+    if (-not (Test-Path -LiteralPath $baseLogs)) {
+        Write-Info 'Nenhuma execucao registrada nesta maquina.'
+        return [long]0
+    }
+
+    $pastas = @(Get-ChildItem -LiteralPath $baseLogs -Directory -ErrorAction SilentlyContinue |
+                Sort-Object CreationTime -Descending | Select-Object -First 12)
+    if ($pastas.Count -eq 0) { Write-Info 'Nenhuma pasta de log encontrada.'; return [long]0 }
+
+    Write-Info 'Execucoes registradas (mais recentes primeiro):'
+    Write-Host ''
+    $i = 1
+    foreach ($p in $pastas) {
+        $itens = [System.Collections.Generic.List[string]]::new()
+        if (Test-Path -LiteralPath (Join-Path $p.FullName 'RESTAURAR.cmd')) { $itens.Add('registro/inicializacao') }
+        if (Test-Path -LiteralPath (Join-Path $p.FullName 'backup-anydesk'))  { $itens.Add('AnyDesk') }
+        if (@(Get-ChildItem -LiteralPath $p.FullName -Filter '*.reg' -ErrorAction SilentlyContinue).Count -gt 0) { $itens.Add('.reg') }
+        $temQue = if ($itens.Count) { ($itens -join ', ') } else { 'sem backup para reverter' }
+        Write-Host ("     [{0,2}] {1}   ({2})" -f $i, $p.CreationTime.ToString('dd/MM/yyyy HH:mm'), $temQue) -ForegroundColor White
+        $i++
+    }
+
+    if ($SemInteracao) { return [long]0 }
+
+    Write-Host ''
+    Write-Info 'Voce tambem pode usar a Restauracao do Sistema do Windows, que desfaz'
+    Write-Info 'tudo de uma vez (a manutencao completa cria um ponto antes de comecar).'
+    Write-Host ''
+    Write-Host '     [numero] escolher uma execucao   [R] abrir a Restauracao do Sistema   [0] sair' -ForegroundColor DarkGray
+    Write-Host ''
+    $sel = (Read-Host '  Opcao').Trim()
+
+    if ($sel -match '^[Rr]$') {
+        try { Start-Process 'rstrui.exe' -ErrorAction Stop; Write-Ok 'Restauracao do Sistema aberta.' }
+        catch { Write-Aviso 'Nao foi possivel abrir. Use: Windows + R > rstrui' }
+        return [long]0
+    }
+    if ($sel -notmatch '^\d+$' -or [int]$sel -lt 1 -or [int]$sel -gt $pastas.Count) {
+        Write-Info 'Cancelado.'
+        return [long]0
+    }
+
+    $alvo = $pastas[[int]$sel - 1]
+    Write-Host ''
+    Write-Dest ("Pasta: " + $alvo.FullName)
+
+    $restCmd = Join-Path $alvo.FullName 'RESTAURAR.cmd'
+    $bkpAny  = Join-Path $alvo.FullName 'backup-anydesk'
+
+    Write-Host ''
+    if (Test-Path -LiteralPath $restCmd) {
+        Write-Host '     [1] Restaurar registro e programas de inicializacao (RESTAURAR.cmd)' -ForegroundColor White
+    }
+    if (Test-Path -LiteralPath $bkpAny) {
+        Write-Host '     [2] Restaurar a pasta do AnyDesk (ID e senha antigos)' -ForegroundColor White
+    }
+    Write-Host '     [3] Abrir a pasta no Explorer' -ForegroundColor White
+    Write-Host '     [0] Voltar' -ForegroundColor DarkGray
+    Write-Host ''
+    $acao = (Read-Host '  Opcao').Trim()
+
+    switch ($acao) {
+        '1' {
+            if (-not (Test-Path -LiteralPath $restCmd)) { Write-Aviso 'Este atendimento nao tem RESTAURAR.cmd.'; break }
+            Write-Aviso 'Isto devolve as chaves de registro e a inicializacao ao estado anterior.'
+            $c = Read-Host '  Confirma? (S/N)'
+            if ($c -match '^[Ss]') {
+                Start-Process 'cmd.exe' -ArgumentList '/c', "`"$restCmd`"" -Wait -Verb RunAs -ErrorAction SilentlyContinue
+                Write-Ok 'Restauracao executada. Reinicie para aplicar por completo.'
+                $script:precisaReiniciar = $true
+            } else { Write-Info 'Cancelado.' }
+        }
+        '2' {
+            if (-not (Test-Path -LiteralPath $bkpAny)) { Write-Aviso 'Este atendimento nao tem backup do AnyDesk.'; break }
+            Write-Aviso 'O AnyDesk precisa estar FECHADO para restaurar.'
+            $c = Read-Host '  Confirma? (S/N)'
+            if ($c -match '^[Ss]') {
+                $proc = Get-Process -Name 'AnyDesk' -ErrorAction SilentlyContinue
+                if ($proc) { Write-Aviso 'AnyDesk aberto - feche e tente de novo.'; break }
+                foreach ($par in @(@{ O = 'APPDATA'; D = (Join-Path $env:APPDATA 'AnyDesk') },
+                                   @{ O = 'LOCALAPPDATA'; D = (Join-Path $env:LOCALAPPDATA 'AnyDesk') })) {
+                    $origem = Join-Path $bkpAny $par.O
+                    if (Test-Path -LiteralPath $origem) {
+                        try {
+                            Copy-Item -LiteralPath $origem -Destination $par.D -Recurse -Force -ErrorAction Stop
+                            Write-Ok ("Restaurado: " + $par.D)
+                        } catch { Write-Falha ("Falha em " + $par.D + ": " + $_.Exception.Message) }
+                    }
+                }
+            } else { Write-Info 'Cancelado.' }
+        }
+        '3' {
+            try { Start-Process 'explorer.exe' -ArgumentList $alvo.FullName -ErrorAction Stop }
+            catch { Write-Info ("Abra a mao: " + $alvo.FullName) }
+        }
+        default { Write-Info 'Nada feito.' }
+    }
+    return [long]0
+}
+
+function Test-MemoriaRAM {
+    <#
+      Mostra a memoria instalada e agenda o teste do Windows. Vale quando a
+      tela azul volta depois do reparo: RAM defeituosa e disco ruim sao os
+      dois suspeitos que sobram.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Mostraria a memoria instalada e ofereceria agendar o teste.'; return [long]0 }
+
+    Write-Etapa 'Memoria RAM - informacoes e teste'
+
+    try {
+        $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+        if ($cs) { Write-Info ("Total instalado : " + [math]::Round($cs.TotalPhysicalMemory / 1GB, 1) + " GB") }
+        $pentes = @(Get-CimInstance Win32_PhysicalMemory -ErrorAction SilentlyContinue)
+        Write-Info ("Pentes          : " + $pentes.Count)
+        foreach ($p in $pentes) {
+            $gb  = [math]::Round($p.Capacity / 1GB, 1)
+            $vel = if ($p.Speed) { "$($p.Speed) MHz" } else { 'velocidade nao informada' }
+            $fab = if ($p.Manufacturer) { $p.Manufacturer.Trim() } else { 'fabricante nao informado' }
+            Write-Info ("   $($p.DeviceLocator): $gb GB  $vel  $fab")
+        }
+    } catch { Write-Aviso "Nao foi possivel ler os dados da memoria: $($_.Exception.Message)" }
+
+    # Resultado de teste anterior, se houver
+    try {
+        $ev = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-MemoryDiagnostics-Results' } `
+                -MaxEvents 3 -ErrorAction SilentlyContinue)
+        if ($ev.Count -gt 0) {
+            Write-Host ''
+            Write-Dest 'Testes de memoria ja realizados:'
+            foreach ($e in $ev) {
+                Write-Info ("   " + $e.TimeCreated.ToString('dd/MM/yyyy HH:mm') + " - " + ($e.Message -split "`n")[0].Trim())
+            }
+        } else {
+            Write-Host ''
+            Write-Info 'Nenhum teste de memoria registrado nesta maquina.'
+        }
+    } catch { }
+
+    if ($SemInteracao) { return [long]0 }
+
+    Write-Host ''
+    Write-Aviso 'O teste do Windows roda ANTES do sistema iniciar e leva de 15 a 40 minutos.'
+    Write-Info  'O computador REINICIA para executa-lo. Salve tudo antes.'
+    Write-Info  'Ao terminar, o Windows volta sozinho e o resultado aparece aqui nesta tela.'
+    Write-Host ''
+    $c = Read-Host '  Agendar o teste para o proximo reinicio? (S/N)'
+    if ($c -match '^[Ss]') {
+        try {
+            Start-Process 'mdsched.exe' -ErrorAction Stop
+            Write-Ok 'Ferramenta de diagnostico de memoria aberta.'
+            Write-Info 'Escolha "Reiniciar agora" ou "Verificar na proxima vez".'
+        } catch {
+            Write-Aviso 'Nao foi possivel abrir. Use: Windows + R > mdsched'
+        }
+    } else {
+        Write-Info 'Nada agendado.'
+    }
+    return [long]0
+}
+
 function Remove-PastaAnyDesk {
     param(
         [ValidateSet('Completo', 'SomenteLogs')][string]$Modo = 'SomenteLogs',
@@ -10144,6 +10506,9 @@ if ($Ferramenta) {
             }
             'certificados'  { Show-CertificadosInstalados | Out-Null }
             'dll'           { Repair-DLLFaltando | Out-Null }
+            'atendimento'   { New-RelatorioAtendimento | Out-Null }
+            'desfazer'      { Undo-UltimaManutencao | Out-Null }
+            'memoriaram'    { Test-MemoriaRAM | Out-Null }
             'reparoavancado' { Repair-SistemaAvancado | Out-Null }
             'bsod'          { Show-AnaliseBSOD | Out-Null }
             'proxycert'      { Repair-ProxyECertificados | Out-Null }
@@ -10269,7 +10634,7 @@ if ($Ferramenta) {
     }
     Write-Host ''
     # Ferramentas somente-leitura nao deixam log salvo.
-    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll')) {
+    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'atendimento', 'memoriaram')) {
         Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
     }
     Write-Host ('=' * 68) -ForegroundColor Green
@@ -10277,7 +10642,7 @@ if ($Ferramenta) {
     # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
     if ($chave -in @('diagnostico', 'bsod')) { Publicar-RelatorioTemp -RemoverPastaLog }
     # protecaovirus/consoles: so abriram telas; nao deixam pasta de log.
-    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll')) {
+    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'atendimento', 'memoriaram')) {
         Remove-Item -LiteralPath (Join-Path $script:pastaExec 'manutencao.log') -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 200
         if ($script:pastaExec -and (Test-Path -LiteralPath $script:pastaExec)) {

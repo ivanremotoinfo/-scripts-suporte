@@ -23,6 +23,43 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
     [Security.Principal.WindowsBuiltInRole]::Administrator
 )
 
+# =========================================================================
+# ELEVACAO AUTOMATICA
+# =========================================================================
+# Quando o cliente cola o comando numa janela comum, metade das opcoes falha
+# e parece defeito da ferramenta. Aqui o menu se relanca elevado sozinho.
+# Rodando via "irm | iex" nao existe arquivo local para relancar, entao
+# baixamos uma copia para a pasta temporaria e chamamos ela com RunAs.
+
+if (-not $isAdmin -and -not $env:SUPORTEADV_SEM_ELEVAR) {
+    Write-Host ''
+    Write-Host '  Esta janela nao esta como Administrador.' -ForegroundColor Yellow
+    Write-Host '  Reabrindo elevado - confirme no aviso do Windows (UAC)...' -ForegroundColor Yellow
+    Write-Host ''
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $conteudo = (Invoke-RestMethod -Uri ($baseUrl + 'SuporteADV.ps1') -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop).ToString()
+        $conteudo = $conteudo.TrimStart([char]0xFEFF)
+        $tmpMenu  = [System.IO.Path]::GetTempPath() + 'SuporteADV_' + [System.Guid]::NewGuid().ToString('N') + '.ps1'
+        [System.IO.File]::WriteAllText($tmpMenu, $conteudo, (New-Object System.Text.UTF8Encoding($false)))
+        Unblock-File $tmpMenu -ErrorAction SilentlyContinue
+
+        Start-Process -FilePath 'powershell.exe' `
+            -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', "`"$tmpMenu`"" `
+            -Verb RunAs -ErrorAction Stop
+        Write-Host '  Menu aberto na janela elevada. Pode fechar esta.' -ForegroundColor Green
+        Write-Host ''
+        return
+    } catch {
+        # UAC recusado ou sem como elevar: segue no modo limitado, avisando.
+        Write-Host '  Nao foi possivel abrir elevado.' -ForegroundColor Red
+        Write-Host ("  Motivo: " + $_.Exception.Message) -ForegroundColor DarkGray
+        Write-Host '  Seguindo como usuario limitado - varias opcoes nao vao funcionar.' -ForegroundColor Yellow
+        Write-Host ''
+        Start-Sleep -Seconds 3
+    }
+}
+
 # Cada item do menu:
 #   N     = numero
 #   Cat   = categoria (agrupa e colore)
@@ -37,6 +74,8 @@ $menu = @(
     @{ Cat='DIAGNOSTICO'; Label='Maiores Consumidores de RAM';   Tipo='v2';     Args=@{ Ferramenta='topprocessos' } }
     @{ Cat='DIAGNOSTICO'; Label='Listar Certificados Digitais';  Tipo='v2';     Args=@{ Ferramenta='certificados' } }
     @{ Cat='DIAGNOSTICO'; Label='Analisar Tela Azul (BSOD)';     Tipo='v2';     Args=@{ Ferramenta='bsod' } }
+    @{ Cat='DIAGNOSTICO'; Label='Teste de Memoria RAM';          Tipo='v2';     Args=@{ Ferramenta='memoriaram' } }
+    @{ Cat='DIAGNOSTICO'; Label='Relatorio para o Cliente';      Tipo='v2';     Args=@{ Ferramenta='atendimento' } }
 
     # --- MANUTENCAO E LIMPEZA ---
     @{ Cat='MANUTENCAO';  Label='Manutencao Completa (tudo)';    Tipo='v2';     Args=@{} }
@@ -50,6 +89,7 @@ $menu = @(
     @{ Cat='MANUTENCAO';  Label='Limpeza Pesada (WinSxS)';       Tipo='v2';     Args=@{ Ferramenta='winsxs' } }
     @{ Cat='MANUTENCAO';  Label='Apagar pasta do AnyDesk';       Tipo='v2';     Args=@{ Ferramenta='anydesk' } }
     @{ Cat='MANUTENCAO';  Label='Visual C++ Redistribuiveis';    Tipo='v2';     Args=@{ Ferramenta='visualc' } }
+    @{ Cat='MANUTENCAO';  Label='Desfazer um atendimento';      Tipo='v2';     Args=@{ Ferramenta='desfazer' } }
 
     # --- SEGURANCA E ANTIVIRUS ---
     @{ Cat='SEGURANCA';   Label='Escanear Virus (ClamAV+VT)';    Tipo='v2';     Args=@{ EscanearVirus=$true } }
@@ -197,22 +237,70 @@ function Mostrar-Menu {
 
     Write-Host ''
     Write-Host $barra -ForegroundColor DarkCyan
-    Write-Host '  [ 0 ]  Sair' -ForegroundColor DarkGray
+    Write-Host '  [ 0 ]  Sair        ou digite parte do nome para procurar (ex.: dll)' -ForegroundColor DarkGray
     Write-Host $barra -ForegroundColor DarkCyan
     Write-Host ''
 }
 
 # =========================================================================
-# DOWNLOAD (com cache do v2 na sessao para nao rebaixar 181 KB toda vez)
+# DOWNLOAD E CACHE DO MOTOR
 # =========================================================================
+# O motor tem ~500 KB. Antes ele era baixado inteiro a cada sessao e o cache
+# morria ao fechar o menu. Agora fica guardado em %LOCALAPPDATA% junto com o
+# identificador da versao publicada: so baixa de novo quando o arquivo muda
+# no GitHub. Com isso o menu abre na hora e para de depender da internet do
+# cliente para cada ferramenta.
 
-$script:v2Tmp = $null
+$script:v2Tmp    = $null
+$script:pastaCache = Join-Path $env:LOCALAPPDATA 'SuporteADV'
+
+function Get-ShaRemoto {
+    <# SHA do arquivo publicado, pela API do GitHub. Vazio se nao der. #>
+    param([string]$Arquivo)
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $api = "https://api.github.com/repos/ivanremotoinfo/-scripts-suporte/contents/$Arquivo"
+        $r = Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'SuporteADV' } -TimeoutSec 20 -ErrorAction Stop
+        return [string]$r.sha
+    } catch { return '' }
+}
 
 function Get-ScriptTemp {
     param([string]$Arquivo, [switch]$Cachear)
 
-    if ($Cachear -and $script:v2Tmp -and (Test-Path $script:v2Tmp)) { return $script:v2Tmp }
+    # 1) cache da sessao
+    if ($Cachear -and $script:v2Tmp -and (Test-Path -LiteralPath $script:v2Tmp)) { return $script:v2Tmp }
 
+    $encSemBom = New-Object System.Text.UTF8Encoding($false)
+
+    # 2) cache em disco, valido enquanto o SHA publicado nao mudar
+    if ($Cachear) {
+        if (-not (Test-Path -LiteralPath $script:pastaCache)) {
+            New-Item -ItemType Directory -Path $script:pastaCache -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        $arqCache = Join-Path $script:pastaCache $Arquivo
+        $arqSha   = Join-Path $script:pastaCache ($Arquivo + '.sha')
+
+        if ((Test-Path -LiteralPath $arqCache) -and (Test-Path -LiteralPath $arqSha)) {
+            $shaLocal  = (Get-Content -LiteralPath $arqSha -Raw -ErrorAction SilentlyContinue).Trim()
+            $shaRemoto = Get-ShaRemoto -Arquivo $Arquivo
+
+            if (-not $shaRemoto) {
+                # Sem internet ou API fora: usa o que tem em vez de falhar.
+                Write-Host '  (sem acesso ao GitHub - usando a copia local)' -ForegroundColor DarkGray
+                $script:v2Tmp = $arqCache
+                return $arqCache
+            }
+            if ($shaLocal -eq $shaRemoto) {
+                Write-Host '  (versao em cache, ja atualizada)' -ForegroundColor DarkGray
+                $script:v2Tmp = $arqCache
+                return $arqCache
+            }
+            Write-Host '  (versao nova publicada - baixando)' -ForegroundColor DarkGray
+        }
+    }
+
+    # 3) baixa
     $url = $baseUrl + $Arquivo
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $conteudo = (Invoke-RestMethod -Uri $url -UseBasicParsing -TimeoutSec 90 -ErrorAction Stop).ToString()
@@ -221,12 +309,21 @@ function Get-ScriptTemp {
     # BOM, o arquivo ganharia BOM duplo e o param()/CmdletBinding deixaria de
     # ser a 1a instrucao -> erro de parse. Removemos o BOM e gravamos sem BOM.
     $conteudo = $conteudo.TrimStart([char]0xFEFF)
-    $encSemBom = New-Object System.Text.UTF8Encoding($false)
+
+    if ($Cachear) {
+        $arqCache = Join-Path $script:pastaCache $Arquivo
+        $arqSha   = Join-Path $script:pastaCache ($Arquivo + '.sha')
+        [System.IO.File]::WriteAllText($arqCache, $conteudo, $encSemBom)
+        Unblock-File $arqCache -ErrorAction SilentlyContinue
+        $sha = Get-ShaRemoto -Arquivo $Arquivo
+        if ($sha) { [System.IO.File]::WriteAllText($arqSha, $sha, $encSemBom) }
+        $script:v2Tmp = $arqCache
+        return $arqCache
+    }
 
     $tmp = [System.IO.Path]::GetTempPath() + 'sadv_' + [System.Guid]::NewGuid().ToString('N') + '.ps1'
     [System.IO.File]::WriteAllText($tmp, $conteudo, $encSemBom)
     Unblock-File $tmp -ErrorAction SilentlyContinue
-    if ($Cachear) { $script:v2Tmp = $tmp }
     return $tmp
 }
 
@@ -313,14 +410,72 @@ try {
                 $null = Read-Host
                 continue
             }
+            Write-Host ''
+            Write-Host ("  Nao existe a opcao $num. Digite de 1 a $maxOpt, ou parte do nome.") -ForegroundColor Red
+            Start-Sleep -Milliseconds 1500
+            continue
+        }
+
+        # --- Busca por texto ---------------------------------------------
+        # Com 48 opcoes, procurar "dll" ou "impressora" e' mais rapido do que
+        # varrer a tela atras do numero.
+        $termo = $entrada
+        if ($termo.Length -lt 2) {
+            Write-Host ''
+            Write-Host '  Digite o numero da opcao, ou pelo menos 2 letras para procurar.' -ForegroundColor Red
+            Start-Sleep -Milliseconds 1500
+            continue
+        }
+
+        $achados = @($menu | Where-Object {
+            $_.Label -like "*$termo*" -or
+            ($_.Args -and $_.Args.ContainsKey('Ferramenta') -and $_.Args['Ferramenta'] -like "*$termo*")
+        })
+
+        if ($achados.Count -eq 0) {
+            Write-Host ''
+            Write-Host ("  Nada encontrado para '$termo'.") -ForegroundColor Red
+            Start-Sleep -Milliseconds 1800
+            continue
+        }
+
+        if ($achados.Count -eq 1) {
+            $item = $achados[0]
+            Write-Host ''
+            Write-Host ("  Encontrado: [{0}] {1}" -f $item.N, $item.Label) -ForegroundColor Green
+            Start-Sleep -Milliseconds 700
+            Executar-Item -item $item
+            Write-Host ''
+            Write-Host ('  ' + ('-' * 62)) -ForegroundColor DarkGray
+            Write-Host '  Pressione ENTER para voltar ao menu principal...' -ForegroundColor DarkGray
+            $null = Read-Host
+            continue
+        }
+
+        Write-Host ''
+        Write-Host ("  $($achados.Count) opcoes para '$termo':") -ForegroundColor Cyan
+        Write-Host ''
+        foreach ($a in ($achados | Sort-Object N)) {
+            Write-Host ("     [{0,2}] {1}" -f $a.N, $a.Label) -ForegroundColor White
         }
         Write-Host ''
-        Write-Host ("  Opcao invalida: '$entrada'  |  Digite um numero de 0 a $maxOpt.") -ForegroundColor Red
-        Start-Sleep -Milliseconds 1500
+        $escolha = (Read-Host '  Numero (ENTER para voltar)').Trim()
+        $n2 = 0
+        if ([int]::TryParse($escolha, [ref]$n2)) {
+            $item = $achados | Where-Object { $_.N -eq $n2 } | Select-Object -First 1
+            if ($item) {
+                Executar-Item -item $item
+                Write-Host ''
+                Write-Host ('  ' + ('-' * 62)) -ForegroundColor DarkGray
+                Write-Host '  Pressione ENTER para voltar ao menu principal...' -ForegroundColor DarkGray
+                $null = Read-Host
+            }
+        }
     }
 } finally {
-    # Limpa o cache do v2 ao sair
-    if ($script:v2Tmp -and (Test-Path $script:v2Tmp)) {
-        Remove-Item $script:v2Tmp -Force -ErrorAction SilentlyContinue
+    # O motor fica guardado em %LOCALAPPDATA% de proposito: e' o cache entre
+    # sessoes. So arquivo temporario avulso e' descartado aqui.
+    if ($script:v2Tmp -and $script:v2Tmp -like "$env:TEMP*" -and (Test-Path -LiteralPath $script:v2Tmp)) {
+        Remove-Item -LiteralPath $script:v2Tmp -Force -ErrorAction SilentlyContinue
     }
 }
