@@ -84,7 +84,7 @@ $menu = @(
     @{ N=42; Cat='PROGRAMAS';   Label='Remover Impressora';            Tipo='script'; Alvo='ReinstalarImpressora.ps1' }
 
     # --- ATALHOS ADMIN ---
-    @{ N=43; Cat='ATALHOS';     Label='Dispositivos + Token + Servicos'; Tipo='v2';   Args=@{ Ferramenta='consoles' } }
+    @{ N=43; Cat='ATALHOS';     Label='Dispositivos, Servicos, Desinstalar Prog. e Token'; Tipo='v2'; Args=@{ Ferramenta='consoles' } }
 )
 # Converte para objetos (hashtable nao ordena/mede por chave nos cmdlets)
 $menu = $menu | ForEach-Object { [pscustomobject]$_ }

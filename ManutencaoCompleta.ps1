@@ -1438,29 +1438,54 @@ function Set-SmartScreenReputacao {
 function Open-TokenAdmin {
     <#
       Abre o app de administracao de token de certificado digital. Como o
-      programa varia (SafeNet/eToken/Gemalto/etc.), tenta caminhos conhecidos
-      e, se nao achar, procura um atalho no Menu Iniciar por palavra-chave.
+      programa varia por fabricante, tenta caminhos conhecidos e, se nao achar,
+      procura um atalho no Menu Iniciar por palavra-chave. Cobre:
+        1) GD Burti / StarSign  -> Token Administration (Giesecke & Devrient)
+        2) SafeNet / eToken 5110 -> SafeNet Authentication Client (Thales/Gemalto)
+        3) Feitian ePass2003     -> ePass2003 PKI Client (EnterSafe)
+        4) Aladdin / eToken PRO  -> SafeNet Auth. Client / eToken Properties
+        5) Athena / IDProtect    -> IDProtect Client (Athena Smartcard)
       Retorna $true se abriu algo.
     #>
+    $pf   = $env:ProgramFiles
+    $pf86 = ${env:ProgramFiles(x86)}
     $cands = @(
-        "$env:ProgramFiles\SafeNet\Authentication\SAC\x64\SACTools.exe"
-        "$env:ProgramFiles\SafeNet\Authentication\SAC\x32\SACTools.exe"
-        "${env:ProgramFiles(x86)}\SafeNet\Authentication\SAC\x64\SACTools.exe"
-        "${env:ProgramFiles(x86)}\SafeNet\Authentication\SAC\x32\SACTools.exe"
-        "$env:ProgramFiles\Gemalto\SafeNet Authentication Client\Tools\SACTools.exe"
-        "$env:ProgramFiles\Aladdin\eToken\PKIClient\x32\eTProps.exe"
-        "${env:ProgramFiles(x86)}\Aladdin\eToken\PKIClient\x32\eTProps.exe"
+        # 2/4 - SafeNet Authentication Client (eToken 5110, Aladdin eToken PRO)
+        "$pf\SafeNet\Authentication\SAC\x64\SACTools.exe"
+        "$pf\SafeNet\Authentication\SAC\x32\SACTools.exe"
+        "$pf86\SafeNet\Authentication\SAC\x64\SACTools.exe"
+        "$pf86\SafeNet\Authentication\SAC\x32\SACTools.exe"
+        "$pf\Gemalto\SafeNet Authentication Client\Tools\SACTools.exe"
+        "$pf86\Gemalto\SafeNet Authentication Client\Tools\SACTools.exe"
+        # 4 - eToken Properties (Aladdin legado)
+        "$pf\Aladdin\eToken\PKIClient\x32\eTProps.exe"
+        "$pf86\Aladdin\eToken\PKIClient\x32\eTProps.exe"
+        # 1 - GD Burti / StarSign (Giesecke & Devrient) - Token Administration
+        "$pf\Giesecke & Devrient\StarSign Token Administration\TokenAdmin.exe"
+        "$pf86\Giesecke & Devrient\StarSign Token Administration\TokenAdmin.exe"
+        "$pf\Giesecke Devrient\StarSign Crypto USB Token\TokenAdmin.exe"
+        "$pf86\Giesecke Devrient\StarSign Crypto USB Token\TokenAdmin.exe"
+        # 3 - Feitian ePass2003 / EnterSafe PKI
+        "$pf\EnterSafe\ePass2003\ePass2003Token.exe"
+        "$pf86\EnterSafe\ePass2003\ePass2003Token.exe"
+        "$pf86\Feitian\ePass2003\ePass2003Token.exe"
+        # 5 - Athena IDProtect Client
+        "$pf\Athena\IDProtect Client\IDProtectClient.exe"
+        "$pf86\Athena Smartcard Solutions\IDProtect Client\IDProtectClient.exe"
+        "$pf86\Athena\IDProtect Client\IDProtectClient.exe"
     )
     foreach ($c in $cands) {
         if ($c -and (Test-Path -LiteralPath $c)) { Start-Process $c -ErrorAction SilentlyContinue; return $true }
     }
-    # Procura atalho no Menu Iniciar (rapido - pastas pequenas)
+    # Procura atalho no Menu Iniciar (rapido - pastas pequenas). Cobre os 5
+    # modelos pelo nome do programa/pasta.
+    $chave = 'token|safenet|etoken|aladdin|gemalto|thales|starsign|giesecke|devrient|feitian|epass|entersafe|idprotect|athena|autenticac|certificad'
     $menus = @("$env:ProgramData\Microsoft\Windows\Start Menu\Programs",
                "$env:APPDATA\Microsoft\Windows\Start Menu\Programs")
     foreach ($m in $menus) {
         if (-not (Test-Path -LiteralPath $m)) { continue }
         $lnk = Get-ChildItem -LiteralPath $m -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue |
-               Where-Object { $_.Name -match 'token|safenet|etoken|gemalto|thales|autenticac|certificad' } |
+               Where-Object { $_.FullName -match $chave } |
                Select-Object -First 1
         if ($lnk) { Start-Process $lnk.FullName -ErrorAction SilentlyContinue; return $true }
     }
@@ -3804,11 +3829,13 @@ if ($Ferramenta) {
             'programas'     { Get-ProgramasInstalados | Format-Table -AutoSize | Out-Host }
             'diagnostico'   { Show-DiagnosticoCompleto }
             'consoles'      {
-                Write-Etapa 'Abrindo Gerenciador de Dispositivos, Servicos e Token Administration...'
+                Write-Etapa 'Abrindo Dispositivos, Servicos, Desinstalar Programa e Token Administration...'
                 try { Start-Process 'devmgmt.msc' -ErrorAction Stop; Write-Ok 'Gerenciador de Dispositivos aberto.' }
                 catch { try { Start-Process 'mmc.exe' -ArgumentList 'devmgmt.msc' -ErrorAction SilentlyContinue; Write-Ok 'Gerenciador de Dispositivos aberto.' } catch { Write-Aviso 'Falha ao abrir Gerenciador de Dispositivos.' } }
                 try { Start-Process 'services.msc' -ErrorAction Stop; Write-Ok 'Servicos do Windows abertos.' }
                 catch { try { Start-Process 'mmc.exe' -ArgumentList 'services.msc' -ErrorAction SilentlyContinue; Write-Ok 'Servicos do Windows abertos.' } catch { Write-Aviso 'Falha ao abrir Servicos.' } }
+                try { Start-Process 'appwiz.cpl' -ErrorAction Stop; Write-Ok 'Desinstalar um programa (Painel de Controle) aberto.' }
+                catch { try { Start-Process 'control.exe' -ArgumentList 'appwiz.cpl' -ErrorAction SilentlyContinue; Write-Ok 'Desinstalar um programa (Painel de Controle) aberto.' } catch { Write-Aviso 'Falha ao abrir Desinstalar um programa.' } }
                 if (Open-TokenAdmin) { Write-Ok 'Token Administration aberto.' }
                 else {
                     Write-Aviso 'Nao encontrei o app de administracao de token (SafeNet/eToken/Gemalto...).'
