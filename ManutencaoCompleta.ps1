@@ -3861,20 +3861,25 @@ if ($Ferramenta) {
             'programas'     { Get-ProgramasInstalados | Format-Table -AutoSize | Out-Host }
             'desinstalar'   {
                 $progs = @(Get-ProgramasDesinstalaveis)
-                Write-Info ("{0} programas instalados (estilo Painel de Controle)." -f $progs.Count)
+                Write-Info ("{0} programas instalados (estilo Painel de Controle):" -f $progs.Count)
                 if ($progs.Count -eq 0) { Write-Aviso 'Nenhum programa listavel.' }
-                elseif ($SemInteracao) {
-                    $progs | Select-Object Nome, Versao, Fabricante | Format-Table -AutoSize | Out-Host
-                } else {
-                    $termo = (Read-Host '  Filtrar por nome (Enter = listar todos)').Trim()
-                    if ($termo) { $progs = @($progs | Where-Object { $_.Nome -match [regex]::Escape($termo) }) }
-                    if ($progs.Count -eq 0) { Write-Aviso 'Nada com esse nome.' }
-                    else {
-                        Write-Host ''
-                        for ($i = 0; $i -lt $progs.Count; $i++) {
-                            Write-Host ('   {0,3}) {1}  {2}' -f ($i + 1), $progs[$i].Nome, $progs[$i].Versao) -ForegroundColor White
-                        }
-                        Write-Host ''
+                else {
+                    Write-Host ''
+                    # Mostra TODOS de uma vez, em 2 colunas (coluna esq. 1..N/2)
+                    $meio = [math]::Ceiling($progs.Count / 2)
+                    function Fmt-Item($idx) {
+                        $nm = $progs[$idx].Nome
+                        if ($nm.Length -gt 33) { $nm = $nm.Substring(0, 31) + '..' }
+                        '{0,3}) {1}' -f ($idx + 1), $nm
+                    }
+                    for ($r = 0; $r -lt $meio; $r++) {
+                        $linha = '  ' + (Fmt-Item $r).PadRight(43)
+                        $j = $r + $meio
+                        if ($j -lt $progs.Count) { $linha += (Fmt-Item $j) }
+                        Write-Host $linha -ForegroundColor White
+                    }
+                    Write-Host ''
+                    if (-not $SemInteracao) {
                         $sel = (Read-Host '  Numero do programa para DESINSTALAR (Enter cancela)').Trim()
                         if ($sel -match '^\d+$' -and [int]$sel -ge 1 -and [int]$sel -le $progs.Count) {
                             $p = $progs[[int]$sel - 1]
@@ -3891,7 +3896,7 @@ if ($Ferramenta) {
                                 }
                                 Write-Ok ("Desinstalador de '{0}' iniciado. Siga as instrucoes na janela dele." -f $p.Nome)
                             } else { Write-Aviso 'Cancelado.' }
-                        } else { Write-Aviso 'Cancelado (nenhum numero valido).' }
+                        } elseif ($sel) { Write-Aviso 'Numero invalido.' } else { Write-Info 'Nenhum selecionado.' }
                     }
                 }
             }
