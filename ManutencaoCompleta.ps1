@@ -2783,9 +2783,13 @@ function Get-PotencialLimpeza {
     $bytes = [long]0; $qtd = 0
     foreach ($p in @("$env:ProgramData\Microsoft\Windows\WER\ReportQueue",
                      "$env:ProgramData\Microsoft\Windows\WER\ReportArchive",
-                     "$env:LOCALAPPDATA\CrashDumps", "$env:SystemRoot\Minidump")) {
+                     "$env:LOCALAPPDATA\CrashDumps")) {
         $m = Measure-Pasta $p; $bytes += $m.Bytes; $qtd += $m.Arquivos
     }
+    # Mesma janela de 30 dias usada na limpeza, senao a previsao prometeria
+    # espaco que nao vai ser liberado.
+    $m = Measure-Pasta "$env:SystemRoot\Minidump" -DiasAntigos 30
+    $bytes += $m.Bytes; $qtd += $m.Arquivos
     $dump = "$env:SystemRoot\MEMORY.DMP"
     if (Test-Path -LiteralPath $dump) {
         $bytes += (Get-Item -LiteralPath $dump -Force).Length; $qtd++
@@ -2961,15 +2965,25 @@ function Clear-Temporarios {
     $b += Remove-Files -Pasta "$env:ProgramData\Microsoft\Windows\WER\ReportQueue"
     $b += Remove-Files -Pasta "$env:ProgramData\Microsoft\Windows\WER\ReportArchive"
     $b += Remove-Files -Pasta "$env:LOCALAPPDATA\CrashDumps"
-    $b += Remove-Files -Pasta "$env:SystemRoot\Minidump"
+    # Minidumps dos ultimos 30 dias FICAM: sao a unica evidencia de tela azul
+    # e e' exatamente essa janela que a analise de BSOD (opcao 5 do menu) le.
+    # Cada um tem 1-2 MB, entao guardar nao atrapalha a liberacao de espaco.
+    $b += Remove-Files -Pasta "$env:SystemRoot\Minidump" -DiasAntigos 30
     $b += Remove-Files -Pasta "$env:SystemRoot\Logs\CBS" -DiasAntigos 7
+    # MEMORY.DMP sempre sai: costuma ter varios GB e e' o que enche o disco.
+    # Se o chamado for tela azul, rode a analise de BSOD ANTES da manutencao.
     $dump = "$env:SystemRoot\MEMORY.DMP"
     if (Test-Path -LiteralPath $dump) {
         $t = [long](Get-Item -LiteralPath $dump -Force -ErrorAction SilentlyContinue).Length
         if ($SomenteRelatorio) {
             $b += $t   # em simulacao tambem precisa entrar na conta
         } else {
-            try { Remove-Item -LiteralPath $dump -Force -ErrorAction Stop; $b += $t } catch { }
+            try {
+                Remove-Item -LiteralPath $dump -Force -ErrorAction Stop
+                $b += $t
+                Write-Aviso "MEMORY.DMP removido ($(Format-Tamanho $t)) - dump completo de tela azul."
+                Write-Info  'Os minidumps dos ultimos 30 dias foram mantidos para analise de BSOD.'
+            } catch { }
         }
     }
     $total += $b; Write-Ok "Erros e dumps  : $(Format-Tamanho $b)"
