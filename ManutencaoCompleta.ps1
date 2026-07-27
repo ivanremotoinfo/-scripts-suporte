@@ -977,6 +977,85 @@ function Get-ProgramasInstalados {
         Sort-Object Programa -Unique
 }
 
+function Show-DiagnosticoCompleto {
+    <# Diagnostico completo, SOMENTE LEITURA (nao altera nada). #>
+    Write-Titulo 'DIAGNOSTICO COMPLETO DO PC'
+
+    Write-Etapa 'Sistema e inventario:'
+    Get-RelatorioSistema | Format-List | Out-Host
+    Get-InfoInventario   | Format-List | Out-Host
+
+    Write-Etapa 'Saude dos discos (SMART):'
+    Test-SaudeDiscos | Format-Table -AutoSize | Out-Host
+
+    Write-Etapa 'Horario do sistema:'
+    Test-HorarioSistema | Format-List | Out-Host
+
+    Write-Etapa 'Servicos criticos fora de execucao:'
+    $svc = @(Test-ServicosCriticos)
+    if ($svc.Count) { $svc | Format-Table -AutoSize | Out-Host } else { Write-Ok 'Todos os servicos criticos em execucao.' }
+
+    Write-Etapa 'Dispositivos com erro:'
+    $dev = @(Get-DispositivosComErro)
+    if ($dev.Count) { $dev | Format-Table -AutoSize | Out-Host } else { Write-Ok 'Nenhum dispositivo com erro.' }
+
+    Write-Etapa 'Proxy manual:'
+    Test-ProxyManual | Format-List | Out-Host
+
+    Write-Etapa 'Maiores consumidores de memoria:'
+    Get-TopProcessos -Por Memoria -Top 10 | Format-Table -AutoSize | Out-Host
+
+    Write-Etapa 'Impressoras instaladas:'
+    $imp = @(Get-StatusImpressoras)
+    if ($imp.Count) { $imp | Format-Table -AutoSize | Out-Host } else { Write-Info 'Nenhuma impressora.' }
+
+    Write-Etapa 'Erros recentes nos logs (72h):'
+    $ev = @(Get-ErrosRecentes -Horas 72 -Max 8)
+    if ($ev.Count) { $ev | Format-Table -AutoSize -Wrap | Out-Host } else { Write-Ok 'Sem erros recentes.' }
+
+    Write-Etapa 'Falhas de logon (7 dias):'
+    $fl = @(Get-FalhasLogon -Dias 7 -Max 5)
+    if ($fl.Count) { $fl | Format-Table -AutoSize | Out-Host } else { Write-Ok 'Nenhuma falha de logon.' }
+
+    Write-Etapa 'Administradores locais:'
+    @(Get-AdminsLocais) | Format-Table -AutoSize | Out-Host
+
+    Write-Etapa 'Ultimas atualizacoes do Windows:'
+    @(Get-HistoricoUpdates -Max 8) | Format-Table -AutoSize | Out-Host
+
+    Write-Etapa 'Programas instalados:'
+    @(Get-ProgramasInstalados) | Format-Table -AutoSize | Out-Host
+}
+
+function Publicar-RelatorioTemp {
+    <#
+      Chamado APOS Stop-Transcript. Copia a transcricao para um TXT em %TEMP%,
+      abre no Bloco de Notas e NAO deixa o .log salvo na pasta de logs (o
+      tecnico usa "Salvar Como" se quiser guardar). Com -RemoverPastaLog apaga
+      tambem a pasta de logs inteira (usado no diagnostico, que so le).
+    #>
+    param([switch]$RemoverPastaLog)
+    try {
+        $origem = Join-Path $script:pastaExec 'manutencao.log'
+        $tmp = Join-Path $env:TEMP ('Diagnostico_' + $env:COMPUTERNAME + '_' + (Get-Date -Format 'yyyyMMdd_HHmmss') + '.txt')
+        if (Test-Path -LiteralPath $origem) {
+            Copy-Item -LiteralPath $origem -Destination $tmp -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $origem -Force -ErrorAction SilentlyContinue   # nao deixa copia salva
+        }
+        if (Test-Path -LiteralPath $tmp) {
+            Write-Host ''
+            Write-Host ("  Relatorio aberto (TEMPORARIO, nao salvo): $tmp") -ForegroundColor Cyan
+            Write-Host '  Para guardar: no Bloco de Notas use Arquivo > Salvar Como.' -ForegroundColor DarkGray
+            if (-not $NaoAbrirLog -and -not $SemInteracao) {
+                Start-Process -FilePath 'notepad.exe' -ArgumentList "`"$tmp`"" -ErrorAction SilentlyContinue
+            }
+        }
+        if ($RemoverPastaLog -and (Test-Path -LiteralPath $script:pastaExec)) {
+            Remove-Item -LiteralPath $script:pastaExec -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    } catch { }
+}
+
 function Get-HistoricoUpdates {
     param([int]$Max = 8)
     try {
@@ -3601,12 +3680,13 @@ if ($Ferramenta) {
             'perfis'        { Get-PerfisAntigos -DiasSemUso 180 -Medir | Format-Table -AutoSize | Out-Host }
             'topprocessos'  { Get-TopProcessos -Por Memoria -Top 12 | Format-Table -AutoSize | Out-Host }
             'programas'     { Get-ProgramasInstalados | Format-Table -AutoSize | Out-Host }
+            'diagnostico'   { Show-DiagnosticoCompleto }
             default         {
                 Write-Falha "Ferramenta desconhecida: $Ferramenta"
-                Write-Info 'Validas: temp, lixeira, miniaturas, windowsupdate, navegadores, appcache,'
-                Write-Info 'anydesk, winsxs, inicializacao, appdata, efeitos, rede, horario, defender,'
-                Write-Info 'spooler, explorer, chkdsk, appx, gpupdate, ip, proxy, otimizar, sfc, smart,'
-                Write-Info 'perfis, topprocessos, programas.'
+                Write-Info 'Validas: diagnostico, temp, lixeira, miniaturas, windowsupdate, navegadores,'
+                Write-Info 'appcache, anydesk, winsxs, inicializacao, appdata, efeitos, rede, horario,'
+                Write-Info 'defender, spooler, explorer, chkdsk, appx, gpupdate, ip, proxy, otimizar,'
+                Write-Info 'sfc, smart, perfis, topprocessos, programas.'
             }
         }
     } catch { Write-Falha "Erro na ferramenta '$chave': $($_.Exception.Message)" }
@@ -3617,9 +3697,13 @@ if ($Ferramenta) {
         foreach ($a in $script:alertas) { Write-Host "     - $a" -ForegroundColor Red }
     }
     Write-Host ''
-    Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
+    if ($chave -ne 'diagnostico') {
+        Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
+    }
     Write-Host ('=' * 68) -ForegroundColor Green
     try { Stop-Transcript | Out-Null } catch { }
+    # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
+    if ($chave -eq 'diagnostico') { Publicar-RelatorioTemp -RemoverPastaLog }
     exit 0
 }
 
@@ -3965,24 +4049,15 @@ if ($DestinoRelatorio -and (Test-Path $DestinoRelatorio)) {
     } catch { Write-Aviso "Falha ao copiar relatorio: $($_.Exception.Message)" }
 }
 
-$logTxt = Join-Path $script:pastaExec 'relatorio-completo.txt'
 Write-Host ''
-Write-Host ("  Log completo (txt): $logTxt") -ForegroundColor Cyan
 Write-Host ("  Concluido em: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')") -ForegroundColor Gray
 Write-Host ('=' * 68) -ForegroundColor Green
 Write-Host ''
 
 try { Stop-Transcript | Out-Null } catch { }
 
-# --- Log em TXT + abertura automatica -----------------------------------
-# O console rola e a parte de cima some; por isso salvamos TUDO num .txt e o
-# abrimos no Bloco de Notas ao terminar (a menos de -NaoAbrirLog).
-try {
-    $transcricao = Join-Path $script:pastaExec 'manutencao.log'
-    if (Test-Path -LiteralPath $transcricao) {
-        Copy-Item -LiteralPath $transcricao -Destination $logTxt -Force -ErrorAction SilentlyContinue
-    }
-    if ((Test-Path -LiteralPath $logTxt) -and -not $NaoAbrirLog -and -not $SemInteracao) {
-        Start-Process -FilePath 'notepad.exe' -ArgumentList "`"$logTxt`"" -ErrorAction SilentlyContinue
-    }
-} catch { }
+# --- Relatorio TXT temporario + abertura automatica ---------------------
+# O relatorio abre no Bloco de Notas a partir de um arquivo TEMPORARIO e NAO
+# fica salvo (o tecnico usa "Salvar Como" se quiser). Os backups de registro/
+# credenciais na pasta de logs continuam salvos (necessarios p/ reverter).
+Publicar-RelatorioTemp

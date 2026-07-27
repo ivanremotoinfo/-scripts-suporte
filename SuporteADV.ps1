@@ -28,7 +28,7 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 #   Args  = parametros passados ao v2 (quando Tipo='v2')
 $menu = @(
     # --- DIAGNOSTICO ---   (Args e' hashtable p/ splat correto no v2)
-    @{ N=1;  Cat='DIAGNOSTICO'; Label='Diagnostico Completo do PC';    Tipo='script'; Alvo='DiagnosticoCompleto.ps1' }
+    @{ N=1;  Cat='DIAGNOSTICO'; Label='Diagnostico Completo do PC';    Tipo='v2';     Args=@{ Ferramenta='diagnostico' } }
     @{ N=2;  Cat='DIAGNOSTICO'; Label='Saude dos Discos (SMART)';      Tipo='v2';     Args=@{ Ferramenta='smart' } }
     @{ N=3;  Cat='DIAGNOSTICO'; Label='Maiores Consumidores de RAM';   Tipo='v2';     Args=@{ Ferramenta='topprocessos' } }
     @{ N=4;  Cat='DIAGNOSTICO'; Label='Listar Certificados Digitais';  Tipo='script'; Alvo='ListarCertificados.ps1' }
