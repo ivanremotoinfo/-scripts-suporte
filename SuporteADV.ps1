@@ -31,7 +31,7 @@ $menu = @(
     @{ N=1;  Cat='DIAGNOSTICO'; Label='Diagnostico Completo do PC';    Tipo='v2';     Args=@{ Ferramenta='diagnostico' } }
     @{ N=2;  Cat='DIAGNOSTICO'; Label='Saude dos Discos (SMART)';      Tipo='v2';     Args=@{ Ferramenta='smart' } }
     @{ N=3;  Cat='DIAGNOSTICO'; Label='Maiores Consumidores de RAM';   Tipo='v2';     Args=@{ Ferramenta='topprocessos' } }
-    @{ N=4;  Cat='DIAGNOSTICO'; Label='Listar Certificados Digitais';  Tipo='script'; Alvo='ListarCertificados.ps1' }
+    @{ N=4;  Cat='DIAGNOSTICO'; Label='Listar Certificados Digitais';  Tipo='v2';     Args=@{ Ferramenta='certificados' } }
     @{ N=5;  Cat='DIAGNOSTICO'; Label='Analisar Tela Azul (BSOD)';     Tipo='script'; Alvo='AnalisarBSOD.ps1' }
 
     # --- MANUTENCAO E LIMPEZA ---
@@ -55,8 +55,8 @@ $menu = @(
     @{ N=20; Cat='SEGURANCA';   Label='Abrir Protecao Virus/Ameacas';  Tipo='v2';     Args=@{ Ferramenta='protecaovirus' } }
 
     # --- REPAROS ---
-    @{ N=21; Cat='REPAROS';     Label='Reparar Sistema (SFC/DISM)';    Tipo='script'; Alvo='RepararSistema.ps1' }
-    @{ N=22; Cat='REPAROS';     Label='Corrigir Rede e Internet';      Tipo='script'; Alvo='CorrigirRede.ps1' }
+    @{ N=21; Cat='REPAROS';     Label='Reparar Sistema (SFC/DISM)';    Tipo='v2';     Args=@{ Ferramenta='sfc' } }
+    @{ N=22; Cat='REPAROS';     Label='Corrigir Rede e Internet';      Tipo='v2';     Args=@{ Ferramenta='corrigirrede' } }
     @{ N=23; Cat='REPAROS';     Label='Corrigir Proxy e Certif. Rede'; Tipo='script'; Alvo='CorrigirProxy.ps1' }
     @{ N=24; Cat='REPAROS';     Label='Reparar Fila de Impressao';     Tipo='v2';     Args=@{ Ferramenta='spooler' } }
     @{ N=25; Cat='REPAROS';     Label='Reparar acesso a %appdata%';    Tipo='v2';     Args=@{ Ferramenta='appdata' } }

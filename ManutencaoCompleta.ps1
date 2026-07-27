@@ -321,6 +321,9 @@ function Write-Aviso { param([string]$t) Write-Host "     [!]  $t" -ForegroundCo
 function Write-Falha { param([string]$t) Write-Host "     [X]  $t" -ForegroundColor Red }
 function Write-Info  { param([string]$t) Write-Host "     $t" -ForegroundColor Gray }
 function Write-Simul { param([string]$t) Write-Host "     [SIMULACAO] $t" -ForegroundColor DarkYellow }
+# Usadas pelas ferramentas que vieram dos sub-scripts:
+function Write-Dest  { param([string]$t) Write-Host "     $t" -ForegroundColor White }
+function Write-Acao  { param([string]$t) Write-Host "     [>>] $t" -ForegroundColor Magenta }
 
 function Read-HostComTimeout {
     <#
@@ -3310,6 +3313,127 @@ function Repair-AcessoAppData {
 # preservando ID e senha) e a pasta e copiada para o log antes de apagar.
 # =========================================================================
 
+# =========================================================================
+# REGIAO: CERTIFICADOS DIGITAIS   (veio de ListarCertificados.ps1)
+# =========================================================================
+
+function Show-CertificadosInstalados {
+    <#
+      Lista os certificados das lojas pessoais do usuario e da maquina, com
+      validade e se tem chave privada - que e' o que diz se o certificado
+      serve para assinar. Somente leitura.
+      Certificado A3 (token) so aparece com o token conectado e o middleware
+      carregado: ausencia aqui nao significa que o certificado nao exista.
+    #>
+    param(
+        [string]$Loja = 'My',
+        [string]$Local = '',              # vazio = CurrentUser e LocalMachine
+        [int]$DiasParaVencer = 30
+    )
+
+    function Get-StatusValidade {
+        param([datetime]$DataExpiracao, [int]$Limite)
+        $hoje = Get-Date
+        $dias = ($DataExpiracao - $hoje).Days
+        if ($DataExpiracao -lt $hoje)  { return @{ Status = 'EXPIRADO';       Cor = 'Red';    Dias = $dias } }
+        elseif ($dias -le $Limite)     { return @{ Status = 'VENCE EM BREVE'; Cor = 'Yellow'; Dias = $dias } }
+        else                           { return @{ Status = 'Valido';         Cor = 'Green';  Dias = $dias } }
+    }
+    function Get-CN {
+        param([string]$Nome)
+        if ($Nome -match 'CN=([^,]+)') { return $Matches[1].Trim() }
+        return $Nome
+    }
+    function Get-CPFCNPJ {
+        param([string]$Subject)
+        if ($Subject -match ':(\d{14})\b') {
+            $n = $Matches[1]
+            return 'CNPJ ' + $n.Substring(0,2) + '.' + $n.Substring(2,3) + '.' + $n.Substring(5,3) + '/' + $n.Substring(8,4) + '-' + $n.Substring(12,2)
+        }
+        if ($Subject -match ':(\d{11})\b') {
+            $n = $Matches[1]
+            return 'CPF ' + $n.Substring(0,3) + '.' + $n.Substring(3,3) + '.' + $n.Substring(6,3) + '-' + $n.Substring(9,2)
+        }
+        return ''
+    }
+
+    $locais     = if ($Local) { @($Local) } else { @('CurrentUser', 'LocalMachine') }
+    $totalGeral = 0
+    $comChaveGeral = 0
+
+    foreach ($loc in $locais) {
+        $caminho = "Cert:\$loc\$Loja"
+        Write-Etapa "Certificados em $loc\$Loja"
+
+        try {
+            $certificados = @(Get-ChildItem -Path $caminho -ErrorAction Stop)
+        } catch {
+            Write-Aviso ("Nao foi possivel acessar '$caminho': " + $_.Exception.Message)
+            continue
+        }
+
+        if ($certificados.Count -eq 0) {
+            Write-Info "Nenhum certificado nesta loja."
+            continue
+        }
+
+        $lista = foreach ($cert in $certificados) {
+            $sv = Get-StatusValidade -DataExpiracao $cert.NotAfter -Limite $DiasParaVencer
+            $temChave = $false
+            try { $temChave = $cert.HasPrivateKey } catch { }
+            [PSCustomObject]@{
+                Nome          = Get-CN $cert.Subject
+                Identificador = Get-CPFCNPJ $cert.Subject
+                Emissor       = Get-CN $cert.Issuer
+                ValidoDe      = $cert.NotBefore.ToString('dd/MM/yyyy')
+                ValidoAte     = $cert.NotAfter.ToString('dd/MM/yyyy')
+                Dias          = $sv.Dias
+                Status        = $sv.Status
+                ChavePrivada  = $temChave
+                Thumbprint    = $cert.Thumbprint
+                Cor           = $sv.Cor
+            }
+        }
+        $lista = @($lista)
+
+        foreach ($item in ($lista | Sort-Object { $_.Status -ne 'Valido' }, ValidoAte)) {
+            Write-Host ''
+            Write-Dest  ("Nome       : " + $item.Nome)
+            if ($item.Identificador) { Write-Info ("Documento  : " + $item.Identificador) }
+            Write-Info  ("Emissor    : " + $item.Emissor)
+            Write-Info  ("Valido de  : " + $item.ValidoDe + "  ate  " + $item.ValidoAte)
+            Write-Host  ("     Status     : " + $item.Status + " (" + $item.Dias + " dias)") -ForegroundColor $item.Cor
+            if ($item.ChavePrivada) {
+                Write-Host '     Chave priv.: SIM - pode assinar documentos' -ForegroundColor Green
+            } else {
+                Write-Host '     Chave priv.: nao - somente a parte publica (nao assina)' -ForegroundColor DarkGray
+            }
+            Write-Host  ("     Thumbprint : " + $item.Thumbprint) -ForegroundColor DarkGray
+        }
+
+        $comChave = @($lista | Where-Object { $_.ChavePrivada }).Count
+        $vencidos = @($lista | Where-Object { $_.Status -eq 'EXPIRADO' }).Count
+        $aVencer  = @($lista | Where-Object { $_.Status -eq 'VENCE EM BREVE' }).Count
+
+        Write-Host ''
+        Write-Ok ("$loc : $($lista.Count) certificado(s)  |  com chave privada: $comChave")
+        if ($vencidos -gt 0) { Write-Aviso "$vencidos vencido(s) nesta loja." }
+        if ($aVencer -gt 0) {
+            Write-Aviso "$aVencer vence(m) nos proximos $DiasParaVencer dias."
+            Add-Alerta "$aVencer certificado(s) vencendo em ate $DiasParaVencer dias em $loc."
+        }
+
+        $totalGeral += $lista.Count
+        $comChaveGeral += $comChave
+    }
+
+    Write-Host ''
+    Write-Ok "Total: $totalGeral certificado(s), $comChaveGeral com chave privada."
+    Write-Info 'Token A3 so aparece com o token conectado e o middleware instalado.'
+    Write-Info 'Gerenciar a mao: certmgr.msc (usuario) ou certlm.msc (maquina).'
+    return [long]0
+}
+
 function Remove-PastaAnyDesk {
     param(
         [ValidateSet('Completo', 'SomenteLogs')][string]$Modo = 'SomenteLogs',
@@ -3653,24 +3777,137 @@ function Set-DesempenhoEnergia {
 }
 
 function Repair-Sistema {
-    if ($SomenteRelatorio) { Write-Simul 'Executaria DISM /RestoreHealth e SFC /scannow.'; return [long]0 }
+    <#
+      DISM em escada (CheckHealth -> ScanHealth -> RestoreHealth) e depois SFC.
+      So desce um degrau se o anterior acusou problema: numa maquina sadia isso
+      economiza os 10 a 30 minutos do RestoreHealth.
+      A deteccao trata PT e EN: o DISM imprime no idioma do Windows, e so
+      comparar com o texto em ingles fazia tudo virar "inconclusivo" no PT-BR.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Executaria DISM (CheckHealth/ScanHealth/RestoreHealth) e SFC /scannow.'; return [long]0 }
 
-    # Ordem correta: DISM primeiro (repara a fonte que o SFC usa), depois SFC.
-    Write-Etapa 'DISM /RestoreHealth - pode levar 10 a 20 minutos...'
-    & dism.exe /Online /Cleanup-Image /RestoreHealth | Out-Null
-    if ($LASTEXITCODE -eq 0) { Write-Ok 'Imagem do Windows integra.' }
-    else { Write-Aviso "DISM retornou codigo $LASTEXITCODE." }
+    $reSemCorrupcao = 'No component store corruption detected|Nenhuma corrup.{0,3}o do reposit.{0,3}rio de componentes|Nenhuma corrup.{0,3}o de armazenamento de componentes'
+    $reCorrompido   = 'component store is repairable|component store is corrupted|reposit.{0,3}rio de componentes .{0,3} repar.vel|reposit.{0,3}rio de componentes est. corrompido|armazenamento de componentes .{0,3} repar.vel'
+    $reSucesso      = 'The restore operation completed successfully|The operation completed successfully|A opera.{0,3}o de restaura.{0,3}o foi conclu.da com .xito|A opera.{0,3}o foi conclu.da com .xito'
 
-    Write-Etapa 'SFC /scannow - pode levar 5 a 15 minutos...'
-    $saida = (& sfc.exe /scannow) -join ' '
-    $saida = $saida -replace "`0", ''   # sfc emite UTF-16 no console
-    if ($saida -match 'did not find any integrity violations|nao encontrou nenhuma viola') {
-        Write-Ok 'Nenhuma violacao de integridade encontrada.'
-    } elseif ($saida -match 'successfully repaired|reparou com exito') {
-        Write-Ok 'Arquivos corrompidos foram reparados.'
-    } else {
-        Write-Aviso 'Verifique %windir%\Logs\CBS\CBS.log para detalhes.'
+    function Invoke-DISM {
+        param([string[]]$Argumentos)
+        $linhas = [System.Collections.Generic.List[string]]::new()
+        & dism.exe @Argumentos 2>&1 | ForEach-Object {
+            $l = $_.ToString()
+            $linhas.Add($l)
+            if ($l.Trim()) { Write-Host "     $l" -ForegroundColor DarkGray }
+        }
+        return ($linhas -join ' ')
     }
+
+    $statusDISM = 'nao executado'
+    $statusSFC  = 'nao executado'
+
+    # --- Degrau 1: CheckHealth (rapido, so le os metadados) ---
+    Write-Etapa 'DISM CheckHealth - verificacao rapida da imagem...'
+    $txt = Invoke-DISM @('/Online', '/Cleanup-Image', '/CheckHealth')
+
+    $precisaScan = $true
+    if ($txt -match $reSemCorrupcao) {
+        Write-Ok 'CheckHealth: imagem sem corrupcao.'
+        $statusDISM  = 'OK - sem corrupcao'
+        $precisaScan = $false
+    } elseif ($txt -match $reCorrompido) {
+        Write-Aviso 'CheckHealth: corrupcao detectada.'
+    } else {
+        Write-Aviso 'CheckHealth: resultado inconclusivo, seguindo para ScanHealth.'
+    }
+
+    # --- Degrau 2: ScanHealth (varredura completa) ---
+    $precisaRestore = $false
+    if ($precisaScan) {
+        Write-Etapa 'DISM ScanHealth - varredura completa, alguns minutos...'
+        $txt = Invoke-DISM @('/Online', '/Cleanup-Image', '/ScanHealth')
+        if ($txt -match $reSemCorrupcao) {
+            Write-Ok 'ScanHealth: nenhuma corrupcao confirmada.'
+            $statusDISM = 'OK - sem corrupcao'
+        } elseif ($txt -match $reCorrompido) {
+            Write-Aviso 'ScanHealth: corrupcao confirmada.'
+            $statusDISM = 'ATENCAO - corrupcao confirmada'
+            $precisaRestore = $true
+        } else {
+            Write-Aviso 'ScanHealth: inconclusivo, tentando reparar por precaucao.'
+            $statusDISM = 'inconclusivo'
+            $precisaRestore = $true
+        }
+    } else {
+        Write-Info 'ScanHealth e RestoreHealth dispensados (imagem sadia).'
+    }
+
+    # --- Degrau 3: RestoreHealth (repara, precisa de internet) ---
+    if ($precisaRestore) {
+        Write-Etapa 'DISM RestoreHealth - reparando, de 10 a 30 minutos. Nao feche...'
+        $txt = Invoke-DISM @('/Online', '/Cleanup-Image', '/RestoreHealth')
+        if ($txt -match $reSucesso) {
+            Write-Ok 'RestoreHealth: imagem reparada.'
+            $statusDISM = 'OK - reparado'
+            $script:precisaReiniciar = $true
+        } elseif ($txt -match 'Error|Erro') {
+            Write-Falha 'RestoreHealth: erro no reparo. Confira a conexao com a internet.'
+            Write-Info  'Alternativa: dism /Online /Cleanup-Image /RestoreHealth /Source:X:\Sources\install.wim'
+            $statusDISM = 'FALHA'
+            Add-Alerta 'DISM RestoreHealth falhou - imagem do Windows segue corrompida.'
+        } else {
+            Write-Aviso 'RestoreHealth: resultado inconclusivo.'
+            $statusDISM = 'inconclusivo'
+        }
+    }
+
+    # --- SFC depois do DISM (o SFC usa a imagem que o DISM repara) ---
+    Write-Etapa 'SFC /scannow - de 5 a 20 minutos. Nao feche esta janela...'
+    & "$env:SystemRoot\System32\sfc.exe" /scannow
+    $sfcExit = $LASTEXITCODE
+
+    # O CBS.log e sempre em ingles; as frases do console (traduzidas) NAO
+    # aparecem la. O que aparece sao as linhas [SR].
+    $cbs = "$env:SystemRoot\Logs\CBS\CBS.log"
+    if (Test-Path -LiteralPath $cbs) {
+        try {
+            $sr = @(Get-Content -LiteralPath $cbs -Tail 1500 -ErrorAction SilentlyContinue |
+                    Where-Object { $_ -match '\[SR\]' })
+            $naoReparou = @($sr | Where-Object { $_ -match 'Cannot repair member file|Cannot repair' })
+            $reparou    = @($sr | Where-Object { $_ -match 'Repairing corrupted file|Repaired file|successfully repaired' })
+            $verificou  = @($sr | Where-Object { $_ -match 'Verify complete|Verifying \d+' })
+
+            if ($naoReparou.Count -gt 0) {
+                Write-Falha 'SFC: encontrou arquivos corrompidos que NAO conseguiu reparar.'
+                $statusSFC = 'ATENCAO - reparo incompleto'
+                Add-Alerta 'SFC nao reparou tudo - ver %windir%\Logs\CBS\CBS.log.'
+            } elseif ($reparou.Count -gt 0) {
+                Write-Ok 'SFC: arquivos corrompidos reparados.'
+                $statusSFC = 'OK - reparado'
+                $script:precisaReiniciar = $true
+            } elseif ($verificou.Count -gt 0 -or $sfcExit -eq 0) {
+                Write-Ok 'SFC: nenhuma violacao de integridade.'
+                $statusSFC = 'OK - sem violacoes'
+            } else {
+                Write-Aviso 'SFC: resultado nao determinado. Ver %windir%\Logs\CBS\CBS.log.'
+                $statusSFC = 'inconclusivo'
+            }
+        } catch { Write-Aviso 'Nao foi possivel ler o CBS.log.' }
+    } elseif ($sfcExit -eq 0) {
+        Write-Ok 'SFC: concluido sem erros.'
+        $statusSFC = 'OK'
+    }
+
+    # --- Reinicializacao pendente ---
+    $chaves = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending'
+    )
+    foreach ($k in $chaves) {
+        if (Test-Path -LiteralPath $k -ErrorAction SilentlyContinue) { $script:precisaReiniciar = $true; break }
+    }
+
+    Write-Host ''
+    Write-Dest ("Resultado  ->  DISM: $statusDISM   |   SFC: $statusSFC")
+    if ($script:precisaReiniciar) { Write-Aviso 'Reinicie o computador para concluir os reparos.' }
     return [long]0
 }
 
@@ -3697,6 +3934,149 @@ function Invoke-ManutencaoRede {
         Write-Aviso 'Winsock e TCP/IP resetados - REINICIALIZACAO NECESSARIA.'
         $script:precisaReiniciar = $true
     }
+    return [long]0
+}
+
+function Repair-RedeCompleta {
+    <#
+      Ferramenta da opcao "Corrigir Rede e Internet" (veio de CorrigirRede.ps1).
+      Separada da Invoke-ManutencaoRede de proposito: aquela roda dentro da
+      manutencao completa e nao pode parar para perguntar nada.
+      Dois niveis:
+        BASICO   - flush DNS, ARP e renovar IP. Nao derruba a conexao.
+        PROFUNDO - + release, netsh int ip reset e winsock reset. DERRUBA.
+    #>
+    if ($SomenteRelatorio) {
+        Write-Simul 'Limparia DNS/ARP e renovaria o IP (modo basico).'
+        return [long]0
+    }
+
+    Write-Etapa 'Como esta o acesso a esta maquina'
+
+    # Reset de rede derruba atendimento remoto no meio: avisar antes.
+    $procRemoto = @(Get-Process -ErrorAction SilentlyContinue |
+        Where-Object { $_.ProcessName -match '(?i)^(anydesk|teamviewer|rustdesk|vncserver|winvnc)' })
+    $sessaoRDP = ($env:SESSIONNAME -and $env:SESSIONNAME -match '(?i)^RDP')
+    $acessoRemoto = ($procRemoto.Count -gt 0) -or $sessaoRDP
+
+    if ($acessoRemoto) {
+        Write-Falha 'ACESSO REMOTO DETECTADO NESTA MAQUINA'
+        foreach ($p in ($procRemoto | Select-Object -Unique ProcessName)) {
+            Write-Info ("   programa: " + $p.ProcessName)
+        }
+        if ($sessaoRDP) { Write-Info ("   sessao RDP: " + $env:SESSIONNAME) }
+        Write-Aviso 'O modo PROFUNDO derruba a conexao e VOCE PERDE O ACESSO.'
+    } else {
+        Write-Ok 'Nenhum programa de acesso remoto em execucao.'
+    }
+
+    # IP fixo se perde no reset profundo: mostrar antes para poder reconfigurar.
+    $temIPFixo = $false
+    Write-Etapa 'Configuracao de rede atual'
+    try {
+        foreach ($ad in @(Get-NetIPConfiguration -ErrorAction SilentlyContinue |
+                          Where-Object { $_.NetAdapter.Status -eq 'Up' })) {
+            $ipv4 = @($ad.IPv4Address)[0]
+            $origem = if ($ipv4) { $ipv4.PrefixOrigin } else { 'sem IP' }
+            if ($origem -eq 'Manual') { $temIPFixo = $true }
+            $gw  = if ($ad.IPv4DefaultGateway) { @($ad.IPv4DefaultGateway)[0].NextHop } else { '-' }
+            $dns = ($ad.DNSServer | Where-Object { $_.AddressFamily -eq 2 } |
+                    ForEach-Object { $_.ServerAddresses }) -join ', '
+            Write-Dest $ad.InterfaceAlias
+            Write-Info ("   IP      : " + $(if ($ipv4) { $ipv4.IPAddress } else { '-' }) + "  ($origem)")
+            Write-Info ("   Gateway : $gw")
+            Write-Info ("   DNS     : " + $(if ($dns) { $dns } else { '-' }))
+        }
+    } catch { Write-Aviso "Nao foi possivel ler a configuracao: $($_.Exception.Message)" }
+
+    if ($temIPFixo) {
+        Write-Aviso 'Esta maquina usa IP FIXO. O modo profundo devolve o adaptador para DHCP.'
+        Write-Info  'Anote os dados acima antes de prosseguir.'
+    }
+
+    # --- Escolha do modo ---
+    $modoProfundo = $false
+    if ($SemInteracao) {
+        Write-Info 'Modo desatendido: executando apenas o BASICO.'
+    } else {
+        Write-Host ''
+        Write-Host '     [1] BASICO   - limpa DNS/ARP e renova o IP (nao derruba a conexao)' -ForegroundColor Green
+        Write-Host '     [2] PROFUNDO - + reset de TCP/IP e Winsock (DERRUBA e exige reiniciar)' -ForegroundColor Yellow
+        Write-Host '     [0] Cancelar' -ForegroundColor DarkGray
+        Write-Host ''
+        $modo = (Read-Host '  Opcao').Trim()
+        if ($modo -eq '0' -or $modo -eq '') { Write-Info 'Cancelado. Nada foi alterado.'; return [long]0 }
+        if ($modo -eq '2') {
+            Write-Host ''
+            Write-Aviso 'O modo PROFUNDO vai executar:'
+            Write-Info  '  ipconfig /release e /renew   (a conexao cai por alguns segundos)'
+            Write-Info  '  netsh int ip reset           (zera o TCP/IP, volta para DHCP)'
+            Write-Info  '  netsh winsock reset          (zera o catalogo Winsock)'
+            if ($acessoRemoto) { Write-Falha 'VOCE ESTA CONECTADO REMOTAMENTE - VAI PERDER O ACESSO AGORA.' }
+            $conf = Read-Host '  Confirma o modo PROFUNDO? (S/N)'
+            if ($conf -match '^[Ss]') { $modoProfundo = $true }
+            else { Write-Info 'Modo profundo cancelado. Seguindo apenas com o basico.' }
+        }
+    }
+
+    # --- Basico ---
+    Write-Etapa 'Limpando cache DNS...'
+    try { Clear-DnsClientCache -ErrorAction Stop; Write-Ok 'Cache DNS limpo.' }
+    catch { & ipconfig /flushdns | Out-Null; Write-Ok 'Cache DNS limpo (ipconfig).' }
+
+    Write-Etapa 'Limpando cache ARP...'
+    try { & arp -d '*' 2>&1 | Out-Null; Write-Ok 'Cache ARP limpo.' }
+    catch { Write-Info 'Cache ARP: nao foi possivel limpar (normal em algumas versoes).' }
+
+    if ($modoProfundo) {
+        Write-Etapa 'Liberando endereco IP...'
+        try { & ipconfig /release 2>&1 | Out-Null; Write-Ok 'IP liberado.' }
+        catch { Write-Aviso "Falha ao liberar IP: $($_.Exception.Message)" }
+    }
+
+    Write-Etapa 'Renovando endereco IP...'
+    try {
+        $saida = & ipconfig /renew 2>&1
+        if ($saida | Where-Object { $_ -match '(?i)(erro|error|failed|falhou|incapaz|unable)' }) {
+            Write-Aviso 'Renovacao com avisos. Verifique cabo ou sinal Wi-Fi.'
+        } else { Write-Ok 'IP renovado.' }
+    } catch { Write-Aviso "Falha ao renovar IP: $($_.Exception.Message)" }
+
+    # --- Profundo ---
+    if ($modoProfundo) {
+        Write-Etapa 'Resetando TCP/IP...'
+        try { & netsh int ip reset 2>&1 | Out-Null; Write-Ok 'TCP/IP resetado.'; $script:precisaReiniciar = $true }
+        catch { Write-Aviso "Falha no reset de TCP/IP: $($_.Exception.Message)" }
+
+        Write-Etapa 'Resetando catalogo Winsock...'
+        try { & netsh winsock reset 2>&1 | Out-Null; Write-Ok 'Winsock resetado.'; $script:precisaReiniciar = $true }
+        catch { Write-Aviso "Falha no reset do Winsock: $($_.Exception.Message)" }
+
+        Add-Alerta 'Reset de TCP/IP e Winsock aplicado - REINICIAR o computador.'
+        if ($temIPFixo) { Add-Alerta 'A maquina usava IP FIXO: reconfigurar apos reiniciar.' }
+    } else {
+        Write-Info 'Reset de TCP/IP e Winsock nao executado (modo basico).'
+    }
+
+    # --- Conferencia ---
+    Write-Etapa 'Testando conectividade...'
+    $ok = 0
+    foreach ($alvo in @('1.1.1.1', '8.8.8.8')) {
+        $r = Test-Connection -ComputerName $alvo -Count 2 -ErrorAction SilentlyContinue
+        if ($r) {
+            $ms = [math]::Round(($r | Measure-Object -Property ResponseTime -Average).Average)
+            Write-Ok "Resposta de ${alvo}: $ms ms"
+            $ok++
+        } else { Write-Falha "Sem resposta de $alvo" }
+    }
+    if ($ok -eq 0) {
+        Write-Aviso 'Nenhum host respondeu. Verifique cabo, Wi-Fi e roteador.'
+        if ($script:precisaReiniciar) { Write-Info 'Reinicie: o reset de TCP/IP so vale apos reiniciar.' }
+        Add-Alerta 'Sem conectividade apos a correcao de rede.'
+    }
+
+    Write-Host ''
+    Write-Dest ("Modo executado: " + $(if ($modoProfundo) { 'PROFUNDO' } else { 'BASICO' }))
     return [long]0
 }
 
@@ -4035,6 +4415,8 @@ if ($Ferramenta) {
                     Write-Info  'Abra pelo menu Iniciar. Me diga o nome exato do programa que eu incluo na busca.'
                 }
             }
+            'certificados'  { Show-CertificadosInstalados | Out-Null }
+            'corrigirrede'  { Repair-RedeCompleta | Out-Null }
             'memoriavirtual' {
                 Write-Etapa 'Memoria virtual (arquivo de paginacao)'
 
@@ -4148,7 +4530,7 @@ if ($Ferramenta) {
     }
     Write-Host ''
     # Ferramentas somente-leitura nao deixam log salvo.
-    if ($chave -notin @('diagnostico', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual')) {
+    if ($chave -notin @('diagnostico', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados')) {
         Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
     }
     Write-Host ('=' * 68) -ForegroundColor Green
@@ -4156,7 +4538,7 @@ if ($Ferramenta) {
     # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
     if ($chave -eq 'diagnostico') { Publicar-RelatorioTemp -RemoverPastaLog }
     # protecaovirus/consoles: so abriram telas; nao deixam pasta de log.
-    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual')) {
+    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados')) {
         Remove-Item -LiteralPath (Join-Path $script:pastaExec 'manutencao.log') -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 200
         if ($script:pastaExec -and (Test-Path -LiteralPath $script:pastaExec)) {

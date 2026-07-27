@@ -16,13 +16,10 @@
 !ConfigurarPJe.ps1
 !CorrigirPermissoesPowerShell.ps1
 !CorrigirProxy.ps1
-!CorrigirRede.ps1
 !InstalarVisualC.ps1
 !LimparCertificadosVencidos.ps1
-!ListarCertificados.ps1
 !ReinstalarImpressora.ps1
 !RepararAudio.ps1
-!RepararSistema.ps1
 !RepararWebcam.ps1
 !README.md
 !.gitignore
