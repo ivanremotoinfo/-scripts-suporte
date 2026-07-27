@@ -60,6 +60,8 @@ $menu = @(
 
     # --- REPAROS ---
     @{ Cat='REPAROS';     Label='Reparar Sistema (SFC/DISM)';    Tipo='v2';     Args=@{ Ferramenta='sfc' } }
+    @{ Cat='REPAROS';     Label='Falta DLL (achar o pacote)';    Tipo='v2';     Args=@{ Ferramenta='dll' } }
+    @{ Cat='REPAROS';     Label='Reparo Avancado (ISO/CBS)';     Tipo='v2';     Args=@{ Ferramenta='reparoavancado' } }
     @{ Cat='REPAROS';     Label='Corrigir Rede e Internet';      Tipo='v2';     Args=@{ Ferramenta='corrigirrede' } }
     @{ Cat='REPAROS';     Label='Corrigir Proxy e Certif. Rede'; Tipo='v2';     Args=@{ Ferramenta='proxycert' } }
     @{ Cat='REPAROS';     Label='Reparar Fila de Impressao';     Tipo='v2';     Args=@{ Ferramenta='spooler' } }

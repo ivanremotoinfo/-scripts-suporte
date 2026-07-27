@@ -8663,6 +8663,504 @@ function Show-AnaliseBSOD {
     return [long]0
 }
 
+# =========================================================================
+# REGIAO: DLL FALTANDO
+# =========================================================================
+
+function Get-PacoteDaDLL {
+    <#
+      Diz de qual pacote vem uma DLL. A mensagem "falta X.dll" quase nunca e
+      arquivo de sistema corrompido: e' redistribuivel que nao foi instalado.
+      Por isso SFC e DISM nao resolvem esse tipo de erro.
+    #>
+    param([string]$Nome)
+
+    $n = $Nome.ToLower()
+
+    # Universal C Runtime: veio com o VC++ 2015 em diante
+    if ($n -like 'api-ms-win-crt-*' -or $n -eq 'ucrtbase.dll') {
+        return @{ Pacote = 'Visual C++ 2015-2022 (Universal C Runtime)'; Ferramenta = 'visualc'
+                  Obs = 'No Windows 7/8 tambem exige a atualizacao KB2999226.' }
+    }
+    # Visual C++ por versao
+    $mapaVC = [ordered]@{
+        '140' = 'Visual C++ 2015-2022'; '120' = 'Visual C++ 2013'; '110' = 'Visual C++ 2012'
+        '100' = 'Visual C++ 2010';      '90'  = 'Visual C++ 2008'; '80'  = 'Visual C++ 2005'
+        '71'  = 'Visual C++ 2003';      '70'  = 'Visual C++ 2002'
+    }
+    foreach ($ver in $mapaVC.Keys) {
+        if ($n -match "^(msvcr|msvcp|vcruntime|concrt|vccorlib|mfc|mfcm|atl)$ver(_\d+)?\.dll$") {
+            return @{ Pacote = $mapaVC[$ver]; Ferramenta = 'visualc'; Obs = '' }
+        }
+    }
+    # DirectX antigo (jogos e alguns sistemas graficos)
+    if ($n -match '^(d3dx9|d3dx10|d3dx11|xinput1_|x3daudio|xactengine|xapofx|d3dcompiler_4)') {
+        return @{ Pacote = 'DirectX End-User Runtime (junho/2010)'; Ferramenta = ''
+                  Obs = 'Baixar em microsoft.com/download/details.aspx?id=35 - o DirectX do Windows nao inclui essas DLLs antigas.' }
+    }
+    # Visual Basic 6: comum em sistema juridico antigo
+    if ($n -match '^(msvbvm50|msvbvm60)\.dll$') {
+        return @{ Pacote = 'Visual Basic 6 Runtime'; Ferramenta = ''
+                  Obs = 'Normalmente vem junto com o instalador do proprio sistema.' }
+    }
+    if ($n -match '^(mscomctl|comdlg32|richtx32|msflxgrd|tabctl32|mscomct2)\.ocx$') {
+        return @{ Pacote = 'Controles OCX do Visual Basic 6'; Ferramenta = ''
+                  Obs = 'Precisa copiar para SysWOW64 e registrar com: regsvr32 <arquivo>' }
+    }
+    # .NET
+    if ($n -match '^(mscoree|mscorlib|system\.|clr)') {
+        return @{ Pacote = '.NET Framework'; Ferramenta = ''
+                  Obs = 'Instalar o .NET Framework 4.8 (ou o 3.5 via Recursos do Windows).' }
+    }
+    # Java
+    if ($n -match '^(jvm|msvcr100|deploy|jp2iexp)\.dll$') {
+        return @{ Pacote = 'Java Runtime'; Ferramenta = 'java'; Obs = '' }
+    }
+    return $null
+}
+
+function Get-DLLsComErroRecente {
+    <#
+      Varre o log de eventos atras de falhas que citam .dll ou .ocx.
+      Evita depender do cliente lembrar o nome exato que apareceu na tela.
+        Application Error (1000) : "Nome do modulo com falha: X.dll"
+        SideBySide (33,58,59,78) : manifesto/VC++ errado
+        Application Hang (1002)  : travamento
+    #>
+    param([int]$Dias = 60)
+
+    $resultado = [System.Collections.Generic.List[PSObject]]::new()
+    $inicio = (Get-Date).AddDays(-$Dias)
+
+    try {
+        $eventos = @(Get-WinEvent -FilterHashtable @{
+            LogName = 'Application'; StartTime = $inicio } -MaxEvents 400 -ErrorAction SilentlyContinue |
+            Where-Object { $_.ProviderName -in @('Application Error', 'SideBySide', 'Application Hang') })
+    } catch { return $resultado }
+
+    foreach ($ev in $eventos) {
+        $msg = $ev.Message
+        if (-not $msg) { continue }
+        # pega qualquer nome de arquivo .dll/.ocx citado na mensagem
+        foreach ($m in [regex]::Matches($msg, '(?i)\b([A-Za-z0-9_\-\.]+\.(dll|ocx))\b')) {
+            $arq = $m.Groups[1].Value
+            # ignora o proprio executavel e modulos do sistema que nao ajudam
+            if ($arq -match '(?i)^(ntdll|kernelbase|kernel32|combase|user32|shell32)\.dll$') { continue }
+            $ja = $resultado | Where-Object { $_.Arquivo -eq $arq }
+            if ($ja) {
+                $ja.Ocorrencias++
+                if ($ev.TimeCreated -gt $ja.Ultima) { $ja.Ultima = $ev.TimeCreated }
+            } else {
+                $resultado.Add([PSCustomObject]@{
+                    Arquivo     = $arq
+                    Ocorrencias = 1
+                    Ultima      = $ev.TimeCreated
+                    Origem      = $ev.ProviderName
+                })
+            }
+        }
+    }
+    return ($resultado | Sort-Object Ocorrencias -Descending)
+}
+
+function Show-RedistribuiveisInstalados {
+    $regs = @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+              'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall')
+    $lista = [System.Collections.Generic.List[string]]::new()
+    foreach ($r in $regs) {
+        Get-ChildItem -Path $r -ErrorAction SilentlyContinue |
+            Get-ItemProperty -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -match 'Visual C\+\+|\.NET Framework|DirectX' } |
+            ForEach-Object { [void]$lista.Add($_.DisplayName) }
+    }
+    $unicos = @($lista | Sort-Object -Unique)
+    if ($unicos.Count -eq 0) {
+        Write-Aviso 'Nenhum redistribuivel Visual C++ / .NET encontrado nesta maquina.'
+    } else {
+        Write-Info "$($unicos.Count) pacote(s) instalado(s):"
+        foreach ($u in $unicos) { Write-Info "   $u" }
+    }
+}
+
+function Repair-DLLFaltando {
+    <#
+      Ajuda no erro "nao foi possivel iniciar o programa porque falta X.dll".
+      Descobre de onde a DLL deveria vir, verifica se ela existe na maquina,
+      confere a arquitetura, olha a quarentena do antivirus e oferece instalar
+      o pacote correto. SFC e DISM nao resolvem esse tipo de erro: a DLL nao e'
+      arquivo do Windows, e' de redistribuivel.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Identificaria de qual pacote vem a DLL faltando.'; return [long]0 }
+
+    Write-Etapa 'DLL faltando - identificar e resolver'
+    Write-Info 'Este erro quase nunca e arquivo do Windows corrompido: a DLL vem'
+    Write-Info 'de um redistribuivel que nao foi instalado. Por isso SFC/DISM nao resolvem.'
+
+    if ($SemInteracao) { Write-Aviso 'Modo desatendido: esta ferramenta precisa de interacao.'; return [long]0 }
+
+    # --- Como descobrir o nome ---
+    Write-Host ''
+    Write-Host '     [1] Procurar sozinho no log de eventos (ultimos 60 dias)' -ForegroundColor White
+    Write-Host '     [2] Digitar o nome que apareceu na mensagem de erro' -ForegroundColor White
+    Write-Host '     [3] So listar os redistribuiveis instalados' -ForegroundColor White
+    Write-Host '     [0] Cancelar' -ForegroundColor DarkGray
+    Write-Host ''
+    $opc = (Read-Host '  Opcao').Trim()
+    if ($opc -eq '0' -or $opc -eq '') { Write-Info 'Cancelado.'; return [long]0 }
+
+    if ($opc -eq '3') {
+        Write-Etapa 'Redistribuiveis instalados'
+        Show-RedistribuiveisInstalados
+        return [long]0
+    }
+
+    $nome = ''
+
+    if ($opc -eq '1') {
+        Write-Etapa 'Procurando falhas recentes no log de eventos...'
+        $achados = @(Get-DLLsComErroRecente -Dias 60)
+        if ($achados.Count -eq 0) {
+            Write-Info 'Nenhuma falha citando .dll nos ultimos 60 dias.'
+            Write-Info 'Use a opcao 2 e digite o nome que aparece na mensagem.'
+            return [long]0
+        }
+        Write-Ok "$($achados.Count) arquivo(s) citado(s) em falhas recentes:"
+        Write-Host ''
+        $i = 1
+        foreach ($a in ($achados | Select-Object -First 12)) {
+            Write-Host ("     [{0,2}] {1,-34} {2} ocorrencia(s)   ultima: {3}" -f `
+                $i, $a.Arquivo, $a.Ocorrencias, $a.Ultima.ToString('dd/MM/yyyy')) -ForegroundColor White
+            $i++
+        }
+        Write-Host ''
+        $sel = (Read-Host '  Numero do arquivo (ENTER para cancelar)').Trim()
+        if ($sel -match '^\d+$' -and [int]$sel -ge 1 -and [int]$sel -le [math]::Min(12, $achados.Count)) {
+            $nome = $achados[[int]$sel - 1].Arquivo
+        } else { Write-Info 'Cancelado.'; return [long]0 }
+    } else {
+        Write-Host ''
+        Write-Info 'Exemplos: VCRUNTIME140.dll, MSVCP140.dll, msvcr100.dll, MSCOMCTL.OCX'
+        $nome = (Read-Host '  Nome do arquivo').Trim().Trim('"').Trim("'")
+        if (-not $nome) { Write-Info 'Nada informado. Cancelado.'; return [long]0 }
+        if ($nome -notmatch '\.(dll|ocx|exe)$') { $nome = $nome + '.dll' }
+        $nome = Split-Path $nome -Leaf     # aceita caminho completo colado do erro
+    }
+
+    Write-Host ''
+    Write-Dest ("Arquivo: $nome")
+
+    # --- 1) A DLL existe na maquina? ---
+    Write-Etapa 'Procurando o arquivo no sistema...'
+    $locais = @(
+        "$env:SystemRoot\System32"
+        "$env:SystemRoot\SysWOW64"
+        "$env:SystemRoot"
+    )
+    $achados = [System.Collections.Generic.List[string]]::new()
+    foreach ($d in $locais) {
+        $c = Join-Path $d $nome
+        if (Test-Path -LiteralPath $c) {
+            $v = ''
+            try { $v = (Get-Item -LiteralPath $c).VersionInfo.FileVersion } catch { }
+            $achados.Add(("$c" + $(if ($v) { "   (versao $v)" } else { '' })))
+        }
+    }
+
+    if ($achados.Count -gt 0) {
+        Write-Ok 'O arquivo EXISTE nesta maquina:'
+        foreach ($a in $achados) { Write-Info "   $a" }
+
+        # System32 = 64 bits, SysWOW64 = 32 bits (nomes trocados, mas e' isso).
+        # Programa de 32 bits so enxerga SysWOW64; de 64 bits so System32.
+        $tem64 = @($achados | Where-Object { $_ -match 'System32' }).Count -gt 0
+        $tem32 = @($achados | Where-Object { $_ -match 'SysWOW64' }).Count -gt 0
+        Write-Host ''
+        Write-Dest 'Arquitetura:'
+        Write-Info ("   64 bits (System32) : " + $(if ($tem64) { 'presente' } else { 'AUSENTE' }))
+        Write-Info ("   32 bits (SysWOW64) : " + $(if ($tem32) { 'presente' } else { 'AUSENTE' }))
+        if ($tem64 -and -not $tem32) {
+            Write-Aviso 'So existe a versao 64 bits. Programa de 32 bits vai continuar acusando falta.'
+            Write-Info  'Instale tambem o redistribuivel x86 (a ferramenta instala os dois).'
+        } elseif ($tem32 -and -not $tem64) {
+            Write-Aviso 'So existe a versao 32 bits. Programa de 64 bits vai continuar acusando falta.'
+            Write-Info  'Instale tambem o redistribuivel x64.'
+        }
+
+        Write-Host ''
+        Write-Aviso 'Se o erro continua mesmo com o arquivo presente:'
+        Write-Info  '  - versao errada (o programa espera outra versao do mesmo pacote)'
+        Write-Info  '  - falta a outra arquitetura (ver acima)'
+        Write-Info  '  - a DLL usada e a que esta na pasta do programa, e ela corrompeu'
+        Write-Info  '    -> reinstalar o programa resolve'
+    } else {
+        Write-Falha 'O arquivo NAO foi encontrado em System32 nem em SysWOW64.'
+    }
+
+    # --- 2) O antivirus colocou em quarentena? ---
+    Write-Etapa 'Verificando se o antivirus colocou o arquivo em quarentena...'
+    try {
+        $q = @(Get-MpThreatDetection -ErrorAction SilentlyContinue)
+        $suspeito = @($q | Where-Object { $_.Resources -match [regex]::Escape($nome) })
+        if ($suspeito.Count -gt 0) {
+            Write-Aviso 'O Windows Defender tem deteccao envolvendo este arquivo.'
+            Write-Info  'Pode ser falso positivo: confira em Seguranca do Windows > Historico de protecao.'
+            Add-Alerta "Defender tem deteccao envolvendo $nome - verificar quarentena."
+        } else {
+            Write-Ok 'Nenhuma deteccao do Defender para este arquivo.'
+        }
+    } catch { Write-Info 'Nao foi possivel consultar o historico do Defender.' }
+
+    # --- 3) De qual pacote vem? ---
+    Write-Etapa 'Identificando a origem do arquivo...'
+    $info = Get-PacoteDaDLL -Nome $nome
+
+    if (-not $info) {
+        Write-Aviso 'Este arquivo nao esta na lista de pacotes conhecidos.'
+        Write-Info  'Provavelmente pertence ao proprio programa que mostrou o erro.'
+        Write-Info  'Caminho recomendado: reinstalar esse programa (nao baixar a DLL avulsa'
+        Write-Info  'de site de DLL - e' + [char]39 + ' fonte comum de malware).'
+        return [long]0
+    }
+
+    Write-Ok ("Vem do pacote: " + $info.Pacote)
+    if ($info.Obs) { Write-Info $info.Obs }
+
+    # --- 4) Resolver ---
+    if ($info.Ferramenta -eq 'visualc') {
+        Write-Host ''
+        Write-Info 'Da para resolver agora instalando os redistribuiveis Visual C++.'
+        $r = Read-Host '  Instalar os redistribuiveis que faltam? (S/N)'
+        if ($r -match '^[Ss]') {
+            Install-VisualCRedist | Out-Null
+            Write-Host ''
+            Write-Info 'Feche e abra o programa que mostrou o erro para testar.'
+        } else {
+            Write-Info 'Voce pode rodar depois pela opcao "Visual C++ Redistribuiveis" do menu.'
+        }
+    } elseif ($info.Ferramenta -eq 'java') {
+        Write-Info 'Use a opcao "Configurar Java (Juridico)" do menu apos instalar o Java.'
+    } else {
+        Write-Info 'Instale o pacote indicado acima e teste o programa novamente.'
+    }
+
+    Write-Host ''
+    Write-Aviso 'Nunca baixe a DLL avulsa de sites de download de DLL.'
+    Write-Info  'Sempre instale o pacote oficial que contem o arquivo.'
+    return [long]0
+}
+
+function Get-ArquivosNaoReparados {
+    <#
+      Extrai do CBS.log os arquivos que o SFC encontrou corrompidos e NAO
+      conseguiu reparar. E' a informacao que falta quando o SFC diz apenas
+      "encontrou arquivos corrompidos mas nao conseguiu corrigir alguns".
+    #>
+    $cbs = "$env:SystemRoot\Logs\CBS\CBS.log"
+    $lista = [System.Collections.Generic.List[string]]::new()
+    if (-not (Test-Path -LiteralPath $cbs)) { return $lista }
+    try {
+        $linhas = @(Get-Content -LiteralPath $cbs -Tail 4000 -ErrorAction SilentlyContinue |
+                    Where-Object { $_ -match 'Cannot repair member file' })
+        foreach ($l in $linhas) {
+            # formato: Cannot repair member file [l:24]'winload.efi' of ...
+            $m = [regex]::Match($l, "Cannot repair member file \[l:\d+\]'([^']+)'")
+            if ($m.Success) {
+                $arq = $m.Groups[1].Value
+                if (-not $lista.Contains($arq)) { [void]$lista.Add($arq) }
+            }
+        }
+    } catch { }
+    return $lista
+}
+
+function Get-FontesInstalacao {
+    <# Procura install.wim/install.esd em unidades montadas (ISO, DVD, pendrive). #>
+    $fontes = [System.Collections.Generic.List[PSObject]]::new()
+    foreach ($v in @(Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter })) {
+        $letra = [string]$v.DriveLetter
+        foreach ($arq in @('install.wim', 'install.esd')) {
+            $c = "${letra}:\sources\$arq"
+            if (Test-Path -LiteralPath $c -ErrorAction SilentlyContinue) {
+                $fontes.Add([PSCustomObject]@{
+                    Caminho = $c
+                    Tipo    = $(if ($arq -like '*.wim') { 'wim' } else { 'esd' })
+                    Rotulo  = $(if ($v.FileSystemLabel) { $v.FileSystemLabel } else { "unidade $letra" })
+                })
+            }
+        }
+    }
+    return $fontes
+}
+
+function Repair-SistemaAvancado {
+    <#
+      Para quando o SFC acusa corrupcao e NAO consegue reparar - normalmente
+      porque o proprio repositorio de componentes esta danificado ou o
+      RestoreHealth nao consegue baixar os arquivos (sem internet, WSUS,
+      Windows Update quebrado).
+      Aqui: mostra QUAIS arquivos falharam, repara usando uma ISO/DVD do
+      Windows como fonte, e permite reparar um arquivo especifico.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Mostraria os arquivos nao reparados e ofereceria reparo com fonte alternativa.'; return [long]0 }
+
+    Write-Etapa 'Reparo avancado de arquivos do sistema'
+
+    # --- 1) O que o SFC nao conseguiu reparar ---
+    Write-Etapa 'Lendo o CBS.log (resultado da ultima varredura do SFC)...'
+    $falhos = @(Get-ArquivosNaoReparados)
+    if ($falhos.Count -gt 0) {
+        Write-Falha "$($falhos.Count) arquivo(s) que o SFC NAO conseguiu reparar:"
+        foreach ($f in ($falhos | Select-Object -First 30)) { Write-Info "   $f" }
+        if ($falhos.Count -gt 30) { Write-Info "   ... e mais $($falhos.Count - 30)" }
+        Add-Alerta "$($falhos.Count) arquivo(s) do sistema seguem corrompidos apos o SFC."
+    } else {
+        Write-Ok 'O CBS.log nao lista arquivos que tenham falhado no reparo.'
+        Write-Info 'Se voce ainda nao rodou o SFC, use antes a opcao "Reparar Sistema (SFC/DISM)".'
+    }
+
+    if ($SemInteracao) { return [long]0 }
+
+    # --- 2) Reparar usando ISO/DVD como fonte ---
+    Write-Host ''
+    Write-Info 'Quando o RestoreHealth falha (sem internet, WSUS bloqueando, ou o proprio'
+    Write-Info 'repositorio danificado), da para reparar usando a midia do Windows.'
+    Write-Host ''
+    Write-Host '     [1] Reparar usando ISO/DVD do Windows como fonte' -ForegroundColor White
+    Write-Host '     [2] Reparar um arquivo especifico (sfc /scanfile)' -ForegroundColor White
+    Write-Host '     [3] Limpar e reconstruir o repositorio de componentes' -ForegroundColor White
+    Write-Host '     [0] Sair' -ForegroundColor DarkGray
+    Write-Host ''
+    $opc = (Read-Host '  Opcao').Trim()
+
+    switch ($opc) {
+
+        '1' {
+            Write-Etapa 'Procurando midia do Windows montada...'
+            $fontes = @(Get-FontesInstalacao)
+            $origem = ''
+
+            if ($fontes.Count -gt 0) {
+                Write-Ok "$($fontes.Count) fonte(s) encontrada(s):"
+                $i = 1
+                foreach ($f in $fontes) {
+                    Write-Host ("     [$i] $($f.Caminho)   ($($f.Rotulo))") -ForegroundColor White
+                    $i++
+                }
+                Write-Host '     [M] Informar outro caminho (arquivo .iso, .wim ou .esd)' -ForegroundColor White
+                Write-Host ''
+                $s = (Read-Host '  Opcao').Trim()
+                if ($s -match '^\d+$' -and [int]$s -ge 1 -and [int]$s -le $fontes.Count) {
+                    $sel = $fontes[[int]$s - 1]
+                    $origem = "$($sel.Tipo):$($sel.Caminho):1"
+                }
+            } else {
+                Write-Info 'Nenhuma ISO/DVD do Windows montado no momento.'
+            }
+
+            if (-not $origem) {
+                Write-Host ''
+                Write-Info 'Informe o caminho da midia. Pode ser:'
+                Write-Info '   um .iso   (eu monto para voce)'
+                Write-Info '   um install.wim ou install.esd'
+                Write-Info '   a letra do DVD/pendrive, ex.: E:'
+                $cam = (Read-Host '  Caminho (ENTER para cancelar)').Trim().Trim('"')
+                if (-not $cam) { Write-Info 'Cancelado.'; return [long]0 }
+
+                if ($cam -match '\.iso$') {
+                    if (-not (Test-Path -LiteralPath $cam)) { Write-Falha 'Arquivo .iso nao encontrado.'; return [long]0 }
+                    Write-Acao 'Montando a ISO...'
+                    try {
+                        $img = Mount-DiskImage -ImagePath $cam -PassThru -ErrorAction Stop
+                        Start-Sleep -Seconds 2
+                        $letra = ($img | Get-Volume).DriveLetter
+                        Write-Ok "ISO montada em ${letra}:"
+                        foreach ($a in @('install.wim', 'install.esd')) {
+                            $c = "${letra}:\sources\$a"
+                            if (Test-Path -LiteralPath $c) {
+                                $origem = $(if ($a -like '*.wim') { "wim:$c`:1" } else { "esd:$c`:1" })
+                                break
+                            }
+                        }
+                        if (-not $origem) { Write-Falha 'A ISO nao tem sources\install.wim nem install.esd.' }
+                    } catch { Write-Falha "Nao foi possivel montar a ISO: $($_.Exception.Message)" }
+                } elseif ($cam -match '\.(wim|esd)$') {
+                    if (-not (Test-Path -LiteralPath $cam)) { Write-Falha 'Arquivo nao encontrado.'; return [long]0 }
+                    $tipo = $(if ($cam -match '\.wim$') { 'wim' } else { 'esd' })
+                    $origem = "$tipo`:$cam`:1"
+                } else {
+                    $letra = $cam.TrimEnd('\', ':')
+                    foreach ($a in @('install.wim', 'install.esd')) {
+                        $c = "${letra}:\sources\$a"
+                        if (Test-Path -LiteralPath $c) {
+                            $origem = $(if ($a -like '*.wim') { "wim:$c`:1" } else { "esd:$c`:1" })
+                            break
+                        }
+                    }
+                    if (-not $origem) { Write-Falha "Nao achei sources\install.wim em ${letra}:" }
+                }
+            }
+
+            if (-not $origem) { return [long]0 }
+
+            Write-Host ''
+            Write-Dest ("Fonte: $origem")
+            Write-Aviso 'A edicao e a versao da midia precisam bater com a instalada,'
+            Write-Info  'senao o DISM recusa a fonte. Confira com: winver'
+            Write-Info  'Pode levar de 10 a 30 minutos. Nao feche a janela.'
+            Write-Host ''
+            $c = Read-Host '  Iniciar o reparo? (S/N)'
+            if ($c -notmatch '^[Ss]') { Write-Info 'Cancelado.'; return [long]0 }
+
+            Write-Etapa 'DISM /RestoreHealth com fonte local...'
+            # /LimitAccess: nao tenta o Windows Update, usa so a midia
+            & dism.exe /Online /Cleanup-Image /RestoreHealth /Source:$origem /LimitAccess 2>&1 |
+                ForEach-Object { if ($_.ToString().Trim()) { Write-Host "     $_" -ForegroundColor DarkGray } }
+
+            if ($LASTEXITCODE -eq 0) {
+                Write-Ok 'DISM concluido com sucesso.'
+                Write-Etapa 'Rodando SFC novamente para aplicar o reparo...'
+                & "$env:SystemRoot\System32\sfc.exe" /scannow
+                $script:precisaReiniciar = $true
+                Write-Ok 'Reparo concluido. Reinicie o computador.'
+            } else {
+                Write-Falha "DISM retornou codigo $LASTEXITCODE."
+                Write-Info 'Causa comum: edicao/versao da midia diferente da instalada.'
+                Write-Info 'Confira a versao com winver e use uma ISO da mesma versao.'
+            }
+        }
+
+        '2' {
+            Write-Host ''
+            Write-Info 'Informe o caminho completo do arquivo, ex.:'
+            Write-Info '   C:\Windows\System32\opencl.dll'
+            $arq = (Read-Host '  Caminho').Trim().Trim('"')
+            if (-not $arq) { Write-Info 'Cancelado.'; return [long]0 }
+            Write-Etapa "Verificando e reparando $arq ..."
+            & "$env:SystemRoot\System32\sfc.exe" "/scanfile=$arq"
+            if ($LASTEXITCODE -eq 0) { Write-Ok 'Comando concluido. Confira a mensagem acima.' }
+            else { Write-Aviso "sfc retornou codigo $LASTEXITCODE." }
+        }
+
+        '3' {
+            Write-Host ''
+            Write-Aviso 'StartComponentCleanup /ResetBase remove as versoes antigas dos'
+            Write-Info  'componentes: libera espaco, mas depois disso NAO da mais para'
+            Write-Info  'desinstalar as atualizacoes ja instaladas.'
+            $c = Read-Host '  Continuar? (S/N)'
+            if ($c -notmatch '^[Ss]') { Write-Info 'Cancelado.'; return [long]0 }
+            Write-Etapa 'DISM StartComponentCleanup /ResetBase - pode demorar...'
+            & dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase 2>&1 |
+                ForEach-Object { if ($_.ToString().Trim()) { Write-Host "     $_" -ForegroundColor DarkGray } }
+            if ($LASTEXITCODE -eq 0) { Write-Ok 'Repositorio de componentes reconstruido.' }
+            else { Write-Aviso "DISM retornou codigo $LASTEXITCODE." }
+        }
+
+        default { Write-Info 'Nada feito.' }
+    }
+
+    return [long]0
+}
+
 function Remove-PastaAnyDesk {
     param(
         [ValidateSet('Completo', 'SomenteLogs')][string]$Modo = 'SomenteLogs',
@@ -9645,6 +10143,8 @@ if ($Ferramenta) {
                 }
             }
             'certificados'  { Show-CertificadosInstalados | Out-Null }
+            'dll'           { Repair-DLLFaltando | Out-Null }
+            'reparoavancado' { Repair-SistemaAvancado | Out-Null }
             'bsod'          { Show-AnaliseBSOD | Out-Null }
             'proxycert'      { Repair-ProxyECertificados | Out-Null }
             'limparcerts'    { Clear-CertificadosVencidos | Out-Null }
@@ -9769,7 +10269,7 @@ if ($Ferramenta) {
     }
     Write-Host ''
     # Ferramentas somente-leitura nao deixam log salvo.
-    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados')) {
+    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll')) {
         Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
     }
     Write-Host ('=' * 68) -ForegroundColor Green
@@ -9777,7 +10277,7 @@ if ($Ferramenta) {
     # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
     if ($chave -in @('diagnostico', 'bsod')) { Publicar-RelatorioTemp -RemoverPastaLog }
     # protecaovirus/consoles: so abriram telas; nao deixam pasta de log.
-    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados')) {
+    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll')) {
         Remove-Item -LiteralPath (Join-Path $script:pastaExec 'manutencao.log') -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 200
         if ($script:pastaExec -and (Test-Path -LiteralPath $script:pastaExec)) {
