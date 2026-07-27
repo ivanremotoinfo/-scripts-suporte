@@ -4241,7 +4241,7 @@ $script:precisaReiniciar = $false
 
 Write-Host ''
 Write-Host ('=' * 68) -ForegroundColor Cyan
-Write-Host '              MANUTENCAO COMPLETA DO PC  -  v2.0' -ForegroundColor Cyan
+Write-Host '        MANUTENCAO COMPLETA DO PC  -  v2.0  (2026.07.27)' -ForegroundColor Cyan
 Write-Host ('=' * 68) -ForegroundColor Cyan
 Write-Host ("  Maquina : $env:COMPUTERNAME") -ForegroundColor Gray
 Write-Host ("  Iniciado: $($script:inicio.ToString('dd/MM/yyyy HH:mm:ss'))") -ForegroundColor Gray

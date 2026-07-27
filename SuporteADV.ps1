@@ -15,6 +15,10 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -ErrorAction S
 $baseUrl = 'https://raw.githubusercontent.com/ivanremotoinfo/-scripts-suporte/main/'
 $scriptV2 = 'ManutencaoCompleta.ps1'   # motor com ~40 ferramentas
 
+# Versao = data da ultima alteracao publicada. Aparece no cabecalho e no
+# relatorio, para saber qual versao o cliente rodou quando ele relatar algo.
+$versaoMenu = '2026.07.27'
+
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator
 )
@@ -149,6 +153,7 @@ function Mostrar-Menu {
     Linha-Central $sub    'White'
     Write-Host $barra -ForegroundColor DarkCyan
     Write-Host ("  $dt   PC: $env:COMPUTERNAME   User: $env:USERNAME") -ForegroundColor DarkGray
+    Write-Host ("  versao $versaoMenu   |   suporte.adv.br") -ForegroundColor DarkGray
     if ($isAdmin) {
         Write-Host '  Privilegios: [Administrador]' -ForegroundColor Green
     } else {
