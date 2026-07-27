@@ -63,32 +63,36 @@ Write-Aviso 'Nao feche esta janela. Aguarde o progresso abaixo:'
 Write-Host ''
 
 & "$env:SystemRoot\System32\sfc.exe" /scannow
+$sfcExit = $LASTEXITCODE
 
 Write-Host ''
 
-# Determinar resultado via CBS.log (SFC grava o resumo neste log)
+# Determinar o resultado pelo CBS.log.
+# O CBS.log e SEMPRE em ingles (a saida colorida do sfc na tela e' que e'
+# traduzida), mas as frases do console - "did not find any integrity
+# violations" - NAO aparecem no log. O que aparece sao as linhas [SR]:
+#   "Verify complete"            -> varredura terminou
+#   "Repairing corrupted file"   -> corrigiu algo
+#   "Cannot repair member file"  -> nao conseguiu corrigir
 $cbsLog = "$env:SystemRoot\Logs\CBS\CBS.log"
 $sfcResultado = 'desconhecido'
 
 if (Test-Path $cbsLog) {
     try {
-        $cbsLinhas = Get-Content -Path $cbsLog -Tail 300 -Encoding Unicode -ErrorAction SilentlyContinue
-        if (-not $cbsLinhas) {
-            $cbsLinhas = Get-Content -Path $cbsLog -Tail 300 -ErrorAction SilentlyContinue
-        }
-        $cbsTexto = ($cbsLinhas -join ' ').ToLower()
-        if ($cbsTexto -match 'did not find any integrity violations') {
-            $sfcResultado = 'limpo'
-        } elseif ($cbsTexto -match 'successfully repaired') {
-            $sfcResultado = 'reparado'
-        } elseif ($cbsTexto -match 'unable to fix' -or $cbsTexto -match 'unable to repair') {
-            $sfcResultado = 'falhou'
-        } elseif ($cbsTexto -match 'found corrupt files') {
-            $sfcResultado = 'corrompido'
-        } elseif ($cbsTexto -match 'could not perform') {
-            $sfcResultado = 'erro'
-        }
+        $cbsLinhas = Get-Content -Path $cbsLog -Tail 1500 -ErrorAction SilentlyContinue
+        $srLinhas  = @($cbsLinhas | Where-Object { $_ -match '\[SR\]' })
+
+        $naoReparou = @($srLinhas | Where-Object { $_ -match 'Cannot repair member file|Cannot repair' })
+        $reparou    = @($srLinhas | Where-Object { $_ -match 'Repairing corrupted file|Repaired file|successfully repaired' })
+        $verificou  = @($srLinhas | Where-Object { $_ -match 'Verify complete|Verifying \d+' })
+
+        if     ($naoReparou.Count -gt 0) { $sfcResultado = 'falhou' }
+        elseif ($reparou.Count    -gt 0) { $sfcResultado = 'reparado' }
+        elseif ($verificou.Count  -gt 0) { $sfcResultado = 'limpo' }
+        elseif ($sfcExit -eq 0)          { $sfcResultado = 'limpo' }
     } catch {}
+} elseif ($sfcExit -eq 0) {
+    $sfcResultado = 'limpo'
 }
 
 switch ($sfcResultado) {
@@ -132,10 +136,17 @@ $checkTexto = Executar-DISM -Argumentos @('/Online', '/Cleanup-Image', '/CheckHe
 Write-Host ''
 $checkProblema = $false
 
-if ($checkTexto -match 'No component store corruption detected') {
+# O DISM imprime no idioma do Windows. Em PT-BR nada casa com o texto em
+# ingles, o que fazia o script achar que era "inconclusivo" e rodar
+# ScanHealth + RestoreHealth (ate 30 min) mesmo com a imagem sadia.
+$reSemCorrupcao = 'No component store corruption detected|Nenhuma corrup.{0,3}o do reposit.{0,3}rio de componentes|Nenhuma corrup.{0,3}o de armazenamento de componentes'
+$reCorrompido   = 'component store is repairable|component store is corrupted|reposit.{0,3}rio de componentes .{0,3} repar.vel|reposit.{0,3}rio de componentes est. corrompido|armazenamento de componentes .{0,3} repar.vel'
+$reSucesso      = 'The restore operation completed successfully|The operation completed successfully|A opera.{0,3}o de restaura.{0,3}o foi conclu.da com .xito|A opera.{0,3}o foi conclu.da com .xito'
+
+if ($checkTexto -match $reSemCorrupcao) {
     Write-Ok 'CheckHealth: Sem corrupcao detectada na imagem do sistema.'
     $statusCheckHealth = 'OK - sem corrupcao'
-} elseif ($checkTexto -match 'component store is repairable' -or $checkTexto -match 'component store is corrupted') {
+} elseif ($checkTexto -match $reCorrompido) {
     Write-Aviso 'CheckHealth: Corrupcao detectada. ScanHealth sera executado a seguir.'
     $statusCheckHealth = 'ATENCAO - corrupcao detectada'
     $checkProblema = $true
@@ -160,10 +171,10 @@ if ($checkProblema) {
 
     Write-Host ''
 
-    if ($scanTexto -match 'No component store corruption detected') {
+    if ($scanTexto -match $reSemCorrupcao) {
         Write-Ok 'ScanHealth: Nenhuma corrupcao confirmada.'
         $statusScanHealth = 'OK - sem corrupcao'
-    } elseif ($scanTexto -match 'component store is repairable' -or $scanTexto -match 'component store is corrupted') {
+    } elseif ($scanTexto -match $reCorrompido) {
         Write-Aviso 'ScanHealth: Corrupcao confirmada. RestoreHealth sera executado a seguir.'
         $statusScanHealth = 'ATENCAO - corrupcao confirmada'
         $scanProblema = $true
@@ -192,12 +203,11 @@ if ($scanProblema) {
 
     Write-Host ''
 
-    if ($restoreTexto -match 'The restore operation completed successfully' -or
-        $restoreTexto -match 'The operation completed successfully') {
+    if ($restoreTexto -match $reSucesso) {
         Write-Ok 'RestoreHealth: Imagem do sistema reparada com sucesso.'
         $statusRestoreHealth = 'OK - reparado com sucesso'
         $precisaReiniciar = $true
-    } elseif ($restoreTexto -match 'Error' -or $restoreTexto -match 'Erro') {
+    } elseif ($restoreTexto -match 'Error|Erro') {
         Write-Falha 'RestoreHealth: Erro durante o reparo. Verifique a conexao com a internet.'
         Write-Info  'Dica: conecte a internet e execute o script novamente, ou use uma midia ISO do Windows.'
         $statusRestoreHealth = 'FALHA - erro durante o reparo'
@@ -283,7 +293,7 @@ if ($statusSFC -match '^OK' -and $statusCheckHealth -match '^OK' -and -not $prec
 }
 
 Write-Host ''
-Write-Host '   Logs detalhados disponíveis em:' -ForegroundColor DarkGray
+Write-Host '   Logs detalhados em:' -ForegroundColor DarkGray
 Write-Host "   - $env:SystemRoot\Logs\CBS\CBS.log" -ForegroundColor DarkGray
 Write-Host "   - $env:SystemRoot\Logs\DISM\dism.log" -ForegroundColor DarkGray
 Write-Host ''

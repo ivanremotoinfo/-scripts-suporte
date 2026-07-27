@@ -45,7 +45,7 @@ Write-Host ''
 # ETAPA 2 - Verificar privilegios de Administrador
 # =========================================================================
 
-Write-Etapa '2/10  Verificando privilegios de Administrador...'
+Write-Etapa '1/10  Verificando privilegios de Administrador...'
 Write-Host ''
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
@@ -54,23 +54,30 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 
 if ($isAdmin) {
     Write-Ok 'Executando como Administrador. Todas as correcoes serao aplicadas.'
-    Add-Rel '2. Administrador' 'OK' 'Script executando com privilegios de Administrador'
+    Add-Rel '1. Administrador' 'OK' 'Script executando com privilegios de Administrador'
 } else {
     Write-Aviso 'NAO esta sendo executado como Administrador.'
     Write-Info  'Correcoes no HKLM e para todos os usuarios exigem privilegios elevados.'
     Write-Info  'Execute novamente: clique direito no PowerShell > Executar como Administrador'
-    Add-Rel '2. Administrador' 'AVISO' 'Sem privilegios de Admin. Algumas correcoes podem nao ser aplicadas.'
+    Add-Rel '1. Administrador' 'AVISO' 'Sem privilegios de Admin. Algumas correcoes podem nao ser aplicadas.'
 }
 
 # =========================================================================
 # ETAPA 1 - Corrigir ExecutionPolicy em todos os escopos
 # =========================================================================
 
-Write-Etapa '1/10  Corrigindo ExecutionPolicy em todos os escopos...'
+Write-Etapa '2/10  Corrigindo ExecutionPolicy em todos os escopos...'
 Write-Host ''
+
+# RemoteSigned e nao Unrestricted: libera todo script criado na propria
+# maquina e continua exigindo assinatura no que vier da internet. Deixar
+# Unrestricted numa maquina de cliente derruba essa protecao para sempre,
+# e o toolkit ja roda com -ExecutionPolicy Bypass quando precisa.
+$politicaAlvo = 'RemoteSigned'
 
 $politicaAntes = Get-ExecutionPolicy -ErrorAction SilentlyContinue
 Write-Info "Politica efetiva atual: $politicaAntes"
+Write-Info "Politica que sera aplicada: $politicaAlvo"
 Write-Host ''
 
 $escopos = @(
@@ -88,16 +95,16 @@ $escoposErro  = 0
 foreach ($escopo in $escopos) {
     try {
         $politicaAtual = Get-ExecutionPolicy -Scope $escopo.Nome -ErrorAction SilentlyContinue
-        if ($politicaAtual -eq 'Unrestricted') {
-            Write-Ok ($escopo.Nome.PadRight(18) + ': ja esta como Unrestricted.')
+        if ($politicaAtual -in @($politicaAlvo, 'Unrestricted', 'Bypass')) {
+            Write-Ok ($escopo.Nome.PadRight(18) + ": ja permite execucao ($politicaAtual).")
             $escoposOk++
         } else {
             if ($escopo.GPO) {
                 Write-Aviso ($escopo.Nome.PadRight(18) + ': controlado por GPO (valor atual: ' + $politicaAtual + '). Ignorando.')
                 $escoposGPO++
             } else {
-                Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope $escopo.Nome -Force -ErrorAction Stop
-                Write-Ok ($escopo.Nome.PadRight(18) + ': corrigido para Unrestricted (era: ' + $politicaAtual + ').')
+                Set-ExecutionPolicy -ExecutionPolicy $politicaAlvo -Scope $escopo.Nome -Force -ErrorAction Stop
+                Write-Ok ($escopo.Nome.PadRight(18) + ": corrigido para $politicaAlvo (era: " + $politicaAtual + ').')
                 $escoposOk++
             }
         }
@@ -118,18 +125,18 @@ Write-Host ''
 Write-Info "Politica efetiva apos correcao: $politicaDepois"
 
 if ($escoposErro -eq 0 -and $escoposGPO -eq 0) {
-    Add-Rel '1. ExecutionPolicy' 'OK' "Todos os escopos definidos como Unrestricted"
+    Add-Rel '2. ExecutionPolicy' 'OK' "Todos os escopos definidos como $politicaAlvo"
 } elseif ($escoposGPO -gt 0 -and $escoposErro -eq 0) {
-    Add-Rel '1. ExecutionPolicy' 'AVISO' "$escoposOk escopo(s) corrigidos | $escoposGPO escopo(s) bloqueados por GPO"
+    Add-Rel '2. ExecutionPolicy' 'AVISO' "$escoposOk escopo(s) corrigidos | $escoposGPO escopo(s) bloqueados por GPO"
 } else {
-    Add-Rel '1. ExecutionPolicy' 'AVISO' "$escoposOk OK | $escoposGPO GPO | $escoposErro erro(s)"
+    Add-Rel '2. ExecutionPolicy' 'AVISO' "$escoposOk OK | $escoposGPO GPO | $escoposErro erro(s)"
 }
 
 # =========================================================================
 # ETAPA 6 - Verificar bloqueio por GPO antes de editar registro
 # =========================================================================
 
-Write-Etapa '6/10  Verificando bloqueio por GPO...'
+Write-Etapa '3/10  Verificando bloqueio por GPO...'
 Write-Host ''
 
 $regGPOHKLM = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell'
@@ -158,9 +165,9 @@ if ($gpoHKCU) {
 
 if (-not $gpoAtivo) {
     Write-Ok 'Nenhum bloqueio por GPO detectado.'
-    Add-Rel '6. GPO' 'OK' 'Nenhuma politica de grupo bloqueando o PowerShell'
+    Add-Rel '3. GPO' 'OK' 'Nenhuma politica de grupo bloqueando o PowerShell'
 } else {
-    Add-Rel '6. GPO' 'AVISO' 'GPO ativa detectada. Administrador do dominio deve liberar via GPMC.'
+    Add-Rel '3. GPO' 'AVISO' 'GPO ativa detectada. Administrador do dominio deve liberar via GPMC.'
 }
 
 # =========================================================================
@@ -178,9 +185,9 @@ try {
         Write-Info 'Chave HKLM 64 bits criada.'
     }
     $valorAtual = (Get-ItemProperty $regHKLM64 -ErrorAction SilentlyContinue).ExecutionPolicy
-    Set-ItemProperty $regHKLM64 -Name 'ExecutionPolicy' -Value 'Unrestricted' -Type String -Force
-    Write-Ok "HKLM 64 bits: ExecutionPolicy definida como Unrestricted (era: $valorAtual)."
-    Add-Rel '4. HKLM 64 bits' 'OK' 'ExecutionPolicy=Unrestricted aplicado'
+    Set-ItemProperty $regHKLM64 -Name 'ExecutionPolicy' -Value $politicaAlvo -Type String -Force
+    Write-Ok "HKLM 64 bits: ExecutionPolicy definida como $politicaAlvo (era: $valorAtual)."
+    Add-Rel '4. HKLM 64 bits' 'OK' ("ExecutionPolicy=$politicaAlvo aplicado")
 } catch {
     Write-Falha ('HKLM 64 bits: erro - ' + $_.Exception.Message)
     Add-Rel '4. HKLM 64 bits' 'ERRO' $_.Exception.Message
@@ -190,7 +197,7 @@ try {
 # ETAPA 7 - Corrigir registro HKLM (32 bits / WOW6432Node)
 # =========================================================================
 
-Write-Etapa '7/10  Corrigindo registro HKLM - PowerShell 32 bits (WOW6432Node)...'
+Write-Etapa '5/10  Corrigindo registro HKLM - PowerShell 32 bits (WOW6432Node)...'
 Write-Host ''
 
 $regHKLM32 = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell'
@@ -201,19 +208,19 @@ try {
         Write-Info 'Chave HKLM 32 bits criada.'
     }
     $valorAtual32 = (Get-ItemProperty $regHKLM32 -ErrorAction SilentlyContinue).ExecutionPolicy
-    Set-ItemProperty $regHKLM32 -Name 'ExecutionPolicy' -Value 'Unrestricted' -Type String -Force
-    Write-Ok "HKLM 32 bits: ExecutionPolicy definida como Unrestricted (era: $valorAtual32)."
-    Add-Rel '7. HKLM 32 bits' 'OK' 'ExecutionPolicy=Unrestricted aplicado (WOW6432Node)'
+    Set-ItemProperty $regHKLM32 -Name 'ExecutionPolicy' -Value $politicaAlvo -Type String -Force
+    Write-Ok "HKLM 32 bits: ExecutionPolicy definida como $politicaAlvo (era: $valorAtual32)."
+    Add-Rel '5. HKLM 32 bits' 'OK' ("ExecutionPolicy=$politicaAlvo aplicado (WOW6432Node)")
 } catch {
     Write-Falha ('HKLM 32 bits: erro - ' + $_.Exception.Message)
-    Add-Rel '7. HKLM 32 bits' 'ERRO' $_.Exception.Message
+    Add-Rel '5. HKLM 32 bits' 'ERRO' $_.Exception.Message
 }
 
 # =========================================================================
 # ETAPA 5 - Corrigir registro HKCU (usuario atual)
 # =========================================================================
 
-Write-Etapa '5/10  Corrigindo registro HKCU - usuario atual...'
+Write-Etapa '6/10  Corrigindo registro HKCU - usuario atual...'
 Write-Host ''
 
 $regHKCU = 'HKCU:\SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell'
@@ -224,19 +231,19 @@ try {
         Write-Info 'Chave HKCU criada.'
     }
     $valorAtualHKCU = (Get-ItemProperty $regHKCU -ErrorAction SilentlyContinue).ExecutionPolicy
-    Set-ItemProperty $regHKCU -Name 'ExecutionPolicy' -Value 'Unrestricted' -Type String -Force
-    Write-Ok "HKCU: ExecutionPolicy definida como Unrestricted (era: $valorAtualHKCU)."
-    Add-Rel '5. HKCU' 'OK' 'ExecutionPolicy=Unrestricted aplicado para o usuario atual'
+    Set-ItemProperty $regHKCU -Name 'ExecutionPolicy' -Value $politicaAlvo -Type String -Force
+    Write-Ok "HKCU: ExecutionPolicy definida como $politicaAlvo (era: $valorAtualHKCU)."
+    Add-Rel '6. HKCU' 'OK' ("ExecutionPolicy=$politicaAlvo aplicado para o usuario atual")
 } catch {
     Write-Falha ('HKCU: erro - ' + $_.Exception.Message)
-    Add-Rel '5. HKCU' 'ERRO' $_.Exception.Message
+    Add-Rel '6. HKCU' 'ERRO' $_.Exception.Message
 }
 
 # =========================================================================
 # ETAPA 3 - Desbloquear arquivos .ps1 com Zone.Identifier
 # =========================================================================
 
-Write-Etapa '3/10  Desbloqueando arquivos .ps1 com Zone.Identifier (bloqueio de internet)...'
+Write-Etapa '7/10  Desbloqueando arquivos .ps1 com Zone.Identifier (bloqueio de internet)...'
 Write-Host ''
 
 $nomesIgnorados  = '^(Public|All Users|Default|Default User|defaultuser0|desktop\.ini)$'
@@ -302,14 +309,14 @@ if (Test-Path 'C:\Suporte') {
 Write-Host ''
 if ($totalBloqueados -eq 0) {
     Write-Ok 'Nenhum arquivo .ps1 bloqueado por Zone.Identifier encontrado.'
-    Add-Rel '3. Zone.Identifier' 'OK' 'Nenhum arquivo bloqueado encontrado'
+    Add-Rel '7. Zone.Identifier' 'OK' 'Nenhum arquivo bloqueado encontrado'
 } elseif ($totalDesbloqueados -eq $totalBloqueados) {
     Write-Ok "Zone.Identifier: $totalDesbloqueados de $totalBloqueados arquivo(s) desbloqueado(s) com sucesso."
-    Add-Rel '3. Zone.Identifier' 'OK' "$totalDesbloqueados arquivo(s) desbloqueados de $totalBloqueados encontrados"
+    Add-Rel '7. Zone.Identifier' 'OK' "$totalDesbloqueados arquivo(s) desbloqueados de $totalBloqueados encontrados"
 } else {
     $falhas = $totalBloqueados - $totalDesbloqueados
     Write-Aviso "$totalDesbloqueados desbloqueados, $falhas ainda bloqueados (possivelmente em uso)."
-    Add-Rel '3. Zone.Identifier' 'AVISO' "$falhas arquivo(s) nao puderam ser desbloqueados"
+    Add-Rel '7. Zone.Identifier' 'AVISO' "$falhas arquivo(s) nao puderam ser desbloqueados"
 }
 
 # =========================================================================
@@ -322,8 +329,10 @@ Write-Host ''
 $totalCacheLimpo = 0
 
 foreach ($usuario in $usuarios) {
+    # PSReadline NAO entra aqui: essa pasta guarda o HISTORICO de comandos do
+    # usuario (ConsoleHost_history.txt), nao cache. Apagar nao ajuda em nada
+    # a destravar a execucao de scripts e o usuario perde o historico dele.
     $cachePaths = @(
-        Join-Path $usuario.FullName 'AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline'
         Join-Path $usuario.FullName 'AppData\Local\Microsoft\Windows\PowerShell\CommandAnalysis'
         Join-Path $usuario.FullName 'AppData\Local\Microsoft\Windows\PowerShell\ModuleAnalysisCache'
     )
@@ -461,7 +470,7 @@ Write-Host ''
 Write-Host '   Estado final da ExecutionPolicy:' -ForegroundColor White
 $politicaFinal = Get-ExecutionPolicy -List -ErrorAction SilentlyContinue
 foreach ($p in $politicaFinal) {
-    $corPol = if ($p.ExecutionPolicy -eq 'Unrestricted') { 'Green' } elseif ($p.ExecutionPolicy -eq 'Undefined') { 'Gray' } else { 'Yellow' }
+    $corPol = if ($p.ExecutionPolicy -in @('RemoteSigned','Unrestricted','Bypass')) { 'Green' } elseif ($p.ExecutionPolicy -eq 'Undefined') { 'Gray' } else { 'Yellow' }
     Write-Host ('     ' + $p.Scope.ToString().PadRight(18) + ': ') -ForegroundColor DarkGray -NoNewline
     Write-Host $p.ExecutionPolicy -ForegroundColor $corPol
 }

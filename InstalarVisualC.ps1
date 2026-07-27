@@ -201,8 +201,18 @@ function Test-VCInstalado {
             Where-Object { $_.DisplayName -match 'Microsoft Visual C\+\+' }
         foreach ($item in $itens) {
             $nome = $item.DisplayName
-            $temArq = $nome -match [regex]::Escape("($Arq)") -or $nome -match "[\s-]$Arq[\s\.]"
-            if (-not $temArq) { continue }
+            # Pacotes antigos (2005/2008) nomeiam so a versao x64; a x86 vem
+            # sem sufixo nenhum. Sem este tratamento a x86 nunca era vista
+            # como instalada e o script rebaixava e reinstalava toda vez.
+            $marcaX64 = ($nome -match [regex]::Escape('(x64)') -or $nome -match '[\s-]x64[\s\.]' -or $nome -match 'x64$')
+            $marcaX86 = ($nome -match [regex]::Escape('(x86)') -or $nome -match '[\s-]x86[\s\.]' -or $nome -match 'x86$')
+
+            if ($Arq -eq 'x64') {
+                if (-not $marcaX64) { continue }
+            } else {
+                # x86 = tem marca x86, ou nao tem marca alguma de arquitetura
+                if ($marcaX64) { continue }
+            }
             foreach ($p in $Padroes) {
                 if ($nome -match [regex]::Escape($p)) { return $true }
             }
@@ -298,6 +308,33 @@ foreach ($pkg in $faltando) {
 
     $tamanhoMB = [math]::Round((Get-Item $destino).Length / 1MB, 1)
     Write-Info "Arquivo: $($pkg.Arquivo)  ($tamanhoMB MB)"
+
+    # ----- Conferir a assinatura digital antes de executar -----
+    # O arquivo veio da internet e vai rodar como Administrador. Se o
+    # download for interceptado ou o link redirecionado, sem esta checagem
+    # o script executaria um binario qualquer com privilegio total.
+    $assinaturaOk = $false
+    try {
+        $sig = Get-AuthenticodeSignature -FilePath $destino -ErrorAction Stop
+        if ($sig.Status -eq 'Valid' -and $sig.SignerCertificate -and
+            $sig.SignerCertificate.Subject -match 'O=Microsoft Corporation') {
+            $assinaturaOk = $true
+            Write-Ok 'Assinatura digital conferida: Microsoft Corporation.'
+        } else {
+            $quem = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { 'sem assinatura' }
+            Write-Falha "Assinatura invalida ou nao e da Microsoft (status: $($sig.Status))."
+            Write-Info  "Assinante: $quem"
+        }
+    } catch {
+        Write-Falha "Nao foi possivel verificar a assinatura: $_"
+    }
+
+    if (-not $assinaturaOk) {
+        Write-Aviso 'Instalacao ABORTADA por seguranca. Arquivo descartado.'
+        Remove-Item -Path $destino -Force -ErrorAction SilentlyContinue
+        $resumoFalhas.Add("$label  (assinatura digital nao confere)")
+        continue
+    }
 
     # ----- Instalacao -----
     Write-Info "Instalando silenciosamente..."

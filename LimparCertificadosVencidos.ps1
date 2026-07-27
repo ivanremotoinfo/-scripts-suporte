@@ -146,7 +146,7 @@ $loja = [System.Security.Cryptography.X509Certificates.X509Store]::new($StoreNam
 try {
     $loja.Open($OpenFlags::ReadOnly)
 } catch {
-    Write-Falha 'Nao foi possivel abrir a loja CurrentUser\My: ' + $_.Exception.Message
+    Write-Falha ('Nao foi possivel abrir a loja CurrentUser\My: ' + $_.Exception.Message)
     exit 1
 }
 
@@ -169,9 +169,13 @@ $hoje = Get-Date
 Write-Etapa '2/7  Classificando certificados...'
 Write-Host ''
 
-# Categoria A: ICP-Brasil/Portugal validos  → MANTER
-# Categoria B: ICP-Brasil/Portugal vencidos → PERGUNTAR
-# Categoria C: Desconhecidos                → REMOVER automaticamente
+# Categoria A: ICP-Brasil/Portugal validos  -> MANTER (nunca removidos)
+# Categoria B: ICP-Brasil/Portugal vencidos -> PERGUNTAR
+# Categoria C: Desconhecidos                -> PERGUNTAR (nunca automatico)
+#
+# IMPORTANTE: certificado com chave privada (A1) removido da loja e' PERDIDO
+# se o cliente nao tiver o arquivo .pfx guardado. Por isso nada e' removido
+# sem confirmacao e a chave privada e' sempre sinalizada na tela.
 
 $icpValidos   = [System.Collections.Generic.List[PSObject]]::new()
 $icpVencidos  = [System.Collections.Generic.List[PSObject]]::new()
@@ -188,6 +192,8 @@ foreach ($cert in $certsBrutos) {
     $diasRestantes = [math]::Round(($vencimento - $hoje).TotalDays, 0)
     $isICP        = Test-ICPBrasil $subject $issuer
     $tipo         = if ($isICP) { Get-TipoICPBrasil $subject $issuer $identificador } else { 'Desconhecido' }
+    $temChave     = $false
+    try { $temChave = $cert.HasPrivateKey } catch {}
 
     $obj = [PSCustomObject]@{
         Thumbprint    = $cert.Thumbprint
@@ -200,6 +206,7 @@ foreach ($cert in $certsBrutos) {
         Vencido       = $vencido
         DiasRestantes = $diasRestantes
         ICPBrasil     = $isICP
+        ChavePrivada  = $temChave
         Certificado   = $cert
     }
 
@@ -208,9 +215,14 @@ foreach ($cert in $certsBrutos) {
     else                            { $desconhecidos.Add($obj)  }
 }
 
-Write-Ok ("ICP-Brasil/Portugal validos (MANTER)  : " + $icpValidos.Count)
-Write-Ok ("ICP-Brasil/Portugal vencidos (PERGUNTAR): " + $icpVencidos.Count)
-Write-Aviso ("Desconhecidos/residuos (REMOVER)   : " + $desconhecidos.Count)
+$comChave = @($desconhecidos | Where-Object { $_.ChavePrivada })
+
+Write-Ok ("ICP-Brasil/Portugal validos (MANTER)     : " + $icpValidos.Count)
+Write-Ok ("ICP-Brasil/Portugal vencidos (PERGUNTAR) : " + $icpVencidos.Count)
+Write-Aviso ("Desconhecidos/residuos (PERGUNTAR)    : " + $desconhecidos.Count)
+if ($comChave.Count -gt 0) {
+    Write-Aviso ("   destes, COM CHAVE PRIVADA (A1)     : " + $comChave.Count + '  <-- atencao')
+}
 
 # =========================================================================
 # ETAPA 3/5 - Exibir as tres categorias separadas
@@ -272,13 +284,17 @@ if ($icpVencidos.Count -eq 0) {
 
 # --- Categoria C: Desconhecidos ---
 Write-Host '   ============================================================' -ForegroundColor Red
-Write-Host '   CATEGORIA C  >>  Certificados DESCONHECIDOS (REMOVER)       ' -ForegroundColor Red
+Write-Host '   CATEGORIA C  >>  Certificados DESCONHECIDOS (sob consulta)  ' -ForegroundColor Red
 Write-Host '   ============================================================' -ForegroundColor Red
 Write-Host ''
 
 if ($desconhecidos.Count -eq 0) {
     Write-Info 'Nenhum certificado desconhecido encontrado.'
 } else {
+    Write-Info 'Desconhecido = nao bateu com a lista de emissores ICP conhecidos.'
+    Write-Info 'Pode ser residuo de software, mas tambem certificado corporativo,'
+    Write-Info 'de VPN, de e-mail (S/MIME) ou de AC estrangeira. Confira antes.'
+    Write-Host ''
     foreach ($c in ($desconhecidos | Sort-Object Nome)) {
         $statusVenc = if ($c.Vencido) { '  [VENCIDO]' } else { '' }
         Write-Host ('   [Residuo  ] ') -ForegroundColor Red -NoNewline
@@ -286,6 +302,9 @@ if ($desconhecidos.Count -eq 0) {
         Write-Host ('   ' + ''.PadRight(12) + ' Emiss.: ' + $c.Emissor) -ForegroundColor Gray
         Write-Host ('   ' + ''.PadRight(12) + ' Validade: ' + $c.Vencimento.ToString('dd/MM/yyyy')) -ForegroundColor Gray
         Write-Host ('   ' + ''.PadRight(12) + ' Thumb : ' + $c.Thumbprint) -ForegroundColor DarkCyan
+        if ($c.ChavePrivada) {
+            Write-Host ('   ' + ''.PadRight(12) + ' CHAVE PRIVADA presente (A1) - remover e PERMANENTE') -ForegroundColor Red
+        }
         Write-Host ''
     }
 }
@@ -307,13 +326,17 @@ if (-not $temAcao) {
 # ETAPA 5/6 - Backup CSV antes de qualquer remocao
 # =========================================================================
 
-Write-Etapa '6/7  Exportando backup CSV para a Area de Trabalho...'
+Write-Etapa '4/7  Exportando backup para a Area de Trabalho...'
 Write-Host ''
 
-$desktop = [Environment]::GetFolderPath('Desktop')
-$csvNome = 'CertificadosBackup_' + (Get-Date -Format 'yyyyMMdd_HHmmss') + '.csv'
-$csvPath = Join-Path $desktop $csvNome
-$backupOk = $false
+$desktop    = [Environment]::GetFolderPath('Desktop')
+$backupDir  = Join-Path $desktop ('CertificadosBackup_' + (Get-Date -Format 'yyyyMMdd_HHmmss'))
+$csvPath    = Join-Path $backupDir 'certificados.csv'
+$backupOk   = $false
+
+if (-not (Test-Path $backupDir)) {
+    New-Item -ItemType Directory -Path $backupDir -Force -ErrorAction SilentlyContinue | Out-Null
+}
 
 $linhasCSV = [System.Collections.Generic.List[PSObject]]::new()
 foreach ($c in $certsBrutos) {
@@ -336,7 +359,7 @@ foreach ($c in $certsBrutos) {
 try {
     $linhasCSV | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8 -Force
     $backupOk = $true
-    Write-Ok "Backup salvo: $csvPath"
+    Write-Ok "Lista salva: $csvPath"
     Write-Info ("$($linhasCSV.Count) certificado(s) registrado(s) no arquivo CSV.")
 } catch {
     Write-Aviso 'Nao foi possivel salvar o CSV.'
@@ -349,54 +372,120 @@ try {
     }
 }
 
+# Exportar o certificado em si (.cer) - permite reimportar a parte publica
+$cerExportados = 0
+foreach ($c in $certsBrutos) {
+    try {
+        $nomeArq = ($c.Thumbprint + '.cer')
+        $bytes   = $c.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+        [System.IO.File]::WriteAllBytes((Join-Path $backupDir $nomeArq), $bytes)
+        $cerExportados++
+    } catch {}
+}
+if ($cerExportados -gt 0) {
+    Write-Ok "$cerExportados arquivo(s) .cer exportado(s) em: $backupDir"
+}
+
+Write-Host ''
+Write-Aviso 'LIMITE DO BACKUP: o .cer guarda apenas a parte PUBLICA do certificado.'
+Write-Info  'A CHAVE PRIVADA (certificado A1) NAO e exportada por este backup e NAO'
+Write-Info  'pode ser recuperada depois da remocao. So remova certificado com chave'
+Write-Info  'privada se o cliente tiver o arquivo .pfx original guardado.'
+
 # =========================================================================
 # ETAPA 5 - Decisao sobre ICP-Brasil vencidos (pergunta)
 # =========================================================================
 
-$icpVencidosParaRemover = [System.Collections.Generic.List[PSObject]]::new()
+# Selecao interativa reaproveitada pelas duas categorias removiveis.
+# Nada e' removido sem passar por aqui.
+function Select-CertsParaRemover {
+    param(
+        [PSObject[]]$Certificados,
+        [string]$Titulo
+    )
+    $escolhidos = [System.Collections.Generic.List[PSObject]]::new()
+    if (-not $Certificados -or $Certificados.Count -eq 0) { return $escolhidos }
 
-if ($icpVencidos.Count -gt 0) {
-    Write-Etapa ('5/7  Certificados ICP vencidos (' + $icpVencidos.Count + ')  - aguardando confirmacao...')
     Write-Host ''
-    Write-Host '   Estes certificados sao ICP-Brasil (eCPF/eCNPJ/OAB) ou ICP-Portugal (Cartao de Cidadao) porem estao vencidos.' -ForegroundColor Yellow
-    Write-Host '   Certificados vencidos nao funcionam para assinar documentos.' -ForegroundColor Yellow
-    Write-Host '   Se ja renovou o certificado, os vencidos podem ser removidos com seguranca.' -ForegroundColor Yellow
+    Write-Host ('   [1] Remover TODOS (' + $Certificados.Count + ') - ' + $Titulo) -ForegroundColor White
+    Write-Host  '   [2] Escolher um por um' -ForegroundColor White
+    Write-Host  '   [3] Nao remover nenhum (manter por precaucao)' -ForegroundColor White
     Write-Host ''
-    Write-Host '   [1] Remover TODOS os ICP vencidos (Brasil e Portugal)' -ForegroundColor White
-    Write-Host '   [2] Escolher um por um' -ForegroundColor White
-    Write-Host '   [3] Nao remover nenhum (manter por precaucao)' -ForegroundColor White
-    Write-Host ''
-    $opcaoICP = Read-Host '   Opcao'
+    $opcao = Read-Host '   Opcao'
 
-    if ($opcaoICP -eq '1') {
-        foreach ($c in $icpVencidos) { $icpVencidosParaRemover.Add($c) }
-        Write-Info ("$($icpVencidosParaRemover.Count) certificado(s) ICP-Brasil vencido(s) marcado(s) para remocao.")
-    } elseif ($opcaoICP -eq '2') {
+    if ($opcao -eq '1') {
+        # Mesmo no "todos", chave privada exige um S/N adicional
+        foreach ($c in $Certificados) {
+            if ($c.ChavePrivada) {
+                Write-Host ''
+                Write-Aviso ('CHAVE PRIVADA (A1): ' + $c.Nome)
+                Write-Info  'Sem o .pfx original este certificado nao volta.'
+                $r = Read-Host '   Remover mesmo assim? (S/N)'
+                if ($r -match '^[Ss]') { $escolhidos.Add($c) } else { Write-Info ('Mantido: ' + $c.Nome) }
+            } else {
+                $escolhidos.Add($c)
+            }
+        }
+        Write-Info ("$($escolhidos.Count) certificado(s) marcado(s) para remocao.")
+    } elseif ($opcao -eq '2') {
         $modoTodos = $false
         $modoPular = $false
-        foreach ($c in ($icpVencidos | Sort-Object Vencimento -Descending)) {
+        foreach ($c in ($Certificados | Sort-Object Vencimento -Descending)) {
             if ($modoPular) { break }
-            if ($modoTodos) {
-                $icpVencidosParaRemover.Add($c)
+            if ($modoTodos -and -not $c.ChavePrivada) {
+                $escolhidos.Add($c)
                 Write-Info ('Marcado: ' + $c.Nome)
                 continue
             }
             Write-Host ''
-            Write-Host ('   ' + $c.Tipo.PadRight(9) + '  ' + $c.Nome) -ForegroundColor White
+            Write-Host ('   ' + $c.Tipo.PadRight(12) + '  ' + $c.Nome) -ForegroundColor White
             if ($c.Identificador) { Write-Host ('   Ident. : ' + $c.Identificador) -ForegroundColor Gray }
-            Write-Host ('   Venceu : ' + $c.Vencimento.ToString('dd/MM/yyyy') + '  |  Emissor: ' + $c.Emissor) -ForegroundColor Gray
+            Write-Host ('   Validade: ' + $c.Vencimento.ToString('dd/MM/yyyy') + '  |  Emissor: ' + $c.Emissor) -ForegroundColor Gray
             Write-Host ('   Thumb  : ' + $c.Thumbprint) -ForegroundColor DarkCyan
+            if ($c.ChavePrivada) {
+                Write-Host '   CHAVE PRIVADA presente (A1) - remocao PERMANENTE sem o .pfx' -ForegroundColor Red
+            }
             Write-Host '   [S] Remover  [N] Manter  [T] Remover todos restantes  [P] Manter todos restantes' -ForegroundColor Gray
             $resp = Read-Host '   Opcao'
 
-            if     ($resp -match '^[Tt]') { $modoTodos = $true;  $icpVencidosParaRemover.Add($c) }
+            if     ($resp -match '^[Tt]') { $modoTodos = $true;  $escolhidos.Add($c) }
             elseif ($resp -match '^[Pp]') { $modoPular = $true }
-            elseif ($resp -match '^[Ss]') { $icpVencidosParaRemover.Add($c) }
+            elseif ($resp -match '^[Ss]') { $escolhidos.Add($c) }
             else { Write-Info ('Mantido: ' + $c.Nome) }
         }
     } else {
-        Write-Info 'Certificados ICP vencidos serao mantidos.'
+        Write-Info 'Nenhum certificado desta categoria sera removido.'
     }
+    return $escolhidos
+}
+
+# --- Categoria C: desconhecidos (NUNCA automatico) ---
+$desconhecidosParaRemover = [System.Collections.Generic.List[PSObject]]::new()
+
+if ($desconhecidos.Count -gt 0) {
+    Write-Etapa ('5/7  Certificados desconhecidos (' + $desconhecidos.Count + ')  - aguardando confirmacao...')
+    Write-Host ''
+    Write-Host '   Estes NAO foram reconhecidos como ICP-Brasil ou ICP-Portugal.' -ForegroundColor Yellow
+    Write-Host '   Na maioria dos casos sao residuos de software, mas a lista acima' -ForegroundColor Yellow
+    Write-Host '   pode conter certificado corporativo, de VPN, de e-mail ou de AC' -ForegroundColor Yellow
+    Write-Host '   estrangeira. Confira a lista antes de confirmar.' -ForegroundColor Yellow
+    if ($comChave.Count -gt 0) {
+        Write-Host ''
+        Write-Host ('   ' + $comChave.Count + ' deste(s) tem CHAVE PRIVADA: remover e permanente.') -ForegroundColor Red
+    }
+    $desconhecidosParaRemover = Select-CertsParaRemover -Certificados $desconhecidos.ToArray() -Titulo 'desconhecidos/residuos'
+}
+
+# --- Categoria B: ICP vencidos ---
+$icpVencidosParaRemover = [System.Collections.Generic.List[PSObject]]::new()
+
+if ($icpVencidos.Count -gt 0) {
+    Write-Etapa ('6/7  Certificados ICP vencidos (' + $icpVencidos.Count + ')  - aguardando confirmacao...')
+    Write-Host ''
+    Write-Host '   Estes certificados sao ICP-Brasil (eCPF/eCNPJ/OAB) ou ICP-Portugal (Cartao de Cidadao) porem estao vencidos.' -ForegroundColor Yellow
+    Write-Host '   Certificados vencidos nao funcionam para assinar documentos.' -ForegroundColor Yellow
+    Write-Host '   Se ja renovou o certificado, os vencidos podem ser removidos com seguranca.' -ForegroundColor Yellow
+    $icpVencidosParaRemover = Select-CertsParaRemover -Certificados $icpVencidos.ToArray() -Titulo 'ICP vencidos (Brasil e Portugal)'
 }
 
 # =========================================================================
@@ -427,11 +516,11 @@ function Remove-CertDaLoja {
     }
 }
 
-# Remover desconhecidos automaticamente
-if ($desconhecidos.Count -gt 0) {
-    Write-Dest '   --- Removendo residuos de software (automatico) ---'
+# Remover desconhecidos que o usuario confirmou
+if ($desconhecidosParaRemover.Count -gt 0) {
+    Write-Dest '   --- Removendo residuos/desconhecidos (confirmado) ---'
     Write-Host ''
-    foreach ($c in $desconhecidos) {
+    foreach ($c in $desconhecidosParaRemover) {
         Remove-CertDaLoja $c 'Residuo'
     }
 }
@@ -491,7 +580,8 @@ if ($removidosErro.Count -gt 0) {
 
 Write-Host ''
 if ($backupOk) {
-    Write-Host ('   Backup CSV : ' + $csvPath) -ForegroundColor DarkCyan
+    Write-Host ('   Backup : ' + $backupDir) -ForegroundColor DarkCyan
+    Write-Host '   (lista em CSV + .cer da parte publica; chave privada NAO incluida)' -ForegroundColor DarkGray
 }
 
 if ($totalRemovidos -eq 0 -and $totalErros -eq 0) {

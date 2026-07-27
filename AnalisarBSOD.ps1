@@ -1,8 +1,20 @@
 # AnalisarBSOD.ps1
 # Analisa e identifica causas de Tela Azul (BSOD) no Windows
+# Somente leitura: nao altera nada na maquina.
 
 $ErrorActionPreference = 'Continue'
 $dataLimite = (Get-Date).AddDays(-30)
+
+# A analise gera muita saida e nao cabe na rolagem do console. Gravamos tudo
+# num TXT TEMPORARIO e abrimos no Bloco de Notas no final. O arquivo fica em
+# %TEMP% e nao e' salvo em lugar nenhum permanente (se precisar guardar,
+# use Arquivo > Salvar Como no Bloco de Notas).
+$relTemp = Join-Path $env:TEMP ('BSOD_' + $env:COMPUTERNAME + '_' + (Get-Date -Format 'yyyy-MM-dd_HH-mm-ss') + '.txt')
+$temTranscript = $false
+try {
+    Start-Transcript -Path $relTemp -Force -ErrorAction Stop | Out-Null
+    $temTranscript = $true
+} catch { }
 
 # -------------------------------------------------------------------------
 # Funcoes auxiliares
@@ -872,3 +884,16 @@ Write-Host ''
 Write-Host ("   Concluido em: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')") -ForegroundColor DarkGray
 Write-Host '================================================' -ForegroundColor $corResumo
 Write-Host ''
+
+# Fecha o TXT temporario e abre no Bloco de Notas
+if ($temTranscript) {
+    try { Stop-Transcript | Out-Null } catch { }
+    if (Test-Path -LiteralPath $relTemp) {
+        Write-Host '   Abrindo o relatorio completo no Bloco de Notas...' -ForegroundColor Cyan
+        Write-Host '   (arquivo temporario - use Salvar Como se quiser guardar)' -ForegroundColor DarkGray
+        try { Start-Process 'notepad.exe' -ArgumentList $relTemp -ErrorAction Stop } catch {
+            Write-Host ("   Relatorio em: $relTemp") -ForegroundColor DarkGray
+        }
+    }
+    Write-Host ''
+}

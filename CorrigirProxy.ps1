@@ -81,7 +81,7 @@ if ($proxyAtivo -eq 1) {
     Write-Ok 'Proxy do usuario: inativo.'
 }
 if ($proxyAutoConfig) {
-    Write-Aviso 'Auto-config (PAC) configurado: ' + $proxyAutoConfig
+    Write-Aviso ('Auto-config (PAC) configurado: ' + $proxyAutoConfig)
     $problemaEncontrado = $true
 }
 
@@ -192,11 +192,15 @@ try {
     $buildNum = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction SilentlyContinue).CurrentBuildNumber
 } catch {}
 
+# TLS 1.0 e 1.1 sao protocolos obsoletos. Sao habilitados apenas no lado
+# CLIENTE, que e o que a maquina usa para acessar sistemas judiciais antigos.
+# Habilitar no lado SERVIDOR nao ajuda em nada nessas maquinas e so deixaria
+# a maquina aceitando conexoes por protocolo fraco.
 $protocolos = @(
-    @{ Nome = 'TLS 1.0'; Chave = 'TLS 1.0';  Habilitar = $true  }
-    @{ Nome = 'TLS 1.1'; Chave = 'TLS 1.1';  Habilitar = $true  }
-    @{ Nome = 'TLS 1.2'; Chave = 'TLS 1.2';  Habilitar = $true  }
-    @{ Nome = 'TLS 1.3'; Chave = 'TLS 1.3';  Habilitar = ($buildNum -ge 18362) }
+    @{ Nome = 'TLS 1.0'; Chave = 'TLS 1.0';  Habilitar = $true;  Servidor = $false }
+    @{ Nome = 'TLS 1.1'; Chave = 'TLS 1.1';  Habilitar = $true;  Servidor = $false }
+    @{ Nome = 'TLS 1.2'; Chave = 'TLS 1.2';  Habilitar = $true;  Servidor = $true  }
+    @{ Nome = 'TLS 1.3'; Chave = 'TLS 1.3';  Habilitar = ($buildNum -ge 18362); Servidor = $true }
 )
 
 foreach ($proto in $protocolos) {
@@ -204,27 +208,31 @@ foreach ($proto in $protocolos) {
     $caminhoCliente  = $caminho + '\Client'
     $caminhoServidor = $caminho + '\Server'
 
-    $clienteEnabled  = (Get-ItemProperty -Path $caminhoCliente  -Name 'Enabled'          -ErrorAction SilentlyContinue).Enabled
-    $clienteDisabled = (Get-ItemProperty -Path $caminhoCliente  -Name 'DisabledByDefault' -ErrorAction SilentlyContinue).DisabledByDefault
-    $servidorEnabled = (Get-ItemProperty -Path $caminhoServidor -Name 'Enabled'          -ErrorAction SilentlyContinue).Enabled
-
-    $jaAtivo = ($clienteEnabled -eq 1 -and $clienteDisabled -eq 0 -and $servidorEnabled -eq 1)
-
     if (-not $proto.Habilitar) {
         Write-Info "$($proto.Nome): nao aplicavel nesta versao do Windows (build $buildNum). Ignorado."
         continue
     }
 
-    if ($jaAtivo) {
+    $clienteEnabled  = (Get-ItemProperty -Path $caminhoCliente  -Name 'Enabled'          -ErrorAction SilentlyContinue).Enabled
+    $clienteDisabled = (Get-ItemProperty -Path $caminhoCliente  -Name 'DisabledByDefault' -ErrorAction SilentlyContinue).DisabledByDefault
+    $servidorEnabled = (Get-ItemProperty -Path $caminhoServidor -Name 'Enabled'          -ErrorAction SilentlyContinue).Enabled
+
+    $clienteOk  = ($clienteEnabled -eq 1 -and $clienteDisabled -eq 0)
+    $servidorOk = (-not $proto.Servidor) -or ($servidorEnabled -eq 1)
+
+    if ($clienteOk -and $servidorOk) {
         Write-Ok "$($proto.Nome): ja habilitado."
     } else {
-        Write-Acao "Habilitando $($proto.Nome)..."
+        $lado = if ($proto.Servidor) { 'cliente e servidor' } else { 'somente cliente' }
+        Write-Acao "Habilitando $($proto.Nome) ($lado)..."
         Definir-DWORD -Caminho $caminhoCliente  -Nome 'Enabled'          -Valor 1
         Definir-DWORD -Caminho $caminhoCliente  -Nome 'DisabledByDefault' -Valor 0
-        Definir-DWORD -Caminho $caminhoServidor -Nome 'Enabled'          -Valor 1
-        Definir-DWORD -Caminho $caminhoServidor -Nome 'DisabledByDefault' -Valor 0
-        Write-Ok "$($proto.Nome): habilitado com sucesso."
-        $acoesRealizadas.Add("$($proto.Nome) habilitado no SCHANNEL (cliente e servidor)")
+        if ($proto.Servidor) {
+            Definir-DWORD -Caminho $caminhoServidor -Nome 'Enabled'          -Valor 1
+            Definir-DWORD -Caminho $caminhoServidor -Nome 'DisabledByDefault' -Valor 0
+        }
+        Write-Ok "$($proto.Nome): habilitado com sucesso ($lado)."
+        $acoesRealizadas.Add("$($proto.Nome) habilitado no SCHANNEL ($lado)")
     }
 }
 
@@ -307,29 +315,26 @@ certutil -urlcache * delete 2>&1 | Out-Null
 Write-Ok 'Cache de URL do certutil limpo.'
 $acoesRealizadas.Add('Cache de URL do certutil (OCSP/CRL) limpo')
 
-# Limpar cache CryptNetUrlCache
-$cryptCache = "$env:LocalAppData\Microsoft\Windows\INetCache"
-if (Test-Path $cryptCache) {
-    $arquivosCrypt = @(Get-ChildItem -Path $cryptCache -Recurse -File -ErrorAction SilentlyContinue)
+# Limpar o CryptnetUrlCache - e' AQUI que ficam CRL/OCSP/AIA em cache.
+# (Fica em LocalLow, nao no INetCache do navegador.)
+$cryptCache = Join-Path $env:USERPROFILE 'AppData\LocalLow\Microsoft\CryptnetUrlCache'
+if (Test-Path -LiteralPath $cryptCache) {
+    $arquivosCrypt = @(Get-ChildItem -LiteralPath $cryptCache -Recurse -File -ErrorAction SilentlyContinue)
     if ($arquivosCrypt.Count -gt 0) {
-        Write-Acao "Limpando $($arquivosCrypt.Count) arquivo(s) do cache INetCache..."
-        Remove-Item -Path "$cryptCache\*" -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Ok 'Cache INetCache limpo.'
-        $acoesRealizadas.Add("Cache INetCache limpo ($($arquivosCrypt.Count) arquivos removidos)")
+        Write-Acao "Limpando $($arquivosCrypt.Count) arquivo(s) do CryptnetUrlCache..."
+        Remove-Item -Path (Join-Path $cryptCache '*') -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Ok 'CryptnetUrlCache limpo.'
+        $acoesRealizadas.Add("CryptnetUrlCache limpo ($($arquivosCrypt.Count) arquivos removidos)")
     } else {
-        Write-Ok 'Cache INetCache ja estava vazio.'
+        Write-Ok 'CryptnetUrlCache ja estava vazio.'
     }
+} else {
+    Write-Info 'CryptnetUrlCache nao encontrado neste perfil.'
 }
 
-# Limpar estado SSL do IE/Edge (via rundll32)
-Write-Acao 'Limpando estado SSL do Internet Explorer/Edge...'
-try {
-    $proc = Start-Process -FilePath 'rundll32.exe' -ArgumentList 'InetCpl.cpl,ClearMyTracksByProcess 8' -Wait -PassThru -WindowStyle Hidden
-    Write-Ok 'Estado SSL do IE/Edge limpo.'
-    $acoesRealizadas.Add('Estado SSL do Internet Explorer/Edge limpo via InetCpl')
-} catch {
-    Write-Aviso 'Nao foi possivel limpar estado SSL via InetCpl.'
-}
+# O estado SSL do Windows fica no cache de cadeia, ja tratado pelo certutil
+# acima. Nao usamos ClearMyTracksByProcess aqui: os flags dele apagam
+# historico/cookies do IE-Edge e nao tem relacao com estado SSL.
 
 # =========================================================================
 # ETAPA 6 - Verificar certificados expirados ou invalidos
@@ -585,7 +590,7 @@ if ($certExpirados.Count -gt 0) {
     Write-Host ('   Atencao: ' + $certExpirados.Count + ' certificado(s) expirado(s) encontrado(s). Use certmgr.msc para gerenciar.') -ForegroundColor Yellow
 }
 
-$requerReinicio = $acoesRealizadas | Where-Object { $_ -match 'TLS|SCHANNEL|SchUsStrong' }
+$requerReinicio = $acoesRealizadas | Where-Object { $_ -match 'TLS|SCHANNEL|SchUseStrongCrypto' }
 if ($requerReinicio) {
     Write-Host ''
     Write-Host '   IMPORTANTE: As alteracoes de TLS entram em vigor apos reiniciar o computador.' -ForegroundColor Yellow

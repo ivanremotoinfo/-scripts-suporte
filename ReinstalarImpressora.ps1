@@ -128,8 +128,8 @@ $regAmbientes = @(
 )
 
 foreach ($regPath in $regAmbientes) {
-    if (-not (Test-Path $regPath -ErrorAction SilentlyContinue)) { continue }
-    $props = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
+    if (-not (Test-Path -LiteralPath $regPath -ErrorAction SilentlyContinue)) { continue }
+    $props = Get-ItemProperty -LiteralPath $regPath -ErrorAction SilentlyContinue
     if (-not $props) { continue }
     Write-Ok "Driver localizado: $regPath"
     foreach ($propNome in @('DriverPath', 'DataFile', 'ConfigFile', 'HelpFile')) {
@@ -250,8 +250,17 @@ $spoolPrinters = "$env:SystemRoot\System32\spool\PRINTERS"
 if (Test-Path $spoolPrinters) {
     $filaItens = @(Get-ChildItem -Path $spoolPrinters -ErrorAction SilentlyContinue)
     if ($filaItens.Count -gt 0) {
-        Remove-Item -Path "$spoolPrinters\*" -Force -ErrorAction SilentlyContinue
-        Write-Ok "Fila de impressao limpa ($($filaItens.Count) arquivo(s) removidos)."
+        # A fila e' unica para o Windows todo: isso descarta documentos
+        # pendentes de TODAS as impressoras e de todos os usuarios.
+        Write-Aviso "$($filaItens.Count) documento(s) na fila de impressao (de todas as impressoras)."
+        Write-Info  'Limpar a fila descarta esses documentos - eles teriam que ser reenviados.'
+        $respFila = Read-Host '   Limpar a fila de impressao? (S/N)'
+        if ($respFila -match '^[Ss]') {
+            Remove-Item -Path "$spoolPrinters\*" -Force -ErrorAction SilentlyContinue
+            Write-Ok "Fila de impressao limpa ($($filaItens.Count) arquivo(s) removidos)."
+        } else {
+            Write-Info 'Fila de impressao mantida.'
+        }
     } else {
         Write-Info 'Fila de impressao ja estava vazia.'
     }
@@ -284,7 +293,7 @@ foreach ($arquivo in $arquivosDriver) {
     }
     if (-not $caminhoFinal -or -not (Test-Path $caminhoFinal)) { continue }
     try {
-        Remove-Item -Path $caminhoFinal -Force -ErrorAction Stop
+        Remove-Item -LiteralPath $caminhoFinal -Force -ErrorAction Stop
         Write-Ok "Removido: $(Split-Path $caminhoFinal -Leaf)"
         $arquivosRemovidos++
     } catch {
@@ -311,9 +320,9 @@ $regLimpos = 0
 
 # Entrada da impressora em Print\Printers
 $regImpressora = "HKLM:\SYSTEM\CurrentControlSet\Control\Print\Printers\$nomeImpressora"
-if (Test-Path $regImpressora -ErrorAction SilentlyContinue) {
+if (Test-Path -LiteralPath $regImpressora -ErrorAction SilentlyContinue) {
     try {
-        Remove-Item -Path $regImpressora -Recurse -Force -ErrorAction Stop
+        Remove-Item -LiteralPath $regImpressora -Recurse -Force -ErrorAction Stop
         Write-Ok "Registro da impressora removido: Print\Printers\$nomeImpressora"
         $regLimpos++
     } catch {
@@ -325,9 +334,9 @@ if (Test-Path $regImpressora -ErrorAction SilentlyContinue) {
 
 # Entrada no hive SOFTWARE (presente em algumas versoes)
 $regSoftware = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Print\Printers\$nomeImpressora"
-if (Test-Path $regSoftware -ErrorAction SilentlyContinue) {
+if (Test-Path -LiteralPath $regSoftware -ErrorAction SilentlyContinue) {
     try {
-        Remove-Item -Path $regSoftware -Recurse -Force -ErrorAction Stop
+        Remove-Item -LiteralPath $regSoftware -Recurse -Force -ErrorAction Stop
         Write-Ok 'Entrada adicional removida do registro (SOFTWARE hive).'
         $regLimpos++
     } catch {
@@ -338,9 +347,9 @@ if (Test-Path $regSoftware -ErrorAction SilentlyContinue) {
 # Entradas do driver nos ambientes de impressao
 if ($removerDriver) {
     foreach ($regPath in $regAmbientes) {
-        if (-not (Test-Path $regPath -ErrorAction SilentlyContinue)) { continue }
+        if (-not (Test-Path -LiteralPath $regPath -ErrorAction SilentlyContinue)) { continue }
         try {
-            Remove-Item -Path $regPath -Recurse -Force -ErrorAction Stop
+            Remove-Item -LiteralPath $regPath -Recurse -Force -ErrorAction Stop
             Write-Ok "Registro do driver removido: ...$(($regPath -split 'Environments')[1])"
             $regLimpos++
         } catch {

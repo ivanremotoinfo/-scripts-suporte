@@ -43,7 +43,7 @@ $menu = @(
     @{ N=11; Cat='MANUTENCAO';  Label='Cache do Windows Update';       Tipo='v2';     Args=@{ Ferramenta='windowsupdate' } }
     @{ N=12; Cat='MANUTENCAO';  Label='Miniaturas do Explorer';        Tipo='v2';     Args=@{ Ferramenta='miniaturas' } }
     @{ N=13; Cat='MANUTENCAO';  Label='Limpeza Pesada (WinSxS)';       Tipo='v2';     Args=@{ Ferramenta='winsxs' } }
-    @{ N=14; Cat='MANUTENCAO';  Label='Dados do AnyDesk';              Tipo='v2';     Args=@{ Ferramenta='anydesk' } }
+    @{ N=14; Cat='MANUTENCAO';  Label='Apagar pasta do AnyDesk';       Tipo='v2';     Args=@{ Ferramenta='anydesk' } }
     @{ N=15; Cat='MANUTENCAO';  Label='Visual C++ Redistribuiveis';    Tipo='script'; Alvo='InstalarVisualC.ps1' }
 
     # --- SEGURANCA E ANTIVIRUS ---
@@ -84,7 +84,8 @@ $menu = @(
     @{ N=42; Cat='PROGRAMAS';   Label='Remover Impressora';            Tipo='script'; Alvo='ReinstalarImpressora.ps1' }
 
     # --- ATALHOS ADMIN ---
-    @{ N=43; Cat='ATALHOS';     Label='Dispositivos, Servicos, Desinstalar Prog. e Token'; Tipo='v2'; Args=@{ Ferramenta='consoles' } }
+    @{ N=43; Cat='ATALHOS';     Label='Dispositivos, Servicos e Token';  Tipo='v2'; Args=@{ Ferramenta='consoles' } }
+    @{ N=44; Cat='ATALHOS';     Label='Abrir pasta %appdata%';           Tipo='v2'; Args=@{ Ferramenta='abrirappdata' } }
 )
 # Converte para objetos (hashtable nao ordena/mede por chave nos cmdlets)
 $menu = $menu | ForEach-Object { [pscustomobject]$_ }

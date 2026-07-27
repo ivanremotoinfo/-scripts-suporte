@@ -3838,7 +3838,54 @@ if ($Ferramenta) {
             'windowsupdate' { Clear-WindowsUpdate | Out-Null }
             'navegadores'   { Clear-CacheNavegadores | Out-Null }
             'appcache'      { Clear-CacheAplicativos | Out-Null }
-            'anydesk'       { Remove-PastaAnyDesk -Modo $AnyDeskModo -Forcar:$ForcarFecharAnyDesk | Out-Null }
+            'anydesk'       {
+                # Opcao 14 do menu: apaga a PASTA INTEIRA do AnyDesk em
+                # %APPDATA% e %LOCALAPPDATA%. Quem chamar com -AnyDeskModo
+                # explicito manda no modo; sem isso o padrao aqui e Completo.
+                $adModo = if ($PSBoundParameters.ContainsKey('AnyDeskModo')) { $AnyDeskModo } else { 'Completo' }
+                $adForcar = [bool]$ForcarFecharAnyDesk
+
+                if ($adModo -eq 'Completo') {
+                    Write-Etapa 'Apagar a pasta do AnyDesk (%APPDATA% e %LOCALAPPDATA%)'
+                    Write-Aviso 'A pasta inteira sera apagada. Voce PERDE:'
+                    Write-Info  '  - o ID desta maquina no AnyDesk (sera gerado um ID novo)'
+                    Write-Info  '  - a senha de acesso nao supervisionado'
+                    Write-Info  '  - historico, chat e miniaturas'
+                    Write-Info  'Um backup da pasta e gravado na pasta de log antes de apagar.'
+
+                    $adProc = Get-Process -Name 'AnyDesk' -ErrorAction SilentlyContinue
+                    if ($adProc) {
+                        Write-Host ''
+                        Write-Aviso 'O AnyDesk esta ABERTO nesta maquina.'
+                        Write-Falha 'Se voce estiver atendendo por ele AGORA, a sessao CAI ao fechar.'
+                        Write-Info  'Para apagar a pasta o AnyDesk precisa ser encerrado.'
+                    }
+
+                    if ($SemInteracao) {
+                        if (-not $adForcar -and $adProc) {
+                            Write-Aviso 'Modo desatendido com AnyDesk aberto: use -ForcarFecharAnyDesk. Etapa cancelada.'
+                            break
+                        }
+                    } else {
+                        Write-Host ''
+                        $adResp = Read-Host '  Apagar a pasta do AnyDesk? (S/N)'
+                        if ($adResp -notmatch '^[Ss]') {
+                            Write-Info 'Cancelado. Nada foi apagado.'
+                            break
+                        }
+                        if ($adProc -and -not $adForcar) {
+                            $adResp2 = Read-Host '  Encerrar o AnyDesk agora para poder apagar? (S/N)'
+                            if ($adResp2 -match '^[Ss]') { $adForcar = $true }
+                            else {
+                                Write-Info 'Sem encerrar o AnyDesk a pasta fica travada. Cancelado.'
+                                break
+                            }
+                        }
+                    }
+                }
+
+                Remove-PastaAnyDesk -Modo $adModo -Forcar:$adForcar | Out-Null
+            }
             'winsxs'        { Clear-ComponentesWindows | Out-Null }
             'inicializacao' { Invoke-EtapaInicializacao | Out-Null }
             'appdata'       { Repair-AcessoAppData | Out-Null }
@@ -3939,6 +3986,23 @@ if ($Ferramenta) {
                     Write-Info  'Abra pelo menu Iniciar. Me diga o nome exato do programa que eu incluo na busca.'
                 }
             }
+            'abrirappdata'  {
+                Write-Etapa 'Abrindo a pasta %appdata% (Roaming) no Explorer...'
+                $roaming = $env:APPDATA
+                $abriu = $false
+                try { Start-Process 'explorer.exe' -ArgumentList 'shell:AppData' -ErrorAction Stop; $abriu = $true } catch { }
+                if (-not $abriu -and $roaming -and (Test-Path -LiteralPath $roaming)) {
+                    try { Start-Process 'explorer.exe' -ArgumentList $roaming -ErrorAction Stop; $abriu = $true } catch { }
+                }
+                if ($abriu) {
+                    Write-Ok ("Pasta aberta: $roaming")
+                    Write-Info 'Para abrir a mao: Windows + R > shell:AppData   (ou explorer %appdata%)'
+                    Write-Info ("Cache de programas fica em Local: $env:LOCALAPPDATA")
+                } else {
+                    Write-Aviso 'Nao foi possivel abrir a pasta pelo Explorer.'
+                    Write-Info  'Abra a mao: Windows + R > shell:AppData   (ou explorer %appdata%)'
+                }
+            }
             'protecaovirus' {
                 Write-Etapa 'Abrindo Seguranca do Windows > Protecao contra virus e ameacas...'
                 $ab = $false
@@ -3954,10 +4018,10 @@ if ($Ferramenta) {
             }
             default         {
                 Write-Falha "Ferramenta desconhecida: $Ferramenta"
-                Write-Info 'Validas: diagnostico, protecaovirus, consoles, temp, lixeira, miniaturas,'
-                Write-Info 'windowsupdate, navegadores, appcache, anydesk, winsxs, inicializacao, appdata,'
-                Write-Info 'efeitos, rede, horario, defender, spooler, explorer, chkdsk, appx, gpupdate,'
-                Write-Info 'ip, proxy, otimizar, sfc, smart, perfis, topprocessos, programas, desinstalar.'
+                Write-Info 'Validas: diagnostico, protecaovirus, consoles, abrirappdata, temp, lixeira,'
+                Write-Info 'miniaturas, windowsupdate, navegadores, appcache, anydesk, winsxs, inicializacao,'
+                Write-Info 'appdata, efeitos, rede, horario, defender, spooler, explorer, chkdsk, appx,'
+                Write-Info 'gpupdate, ip, proxy, otimizar, sfc, smart, perfis, topprocessos, programas, desinstalar.'
             }
         }
     } catch { Write-Falha "Erro na ferramenta '$chave': $($_.Exception.Message)" }
@@ -3969,7 +4033,7 @@ if ($Ferramenta) {
     }
     Write-Host ''
     # Ferramentas somente-leitura nao deixam log salvo.
-    if ($chave -notin @('diagnostico', 'protecaovirus', 'consoles')) {
+    if ($chave -notin @('diagnostico', 'protecaovirus', 'consoles', 'abrirappdata')) {
         Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
     }
     Write-Host ('=' * 68) -ForegroundColor Green
@@ -3977,7 +4041,7 @@ if ($Ferramenta) {
     # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
     if ($chave -eq 'diagnostico') { Publicar-RelatorioTemp -RemoverPastaLog }
     # protecaovirus/consoles: so abriram telas; nao deixam pasta de log.
-    elseif ($chave -in @('protecaovirus', 'consoles')) {
+    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata')) {
         Remove-Item -LiteralPath (Join-Path $script:pastaExec 'manutencao.log') -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 200
         if ($script:pastaExec -and (Test-Path -LiteralPath $script:pastaExec)) {

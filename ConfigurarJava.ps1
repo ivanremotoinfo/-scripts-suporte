@@ -148,37 +148,50 @@ try {
 # ETAPA 4 - Configurar nivel de seguranca MEDIUM
 # =========================================================================
 
-Write-Etapa '4. Configurando nivel de seguranca para MEDIUM...'
+Write-Etapa '4. Configurando nivel de seguranca do Java...'
 
+# MEDIUM foi removido do Java a partir do 8u20: os unicos niveis validos sao
+# HIGH e VERY_HIGH. Gravar MEDIUM faz o Java ignorar e cair de volta em HIGH.
+# Quem realmente libera os sistemas juridicos e' o exception.sites (etapa 5).
 $chaveNivel  = 'deployment.security.level'
 $chaveLocked = 'deployment.security.level.locked'
+$chaveExpira = 'deployment.expiration.check.enabled'
+$chaveWebJava = 'deployment.webjava.enabled'
 
 $linhasDP   = [System.IO.File]::ReadAllLines($deployProps)
 $novaDP     = [System.Collections.Generic.List[string]]::new()
 $achouNivel = $false
 
 foreach ($linha in $linhasDP) {
-    if ($linha -match "^$chaveLocked\b") {
-        Write-Aviso 'Removendo bloqueio: deployment.security.level.locked'
+    # Qualquer chave .locked trava o painel do Java: removida do arquivo.
+    if ($linha -match '^\s*deployment\..*\.locked\s*=') {
+        Write-Aviso ('Removendo bloqueio: ' + ($linha -split '=')[0].Trim())
         continue
     }
-    if ($linha -match "^$chaveNivel\s*=") {
-        $novaDP.Add("$chaveNivel=MEDIUM")
+    if ($linha -match "^\s*$chaveNivel\s*=") {
+        $novaDP.Add("$chaveNivel=HIGH")
         $achouNivel = $true
+    } elseif ($linha -match "^\s*$chaveExpira\s*=" -or $linha -match "^\s*$chaveWebJava\s*=") {
+        continue
     } else {
         $novaDP.Add($linha)
     }
 }
-if (-not $achouNivel) { $novaDP.Add("$chaveNivel=MEDIUM") }
+if (-not $achouNivel) { $novaDP.Add("$chaveNivel=HIGH") }
+
+# Evita o aviso "Java desatualizado" que trava o usuario, e garante applets.
+$novaDP.Add("$chaveExpira=false")
+$novaDP.Add("$chaveWebJava=true")
 
 Write-TextFile -Caminho $deployProps -Linhas $novaDP
 
 if ($achouNivel) {
-    Write-Ok 'deployment.security.level atualizado para MEDIUM.'
+    Write-Ok 'deployment.security.level atualizado para HIGH.'
 } else {
-    Write-Ok 'deployment.security.level=MEDIUM adicionado.'
+    Write-Ok 'deployment.security.level=HIGH adicionado.'
 }
-Add-Resumo 'Seguranca: deployment.security.level=MEDIUM'
+Write-Info 'Bloqueios (.locked) removidos e verificacao de expiracao desativada.'
+Add-Resumo 'Seguranca: deployment.security.level=HIGH (bloqueios removidos)'
 
 # =========================================================================
 # ETAPA 5 - Configurar excecoes de sites

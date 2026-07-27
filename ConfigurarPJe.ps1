@@ -36,16 +36,31 @@ function Escrever-Linhas {
 }
 
 function Atualizar-Properties {
-    param([string]$Caminho, [hashtable]$Propriedades)
+    param(
+        [string]$Caminho,
+        [hashtable]$Propriedades,
+        [string[]]$Remover = @()
+    )
     $linhasExistentes = Ler-Linhas $Caminho
     $linhasFinais = [System.Collections.Generic.List[string]]::new()
 
     foreach ($linha in $linhasExistentes) {
         $incluir = $true
         foreach ($chave in $Propriedades.Keys) {
-            if ($linha -match ('^' + [regex]::Escape($chave) + '=')) {
+            if ($linha -match ('^\s*' + [regex]::Escape($chave) + '\s*=')) {
                 $incluir = $false
                 break
+            }
+        }
+        # Chaves a remover: a linha some do arquivo e NAO e' regravada.
+        # Gravar 'deployment.security.level.locked=' vazio NAO desbloqueia:
+        # a simples presenca da chave e' o que trava o painel Java.
+        if ($incluir) {
+            foreach ($chave in $Remover) {
+                if ($linha -match ('^\s*' + [regex]::Escape($chave) + '\s*=')) {
+                    $incluir = $false
+                    break
+                }
             }
         }
         if ($incluir) { $linhasFinais.Add($linha) }
@@ -106,34 +121,34 @@ $urlsExcecao = @(
     'https://pje.trf5.jus.br'
     'https://pje.tst.jus.br'
     'https://pje.csjt.jus.br'
-    # PROJUDI - formato estado.projudi.tjestado.jus.br (todos os 27 estados)
-    'https://ac.projudi.tjac.jus.br'
-    'https://al.projudi.tjal.jus.br'
-    'https://am.projudi.tjam.jus.br'
-    'https://ap.projudi.tjap.jus.br'
-    'https://ba.projudi.tjba.jus.br'
-    'https://ce.projudi.tjce.jus.br'
-    'https://df.projudi.tjdft.jus.br'
-    'https://es.projudi.tjes.jus.br'
-    'https://go.projudi.tjgo.jus.br'
-    'https://ma.projudi.tjma.jus.br'
-    'https://mg.projudi.tjmg.jus.br'
-    'https://ms.projudi.tjms.jus.br'
-    'https://mt.projudi.tjmt.jus.br'
-    'https://pa.projudi.tjpa.jus.br'
-    'https://pb.projudi.tjpb.jus.br'
-    'https://pe.projudi.tjpe.jus.br'
-    'https://pi.projudi.tjpi.jus.br'
-    'https://pr.projudi.tjpr.jus.br'
-    'https://rj.projudi.tjrj.jus.br'
-    'https://rn.projudi.tjrn.jus.br'
-    'https://ro.projudi.tjro.jus.br'
-    'https://rr.projudi.tjrr.jus.br'
-    'https://rs.projudi.tjrs.jus.br'
-    'https://sc.projudi.tjsc.jus.br'
-    'https://se.projudi.tjse.jus.br'
-    'https://sp.projudi.tjsp.jus.br'
-    'https://to.projudi.tjto.jus.br'
+    # PROJUDI - formato real: projudi.tj<uf>.jus.br (sem prefixo de estado)
+    'https://projudi.tjac.jus.br'
+    'https://projudi.tjal.jus.br'
+    'https://projudi.tjam.jus.br'
+    'https://projudi.tjap.jus.br'
+    'https://projudi.tjba.jus.br'
+    'https://projudi.tjce.jus.br'
+    'https://projudi.tjdft.jus.br'
+    'https://projudi.tjes.jus.br'
+    'https://projudi.tjgo.jus.br'
+    'https://projudi.tjma.jus.br'
+    'https://projudi.tjmg.jus.br'
+    'https://projudi.tjms.jus.br'
+    'https://projudi.tjmt.jus.br'
+    'https://projudi.tjpa.jus.br'
+    'https://projudi.tjpb.jus.br'
+    'https://projudi.tjpe.jus.br'
+    'https://projudi.tjpi.jus.br'
+    'https://projudi.tjpr.jus.br'
+    'https://projudi.tjrj.jus.br'
+    'https://projudi.tjrn.jus.br'
+    'https://projudi.tjro.jus.br'
+    'https://projudi.tjrr.jus.br'
+    'https://projudi.tjrs.jus.br'
+    'https://projudi.tjsc.jus.br'
+    'https://projudi.tjse.jus.br'
+    'https://projudi.tjsp.jus.br'
+    'https://projudi.tjto.jus.br'
 )
 
 # =========================================================================
@@ -277,18 +292,29 @@ foreach ($usuario in $usuarios) {
         Write-Info 'deployment.properties nao existia. Sera criado.'
     }
 
-    # ETAPA 3 - Configurar nivel de seguranca MEDIUM e apontar exception.sites
+    # ETAPA 3 - Configurar nivel de seguranca e apontar exception.sites
     $excepSitesPath = $usuario.FullName.Replace('\', '/') + '/AppData/LocalLow/Sun/Java/Deployment/exception.sites'
 
+    # MEDIUM foi removido do Java a partir do 8u20: os niveis validos sao
+    # HIGH e VERY_HIGH. Gravar MEDIUM faz o Java ignorar e voltar para HIGH.
+    # O que realmente libera os sistemas juridicos e' o exception.sites.
     $props = @{
-        'deployment.security.level'              = 'MEDIUM'
-        'deployment.security.level.locked'       = ''
+        'deployment.security.level'                = 'HIGH'
         'deployment.user.security.exception.sites' = $excepSitesPath
+        'deployment.expiration.check.enabled'      = 'false'
+        'deployment.webjava.enabled'               = 'true'
     }
+    # Chaves .locked travam o painel do Java: precisam SUMIR do arquivo.
+    $remover = @(
+        'deployment.security.level.locked'
+        'deployment.user.security.exception.sites.locked'
+        'deployment.expiration.check.enabled.locked'
+        'deployment.webjava.enabled.locked'
+    )
 
     try {
-        Atualizar-Properties $deployProps $props
-        Write-Ok 'deployment.properties: security.level=MEDIUM configurado.'
+        Atualizar-Properties $deployProps $props -Remover $remover
+        Write-Ok 'deployment.properties: security.level=HIGH + exception.sites configurado.'
     } catch {
         Write-Aviso ('Erro ao atualizar deployment.properties: ' + $_.Exception.Message)
     }
@@ -324,7 +350,7 @@ foreach ($usuario in $usuarios) {
 }
 
 Add-Rel '2. Backup props' 'OK' "$totalBackups backup(s) criado(s) com timestamp"
-Add-Rel '3. Security MEDIUM' 'OK' "deployment.properties atualizado em $usuariosConfig usuario(s)"
+Add-Rel '3. Security HIGH' 'OK' "deployment.properties atualizado em $usuariosConfig usuario(s) (locks removidos)"
 Add-Rel '4. exception.sites' 'OK' "$($urlsExcecao.Count) URLs configuradas em $usuariosConfig usuario(s)"
 Add-Rel '5. Cache Java' 'OK' "Cache limpo em $totalCacheLimpo usuario(s)"
 
