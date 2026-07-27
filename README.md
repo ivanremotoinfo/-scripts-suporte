@@ -47,9 +47,25 @@ saem dele. Não há mais sub-script solto para manter em sincronia.
 **Limpeza:** `temp`, `lixeira`, `miniaturas`, `windowsupdate`, `navegadores`,
 `appcache`, `anydesk`, `winsxs`.
 
-**Reparos:** `sfc`, `corrigirrede`, `proxycert`, `spooler`, `appdata`,
-`explorer`, `chkdsk`, `appx`, `gpupdate`, `ip`, `proxy`, `rede`, `horario`,
-`defender`, `audio`, `webcam`, `permissoesps`, `impressora`.
+**Reparos:** `sfc`, `dll`, `reparoavancado`, `corrigirrede`, `proxycert`,
+`spooler`, `appdata`, `explorer`, `chkdsk`, `appx`, `gpupdate`, `ip`, `proxy`,
+`rede`, `horario`, `defender`, `audio`, `webcam`, `permissoesps`, `impressora`.
+
+### Arquivo corrompido x DLL faltando
+
+São problemas diferentes e o tratamento é diferente:
+
+| Sintoma | Ferramenta | Por quê |
+|---|---|---|
+| "falta VCRUNTIME140.dll", "MSVCP140.dll não encontrado" | `dll` | A DLL vem de **redistribuível**, não do Windows. SFC/DISM não resolvem. |
+| Programa não abre, erro de side-by-side | `dll` | Também é Visual C++ na maioria dos casos. |
+| Windows instável, SFC acusa corrupção | `sfc` | Arquivo do sistema mesmo: DISM + SFC reparam. |
+| SFC achou corrupção e **não conseguiu reparar** | `reparoavancado` | Lista quais arquivos falharam e repara usando ISO do Windows. |
+
+A ferramenta `dll` acha o nome sozinha no log de eventos, identifica o pacote
+de origem (Visual C++ por versão, Universal C Runtime, DirectX, VB6, OCX,
+.NET, Java), confere as duas arquiteturas (System32 e SysWOW64 — falta de uma
+delas é causa comum do erro persistir) e oferece instalar o pacote.
 
 **Jurídico:** `java`, `pje`, `limparcerts`.
 
