@@ -32,69 +32,80 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 #   Args  = parametros passados ao v2 (quando Tipo='v2')
 $menu = @(
     # --- DIAGNOSTICO ---   (Args e' hashtable p/ splat correto no v2)
-    @{ N=1;  Cat='DIAGNOSTICO'; Label='Diagnostico Completo do PC';    Tipo='v2';     Args=@{ Ferramenta='diagnostico' } }
-    @{ N=2;  Cat='DIAGNOSTICO'; Label='Saude dos Discos (SMART)';      Tipo='v2';     Args=@{ Ferramenta='smart' } }
-    @{ N=3;  Cat='DIAGNOSTICO'; Label='Maiores Consumidores de RAM';   Tipo='v2';     Args=@{ Ferramenta='topprocessos' } }
-    @{ N=4;  Cat='DIAGNOSTICO'; Label='Listar Certificados Digitais';  Tipo='v2';     Args=@{ Ferramenta='certificados' } }
-    @{ N=5;  Cat='DIAGNOSTICO'; Label='Analisar Tela Azul (BSOD)';     Tipo='v2';     Args=@{ Ferramenta='bsod' } }
+    @{ Cat='DIAGNOSTICO'; Label='Diagnostico Completo do PC';    Tipo='v2';     Args=@{ Ferramenta='diagnostico' } }
+    @{ Cat='DIAGNOSTICO'; Label='Saude dos Discos (SMART)';      Tipo='v2';     Args=@{ Ferramenta='smart' } }
+    @{ Cat='DIAGNOSTICO'; Label='Maiores Consumidores de RAM';   Tipo='v2';     Args=@{ Ferramenta='topprocessos' } }
+    @{ Cat='DIAGNOSTICO'; Label='Listar Certificados Digitais';  Tipo='v2';     Args=@{ Ferramenta='certificados' } }
+    @{ Cat='DIAGNOSTICO'; Label='Analisar Tela Azul (BSOD)';     Tipo='v2';     Args=@{ Ferramenta='bsod' } }
 
     # --- MANUTENCAO E LIMPEZA ---
-    @{ N=6;  Cat='MANUTENCAO';  Label='Manutencao Completa (tudo)';    Tipo='v2';     Args=@{} }
-    @{ N=45; Cat='MANUTENCAO';  Label='Simular (nao altera nada)';      Tipo='v2';     Args=@{ SomenteRelatorio=$true } }
-    @{ N=7;  Cat='MANUTENCAO';  Label='Limpar Temporarios';            Tipo='v2';     Args=@{ Ferramenta='temp' } }
-    @{ N=8;  Cat='MANUTENCAO';  Label='Esvaziar Lixeira';              Tipo='v2';     Args=@{ Ferramenta='lixeira' } }
-    @{ N=9;  Cat='MANUTENCAO';  Label='Cache dos Navegadores';         Tipo='v2';     Args=@{ Ferramenta='navegadores' } }
-    @{ N=10; Cat='MANUTENCAO';  Label='Cache de Aplicativos';          Tipo='v2';     Args=@{ Ferramenta='appcache' } }
-    @{ N=11; Cat='MANUTENCAO';  Label='Cache do Windows Update';       Tipo='v2';     Args=@{ Ferramenta='windowsupdate' } }
-    @{ N=12; Cat='MANUTENCAO';  Label='Miniaturas do Explorer';        Tipo='v2';     Args=@{ Ferramenta='miniaturas' } }
-    @{ N=13; Cat='MANUTENCAO';  Label='Limpeza Pesada (WinSxS)';       Tipo='v2';     Args=@{ Ferramenta='winsxs' } }
-    @{ N=14; Cat='MANUTENCAO';  Label='Apagar pasta do AnyDesk';       Tipo='v2';     Args=@{ Ferramenta='anydesk' } }
-    @{ N=15; Cat='MANUTENCAO';  Label='Visual C++ Redistribuiveis';    Tipo='v2';     Args=@{ Ferramenta='visualc' } }
+    @{ Cat='MANUTENCAO';  Label='Manutencao Completa (tudo)';    Tipo='v2';     Args=@{} }
+    @{ Cat='MANUTENCAO';  Label='Simular (nao altera nada)';      Tipo='v2';     Args=@{ SomenteRelatorio=$true } }
+    @{ Cat='MANUTENCAO';  Label='Limpar Temporarios';            Tipo='v2';     Args=@{ Ferramenta='temp' } }
+    @{ Cat='MANUTENCAO';  Label='Esvaziar Lixeira';              Tipo='v2';     Args=@{ Ferramenta='lixeira' } }
+    @{ Cat='MANUTENCAO';  Label='Cache dos Navegadores';         Tipo='v2';     Args=@{ Ferramenta='navegadores' } }
+    @{ Cat='MANUTENCAO';  Label='Cache de Aplicativos';          Tipo='v2';     Args=@{ Ferramenta='appcache' } }
+    @{ Cat='MANUTENCAO';  Label='Cache do Windows Update';       Tipo='v2';     Args=@{ Ferramenta='windowsupdate' } }
+    @{ Cat='MANUTENCAO';  Label='Miniaturas do Explorer';        Tipo='v2';     Args=@{ Ferramenta='miniaturas' } }
+    @{ Cat='MANUTENCAO';  Label='Limpeza Pesada (WinSxS)';       Tipo='v2';     Args=@{ Ferramenta='winsxs' } }
+    @{ Cat='MANUTENCAO';  Label='Apagar pasta do AnyDesk';       Tipo='v2';     Args=@{ Ferramenta='anydesk' } }
+    @{ Cat='MANUTENCAO';  Label='Visual C++ Redistribuiveis';    Tipo='v2';     Args=@{ Ferramenta='visualc' } }
 
     # --- SEGURANCA E ANTIVIRUS ---
-    @{ N=16; Cat='SEGURANCA';   Label='Escanear Virus (ClamAV+VT)';    Tipo='v2';     Args=@{ EscanearVirus=$true } }
-    @{ N=17; Cat='SEGURANCA';   Label='Restaurar Quarentena';          Tipo='v2';     Args=@{ RestaurarQuarentena=$true } }
-    @{ N=18; Cat='SEGURANCA';   Label='Desativar Antivirus+Firewall';  Tipo='v2';     Args=@{ DesativarDefender=$true; DesativarFirewall=$true } }
-    @{ N=19; Cat='SEGURANCA';   Label='Reativar Antivirus+Firewall';   Tipo='v2';     Args=@{ ReativarTudo=$true } }
-    @{ N=20; Cat='SEGURANCA';   Label='Abrir Protecao Virus/Ameacas';  Tipo='v2';     Args=@{ Ferramenta='protecaovirus' } }
+    @{ Cat='SEGURANCA';   Label='Escanear Virus (ClamAV+VT)';    Tipo='v2';     Args=@{ EscanearVirus=$true } }
+    @{ Cat='SEGURANCA';   Label='Restaurar Quarentena';          Tipo='v2';     Args=@{ RestaurarQuarentena=$true } }
+    @{ Cat='SEGURANCA';   Label='Desativar Antivirus+Firewall';  Tipo='v2';     Args=@{ DesativarDefender=$true; DesativarFirewall=$true } }
+    @{ Cat='SEGURANCA';   Label='Reativar Antivirus+Firewall';   Tipo='v2';     Args=@{ ReativarTudo=$true } }
+    @{ Cat='SEGURANCA';   Label='Abrir Protecao Virus/Ameacas';  Tipo='v2';     Args=@{ Ferramenta='protecaovirus' } }
 
     # --- REPAROS ---
-    @{ N=21; Cat='REPAROS';     Label='Reparar Sistema (SFC/DISM)';    Tipo='v2';     Args=@{ Ferramenta='sfc' } }
-    @{ N=22; Cat='REPAROS';     Label='Corrigir Rede e Internet';      Tipo='v2';     Args=@{ Ferramenta='corrigirrede' } }
-    @{ N=23; Cat='REPAROS';     Label='Corrigir Proxy e Certif. Rede'; Tipo='v2';     Args=@{ Ferramenta='proxycert' } }
-    @{ N=24; Cat='REPAROS';     Label='Reparar Fila de Impressao';     Tipo='v2';     Args=@{ Ferramenta='spooler' } }
-    @{ N=25; Cat='REPAROS';     Label='Reparar acesso a %appdata%';    Tipo='v2';     Args=@{ Ferramenta='appdata' } }
-    @{ N=26; Cat='REPAROS';     Label='Reiniciar Explorer';            Tipo='v2';     Args=@{ Ferramenta='explorer' } }
-    @{ N=27; Cat='REPAROS';     Label='Agendar Chkdsk (verif. disco)'; Tipo='v2';     Args=@{ Ferramenta='chkdsk' } }
-    @{ N=28; Cat='REPAROS';     Label='Reparar Apps da Store (AppX)';  Tipo='v2';     Args=@{ Ferramenta='appx' } }
-    @{ N=29; Cat='REPAROS';     Label='Sincronizar Horario (NTP)';     Tipo='v2';     Args=@{ Ferramenta='horario' } }
-    @{ N=30; Cat='REPAROS';     Label='Renovar IP (DHCP)';             Tipo='v2';     Args=@{ Ferramenta='ip' } }
-    @{ N=31; Cat='REPAROS';     Label='Atualizar GPO (dominio)';       Tipo='v2';     Args=@{ Ferramenta='gpupdate' } }
-    @{ N=32; Cat='REPAROS';     Label='Permissoes do PowerShell';      Tipo='v2';     Args=@{ Ferramenta='permissoesps' } }
-    @{ N=33; Cat='REPAROS';     Label='Reparar Audio e Microfone';     Tipo='v2';     Args=@{ Ferramenta='audio' } }
-    @{ N=34; Cat='REPAROS';     Label='Reparar Webcam';                Tipo='v2';     Args=@{ Ferramenta='webcam' } }
+    @{ Cat='REPAROS';     Label='Reparar Sistema (SFC/DISM)';    Tipo='v2';     Args=@{ Ferramenta='sfc' } }
+    @{ Cat='REPAROS';     Label='Corrigir Rede e Internet';      Tipo='v2';     Args=@{ Ferramenta='corrigirrede' } }
+    @{ Cat='REPAROS';     Label='Corrigir Proxy e Certif. Rede'; Tipo='v2';     Args=@{ Ferramenta='proxycert' } }
+    @{ Cat='REPAROS';     Label='Reparar Fila de Impressao';     Tipo='v2';     Args=@{ Ferramenta='spooler' } }
+    @{ Cat='REPAROS';     Label='Reparar acesso a %appdata%';    Tipo='v2';     Args=@{ Ferramenta='appdata' } }
+    @{ Cat='REPAROS';     Label='Reiniciar Explorer';            Tipo='v2';     Args=@{ Ferramenta='explorer' } }
+    @{ Cat='REPAROS';     Label='Agendar Chkdsk (verif. disco)'; Tipo='v2';     Args=@{ Ferramenta='chkdsk' } }
+    @{ Cat='REPAROS';     Label='Reparar Apps da Store (AppX)';  Tipo='v2';     Args=@{ Ferramenta='appx' } }
+    @{ Cat='REPAROS';     Label='Sincronizar Horario (NTP)';     Tipo='v2';     Args=@{ Ferramenta='horario' } }
+    @{ Cat='REPAROS';     Label='Renovar IP (DHCP)';             Tipo='v2';     Args=@{ Ferramenta='ip' } }
+    @{ Cat='REPAROS';     Label='Atualizar GPO (dominio)';       Tipo='v2';     Args=@{ Ferramenta='gpupdate' } }
+    @{ Cat='REPAROS';     Label='Permissoes do PowerShell';      Tipo='v2';     Args=@{ Ferramenta='permissoesps' } }
+    @{ Cat='REPAROS';     Label='Reparar Audio e Microfone';     Tipo='v2';     Args=@{ Ferramenta='audio' } }
+    @{ Cat='REPAROS';     Label='Reparar Webcam';                Tipo='v2';     Args=@{ Ferramenta='webcam' } }
 
     # --- OTIMIZACAO ---
-    @{ N=35; Cat='OTIMIZACAO';  Label='Otimizar Disco (SSD/HDD)';      Tipo='v2';     Args=@{ Ferramenta='otimizar' } }
-    @{ N=36; Cat='OTIMIZACAO';  Label='Gerenciar Inicializacao';       Tipo='v2';     Args=@{ Ferramenta='inicializacao' } }
-    @{ N=37; Cat='OTIMIZACAO';  Label='Efeitos Visuais + Energia';     Tipo='v2';     Args=@{ Ferramenta='efeitos' } }
-    @{ N=46; Cat='OTIMIZACAO';  Label='Memoria Virtual (pagefile)';    Tipo='v2';     Args=@{ Ferramenta='memoriavirtual' } }
+    @{ Cat='OTIMIZACAO';  Label='Otimizar Disco (SSD/HDD)';      Tipo='v2';     Args=@{ Ferramenta='otimizar' } }
+    @{ Cat='OTIMIZACAO';  Label='Gerenciar Inicializacao';       Tipo='v2';     Args=@{ Ferramenta='inicializacao' } }
+    @{ Cat='OTIMIZACAO';  Label='Efeitos Visuais + Energia';     Tipo='v2';     Args=@{ Ferramenta='efeitos' } }
+    @{ Cat='OTIMIZACAO';  Label='Memoria Virtual (pagefile)';    Tipo='v2';     Args=@{ Ferramenta='memoriavirtual' } }
 
     # --- CERTIFICADOS E JURIDICO ---
-    @{ N=38; Cat='CERTIFICADOS';Label='Limpar Certificados Vencidos';  Tipo='v2';     Args=@{ Ferramenta='limparcerts' } }
-    @{ N=39; Cat='CERTIFICADOS';Label='Configurar Java (Juridico)';    Tipo='v2';     Args=@{ Ferramenta='java' } }
-    @{ N=40; Cat='CERTIFICADOS';Label='Configurar Ambiente PJe';       Tipo='v2';     Args=@{ Ferramenta='pje' } }
+    @{ Cat='CERTIFICADOS';Label='Limpar Certificados Vencidos';  Tipo='v2';     Args=@{ Ferramenta='limparcerts' } }
+    @{ Cat='CERTIFICADOS';Label='Configurar Java (Juridico)';    Tipo='v2';     Args=@{ Ferramenta='java' } }
+    @{ Cat='CERTIFICADOS';Label='Configurar Ambiente PJe';       Tipo='v2';     Args=@{ Ferramenta='pje' } }
 
     # --- PROGRAMAS ---
-    @{ N=41; Cat='PROGRAMAS';   Label='Desinstalar Programa';          Tipo='v2';     Args=@{ Ferramenta='desinstalar' } }
-    @{ N=42; Cat='PROGRAMAS';   Label='Remover Impressora';            Tipo='v2';     Args=@{ Ferramenta='impressora' } }
+    @{ Cat='PROGRAMAS';   Label='Desinstalar Programa';          Tipo='v2';     Args=@{ Ferramenta='desinstalar' } }
+    @{ Cat='PROGRAMAS';   Label='Remover Impressora';            Tipo='v2';     Args=@{ Ferramenta='impressora' } }
 
     # --- ATALHOS ADMIN ---
-    @{ N=43; Cat='ATALHOS';     Label='Dispositivos, Servicos e Token';  Tipo='v2'; Args=@{ Ferramenta='consoles' } }
-    @{ N=44; Cat='ATALHOS';     Label='Abrir pasta %appdata%';           Tipo='v2'; Args=@{ Ferramenta='abrirappdata' } }
+    @{ Cat='ATALHOS';     Label='Dispositivos, Servicos e Token';  Tipo='v2'; Args=@{ Ferramenta='consoles' } }
+    @{ Cat='ATALHOS';     Label='Abrir pasta %appdata%';           Tipo='v2'; Args=@{ Ferramenta='abrirappdata' } }
 )
-# Converte para objetos (hashtable nao ordena/mede por chave nos cmdlets)
-$menu = $menu | ForEach-Object { [pscustomobject]$_ }
+# Converte para objetos e NUMERA na ordem em que os itens estao declarados
+# acima - que e' a mesma ordem em que aparecem na tela. Antes o numero era
+# fixo em cada item, e opcao nova recebia numero alto: ela ia parar no fim da
+# categoria dela (no meio do menu) em vez do fim da tela, e nao se achava.
+# Agora, para acrescentar uma opcao, basta declarar na posicao certa: a
+# numeracao se ajusta sozinha e continua sem buraco.
+$numero = 0
+$menu = $menu | ForEach-Object {
+    $numero++
+    $obj = [pscustomobject]$_
+    $obj | Add-Member -NotePropertyName 'N' -NotePropertyValue $numero -Force
+    $obj
+}
 
 $categorias = @(
     @{ Nome='DIAGNOSTICO';  Titulo='DIAGNOSTICO';           Cor='Cyan' }
