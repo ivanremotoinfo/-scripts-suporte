@@ -82,6 +82,9 @@ $menu = @(
     # --- PROGRAMAS ---
     @{ N=41; Cat='PROGRAMAS';   Label='Desinstalar Programa';          Tipo='script'; Alvo='DesinstalarPrograma.ps1' }
     @{ N=42; Cat='PROGRAMAS';   Label='Remover Impressora';            Tipo='script'; Alvo='ReinstalarImpressora.ps1' }
+
+    # --- ATALHOS ADMIN ---
+    @{ N=43; Cat='ATALHOS';     Label='Dispositivos + Token + Servicos'; Tipo='v2';   Args=@{ Ferramenta='consoles' } }
 )
 # Converte para objetos (hashtable nao ordena/mede por chave nos cmdlets)
 $menu = $menu | ForEach-Object { [pscustomobject]$_ }
@@ -94,6 +97,7 @@ $categorias = @(
     @{ Nome='OTIMIZACAO';   Titulo='OTIMIZACAO';            Cor='White' }
     @{ Nome='CERTIFICADOS'; Titulo='CERTIFICADOS E JURIDICO'; Cor='Magenta' }
     @{ Nome='PROGRAMAS';    Titulo='PROGRAMAS';             Cor='Blue' }
+    @{ Nome='ATALHOS';      Titulo='ATALHOS ADMINISTRATIVOS'; Cor='Cyan' }
 )
 
 $maxOpt = ($menu | ForEach-Object { $_.N } | Measure-Object -Maximum).Maximum

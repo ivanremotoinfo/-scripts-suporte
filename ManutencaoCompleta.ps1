@@ -1435,6 +1435,38 @@ function Set-SmartScreenReputacao {
     return $ok
 }
 
+function Open-TokenAdmin {
+    <#
+      Abre o app de administracao de token de certificado digital. Como o
+      programa varia (SafeNet/eToken/Gemalto/etc.), tenta caminhos conhecidos
+      e, se nao achar, procura um atalho no Menu Iniciar por palavra-chave.
+      Retorna $true se abriu algo.
+    #>
+    $cands = @(
+        "$env:ProgramFiles\SafeNet\Authentication\SAC\x64\SACTools.exe"
+        "$env:ProgramFiles\SafeNet\Authentication\SAC\x32\SACTools.exe"
+        "${env:ProgramFiles(x86)}\SafeNet\Authentication\SAC\x64\SACTools.exe"
+        "${env:ProgramFiles(x86)}\SafeNet\Authentication\SAC\x32\SACTools.exe"
+        "$env:ProgramFiles\Gemalto\SafeNet Authentication Client\Tools\SACTools.exe"
+        "$env:ProgramFiles\Aladdin\eToken\PKIClient\x32\eTProps.exe"
+        "${env:ProgramFiles(x86)}\Aladdin\eToken\PKIClient\x32\eTProps.exe"
+    )
+    foreach ($c in $cands) {
+        if ($c -and (Test-Path -LiteralPath $c)) { Start-Process $c -ErrorAction SilentlyContinue; return $true }
+    }
+    # Procura atalho no Menu Iniciar (rapido - pastas pequenas)
+    $menus = @("$env:ProgramData\Microsoft\Windows\Start Menu\Programs",
+               "$env:APPDATA\Microsoft\Windows\Start Menu\Programs")
+    foreach ($m in $menus) {
+        if (-not (Test-Path -LiteralPath $m)) { continue }
+        $lnk = Get-ChildItem -LiteralPath $m -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue |
+               Where-Object { $_.Name -match 'token|safenet|etoken|gemalto|thales|autenticac|certificad' } |
+               Select-Object -First 1
+        if ($lnk) { Start-Process $lnk.FullName -ErrorAction SilentlyContinue; return $true }
+    }
+    return $false
+}
+
 function Disable-DefenderCompleto {
     $st = Get-EstadoProtecao
 
@@ -3771,6 +3803,18 @@ if ($Ferramenta) {
             'topprocessos'  { Get-TopProcessos -Por Memoria -Top 12 | Format-Table -AutoSize | Out-Host }
             'programas'     { Get-ProgramasInstalados | Format-Table -AutoSize | Out-Host }
             'diagnostico'   { Show-DiagnosticoCompleto }
+            'consoles'      {
+                Write-Etapa 'Abrindo Gerenciador de Dispositivos, Servicos e Token Administration...'
+                try { Start-Process 'devmgmt.msc' -ErrorAction Stop; Write-Ok 'Gerenciador de Dispositivos aberto.' }
+                catch { try { Start-Process 'mmc.exe' -ArgumentList 'devmgmt.msc' -ErrorAction SilentlyContinue; Write-Ok 'Gerenciador de Dispositivos aberto.' } catch { Write-Aviso 'Falha ao abrir Gerenciador de Dispositivos.' } }
+                try { Start-Process 'services.msc' -ErrorAction Stop; Write-Ok 'Servicos do Windows abertos.' }
+                catch { try { Start-Process 'mmc.exe' -ArgumentList 'services.msc' -ErrorAction SilentlyContinue; Write-Ok 'Servicos do Windows abertos.' } catch { Write-Aviso 'Falha ao abrir Servicos.' } }
+                if (Open-TokenAdmin) { Write-Ok 'Token Administration aberto.' }
+                else {
+                    Write-Aviso 'Nao encontrei o app de administracao de token (SafeNet/eToken/Gemalto...).'
+                    Write-Info  'Abra pelo menu Iniciar. Me diga o nome exato do programa que eu incluo na busca.'
+                }
+            }
             'protecaovirus' {
                 Write-Etapa 'Abrindo Seguranca do Windows > Protecao contra virus e ameacas...'
                 $ab = $false
@@ -3786,10 +3830,10 @@ if ($Ferramenta) {
             }
             default         {
                 Write-Falha "Ferramenta desconhecida: $Ferramenta"
-                Write-Info 'Validas: diagnostico, protecaovirus, temp, lixeira, miniaturas, windowsupdate,'
-                Write-Info 'navegadores, appcache, anydesk, winsxs, inicializacao, appdata, efeitos, rede,'
-                Write-Info 'horario, defender, spooler, explorer, chkdsk, appx, gpupdate, ip, proxy,'
-                Write-Info 'otimizar, sfc, smart, perfis, topprocessos, programas.'
+                Write-Info 'Validas: diagnostico, protecaovirus, consoles, temp, lixeira, miniaturas,'
+                Write-Info 'windowsupdate, navegadores, appcache, anydesk, winsxs, inicializacao, appdata,'
+                Write-Info 'efeitos, rede, horario, defender, spooler, explorer, chkdsk, appx, gpupdate,'
+                Write-Info 'ip, proxy, otimizar, sfc, smart, perfis, topprocessos, programas.'
             }
         }
     } catch { Write-Falha "Erro na ferramenta '$chave': $($_.Exception.Message)" }
@@ -3801,15 +3845,15 @@ if ($Ferramenta) {
     }
     Write-Host ''
     # Ferramentas somente-leitura nao deixam log salvo.
-    if ($chave -notin @('diagnostico', 'protecaovirus')) {
+    if ($chave -notin @('diagnostico', 'protecaovirus', 'consoles')) {
         Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
     }
     Write-Host ('=' * 68) -ForegroundColor Green
     try { Stop-Transcript | Out-Null } catch { }
     # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
     if ($chave -eq 'diagnostico') { Publicar-RelatorioTemp -RemoverPastaLog }
-    # protecaovirus: so abriu uma tela; nao deixa pasta de log.
-    elseif ($chave -eq 'protecaovirus') {
+    # protecaovirus/consoles: so abriram telas; nao deixam pasta de log.
+    elseif ($chave -in @('protecaovirus', 'consoles')) {
         Remove-Item -LiteralPath (Join-Path $script:pastaExec 'manutencao.log') -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 200
         if ($script:pastaExec -and (Test-Path -LiteralPath $script:pastaExec)) {
