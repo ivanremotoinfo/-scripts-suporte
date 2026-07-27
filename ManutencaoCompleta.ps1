@@ -1457,13 +1457,27 @@ function Disable-DefenderCompleto {
     # 2) Configuracoes de protecao contra virus e ameacas (nucleo do Defender).
     #    Estas SIM sao bloqueadas pela Tamper Protection.
     if ($st.TamperProtection) {
-        Write-Falha 'PROTECAO CONTRA ADULTERACAO (Tamper Protection) ESTA LIGADA.'
-        Write-Aviso 'As configuracoes de virus e ameacas do Defender nao podem ser desativadas por script.'
-        Write-Info  'Desligue manualmente e rode de novo:'
-        Write-Info  '  Seguranca do Windows > Protecao contra virus e ameacas >'
-        Write-Info  '  Gerenciar configuracoes > Protecao contra adulteracao = Desligado'
-        Add-Alerta 'Defender (virus/ameacas) NAO desativado: Tamper Protection ligada. SmartScreen foi desativado.'
-        Add-Alerta 'PROTECOES ALTERADAS - reative com -ReativarTudo assim que possivel.'
+        Write-Host ''
+        Write-Host '  ##############################################################' -ForegroundColor Red
+        Write-Host '  #  PROTECAO CONTRA ADULTERACAO (TAMPER PROTECTION) LIGADA     #' -ForegroundColor Red
+        Write-Host '  ##############################################################' -ForegroundColor Red
+        Write-Host '  O ANTIVIRUS (Protecao contra virus e ameacas) NAO pode ser' -ForegroundColor Yellow
+        Write-Host '  desativado por script enquanto isso estiver LIGADO. E uma trava' -ForegroundColor Yellow
+        Write-Host '  da Microsoft contra malware - NENHUM programa consegue burlar.' -ForegroundColor Yellow
+        Write-Host ''
+        Write-Host '  PASSO A PASSO (manual, so uma vez):' -ForegroundColor White
+        Write-Host '   1) Vou abrir a tela de Seguranca do Windows agora.' -ForegroundColor Gray
+        Write-Host '   2) Em "Configuracoes de protecao contra virus e ameacas",' -ForegroundColor Gray
+        Write-Host '      clique em "Gerenciar configuracoes".' -ForegroundColor Gray
+        Write-Host '   3) Desligue "Protecao contra adulteracao".' -ForegroundColor Gray
+        Write-Host '   4) Rode a opcao 18 novamente.' -ForegroundColor Gray
+        Write-Host ''
+        if (-not $SemInteracao) {
+            try { Start-Process 'windowsdefender://threatsettings' -ErrorAction Stop }
+            catch { try { Start-Process 'windowsdefender:' -ErrorAction SilentlyContinue } catch { } }
+        }
+        Add-Alerta 'ANTIVIRUS NAO desativado: Tamper Protection ligada (desligue na tela que abriu e rode a opcao 18 de novo).'
+        Add-Alerta 'Firewall e SmartScreen JA foram desativados - reative com -ReativarTudo (opcao 19) ao terminar.'
         return
     }
 
@@ -1661,8 +1675,8 @@ function Invoke-GerenciarProtecao {
                 return
             }
         } else {
-            $r = (Read-Host '  Digite DESATIVAR para confirmar').Trim()
-            if ($r -ne 'DESATIVAR') { Write-Aviso 'Cancelado pelo operador.'; return }
+            $r = (Read-Host '  Desativar a protecao agora? (S/N)').Trim()
+            if ($r -notmatch '^[SsYy]') { Write-Aviso 'Cancelado pelo operador.'; return }
         }
     }
 
