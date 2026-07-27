@@ -1398,21 +1398,74 @@ function Enable-FirewallCompleto {
     } catch { Write-Falha "Falha ao reativar firewall: $($_.Exception.Message)" }
 }
 
+function Set-SmartScreenReputacao {
+    <#
+      Liga/desliga o "Controle de aplicativo e do navegador" / "Protecao
+      baseada em reputacao" (SmartScreen do Windows, do Edge e das apps da
+      Store, alem do bloqueio de apps potencialmente indesejados no Edge).
+      Sao politicas de REGISTRO - NAO sao bloqueadas pela Tamper Protection.
+    #>
+    param([bool]$Ativo)
+    $ok = $true
+    $sys  = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System'
+    $edge = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
+    $exp  = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer'
+    $ah   = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppHost'
+    try {
+        if ($Ativo) {
+            # Reativar: REMOVE as politicas (volta ao padrao ligado, sem deixar
+            # a UI "gerenciada pela organizacao") e religa as config. diretas.
+            Remove-ItemProperty -Path $sys  -Name 'EnableSmartScreen'     -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $sys  -Name 'ShellSmartScreenLevel' -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $edge -Name 'SmartScreenEnabled'    -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $edge -Name 'SmartScreenPuaEnabled' -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $exp -Name 'SmartScreenEnabled' -Value 'Warn' -Type String -ErrorAction SilentlyContinue
+            if (-not (Test-Path $ah)) { New-Item -Path $ah -Force | Out-Null }
+            Set-ItemProperty -Path $ah -Name 'EnableWebContentEvaluation' -Value 1 -Type DWord -ErrorAction SilentlyContinue
+        } else {
+            # Desativar tudo (SmartScreen Windows/Explorer/Edge/Store + PUA Edge)
+            foreach ($k in @($sys, $edge, $ah)) { if (-not (Test-Path $k)) { New-Item -Path $k -Force | Out-Null } }
+            Set-ItemProperty -Path $sys  -Name 'EnableSmartScreen'          -Value 0 -Type DWord -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $exp  -Name 'SmartScreenEnabled'         -Value 'Off' -Type String -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $edge -Name 'SmartScreenEnabled'         -Value 0 -Type DWord -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $edge -Name 'SmartScreenPuaEnabled'      -Value 0 -Type DWord -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $ah   -Name 'EnableWebContentEvaluation' -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        }
+    } catch { $ok = $false }
+    return $ok
+}
+
 function Disable-DefenderCompleto {
     $st = Get-EstadoProtecao
-    if (-not $st.DefenderPresente) { Write-Info 'Windows Defender nao esta presente/ativo nesta maquina.'; return }
 
-    if ($st.TamperProtection) {
-        Write-Falha 'PROTECAO CONTRA ADULTERACAO (Tamper Protection) ESTA LIGADA.'
-        Write-Aviso 'O Windows bloqueia a desativacao do Defender por script.'
-        Write-Info  'Desligue manualmente e rode de novo:'
-        Write-Info  '  Seguranca do Windows > Protecao contra virus e ameacas >'
-        Write-Info  '  Gerenciar configuracoes > Protecao contra adulteracao = Desligado'
-        Add-Alerta 'Defender NAO foi desativado: Tamper Protection ligada (desligue na interface).'
+    if ($SomenteRelatorio) {
+        Write-Simul 'Desativaria: SmartScreen (app/navegador/reputacao), PUA, acesso controlado a pastas'
+        Write-Simul 'e as configuracoes de protecao contra virus/ameacas do Defender.'
         return
     }
 
-    if ($SomenteRelatorio) { Write-Simul 'Desativaria a protecao em tempo real do Defender.'; return }
+    # 1) Controle de aplicativo e do navegador + Protecao baseada em reputacao
+    #    (SmartScreen). Politicas de registro - funcionam mesmo com Tamper ON.
+    if (Set-SmartScreenReputacao -Ativo:$false) {
+        Write-Ok 'Controle de aplicativo/navegador + protecao por reputacao (SmartScreen) desativados.'
+    } else {
+        Write-Aviso 'Nao foi possivel desativar todo o SmartScreen.'
+    }
+
+    if (-not $st.DefenderPresente) { Write-Info 'Windows Defender nao esta presente/ativo nesta maquina.'; return }
+
+    # 2) Configuracoes de protecao contra virus e ameacas (nucleo do Defender).
+    #    Estas SIM sao bloqueadas pela Tamper Protection.
+    if ($st.TamperProtection) {
+        Write-Falha 'PROTECAO CONTRA ADULTERACAO (Tamper Protection) ESTA LIGADA.'
+        Write-Aviso 'As configuracoes de virus e ameacas do Defender nao podem ser desativadas por script.'
+        Write-Info  'Desligue manualmente e rode de novo:'
+        Write-Info  '  Seguranca do Windows > Protecao contra virus e ameacas >'
+        Write-Info  '  Gerenciar configuracoes > Protecao contra adulteracao = Desligado'
+        Add-Alerta 'Defender (virus/ameacas) NAO desativado: Tamper Protection ligada. SmartScreen foi desativado.'
+        Add-Alerta 'PROTECOES ALTERADAS - reative com -ReativarTudo assim que possivel.'
+        return
+    }
 
     $prefs = [ordered]@{
         DisableRealtimeMonitoring     = $true
@@ -1428,9 +1481,11 @@ function Disable-DefenderCompleto {
     foreach ($p in $prefs.Keys) {
         try { Set-MpPreference -$p $prefs[$p] -ErrorAction Stop; $ok++ } catch { $falhou++ }
     }
-    try { Set-MpPreference -MAPSReporting Disabled -ErrorAction SilentlyContinue } catch { }
-    try { Set-MpPreference -SubmitSamplesConsent NeverSend -ErrorAction SilentlyContinue } catch { }
-    try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue } catch { }
+    try { Set-MpPreference -MAPSReporting Disabled -ErrorAction SilentlyContinue } catch { }          # Protecao via nuvem
+    try { Set-MpPreference -SubmitSamplesConsent NeverSend -ErrorAction SilentlyContinue } catch { }  # Envio de amostras
+    try { Set-MpPreference -PUAProtection Disabled -ErrorAction SilentlyContinue } catch { }          # Apps potencialmente indesejados
+    try { Set-MpPreference -EnableControlledFolderAccess Disabled -ErrorAction SilentlyContinue } catch { } # Acesso controlado a pastas
+    try { Set-MpPreference -EnableNetworkProtection Disabled -ErrorAction SilentlyContinue } catch { }      # Protecao de rede
 
     # Reforco via politica (persiste apos reboot enquanto TP estiver desligada)
     try {
@@ -1438,6 +1493,7 @@ function Disable-DefenderCompleto {
         $k2 = "$k1\Real-Time Protection"
         foreach ($k in @($k1, $k2)) { if (-not (Test-Path $k)) { New-Item -Path $k -Force | Out-Null } }
         Set-ItemProperty -Path $k1 -Name 'DisableAntiSpyware' -Value 1 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $k1 -Name 'PUAProtection' -Value 0 -Type DWord -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $k2 -Name 'DisableRealtimeMonitoring' -Value 1 -Type DWord -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $k2 -Name 'DisableBehaviorMonitoring' -Value 1 -Type DWord -ErrorAction SilentlyContinue
     } catch { }
@@ -1447,19 +1503,22 @@ function Disable-DefenderCompleto {
         Write-Aviso "Protecao em tempo real ainda ativa ($ok pref. aplicadas, $falhou falharam)."
         Write-Info  'O Windows pode reativar sozinho apos alguns minutos ou no reboot.'
     } else {
-        Write-Ok "Defender desativado ($ok configuracoes aplicadas)."
+        Write-Ok "Configuracoes de virus/ameacas desativadas ($ok aplicadas): tempo real, nuvem, amostras, PUA, acesso a pastas."
     }
-    Add-Alerta 'DEFENDER DESATIVADO - reative com -ReativarDefender assim que possivel.'
+    Add-Alerta 'DEFENDER + SmartScreen DESATIVADOS - reative com -ReativarTudo assim que possivel.'
 }
 
 function Enable-DefenderCompleto {
-    if ($SomenteRelatorio) { Write-Simul 'Reativaria o Defender e restauraria os padroes.'; return }
+    if ($SomenteRelatorio) { Write-Simul 'Reativaria Defender, SmartScreen, PUA e restauraria os padroes.'; return }
 
-    # Remove as politicas que forcavam a desativacao
+    # 1) Reativa Controle de aplicativo/navegador + Protecao por reputacao
+    if (Set-SmartScreenReputacao -Ativo:$true) { Write-Ok 'Controle de aplicativo/navegador + reputacao (SmartScreen) reativados.' }
+
+    # 2) Remove as politicas que forcavam a desativacao do Defender
     try {
         $k1 = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender'
         $k2 = "$k1\Real-Time Protection"
-        foreach ($n in @('DisableAntiSpyware')) { Remove-ItemProperty -Path $k1 -Name $n -ErrorAction SilentlyContinue }
+        foreach ($n in @('DisableAntiSpyware', 'PUAProtection')) { Remove-ItemProperty -Path $k1 -Name $n -ErrorAction SilentlyContinue }
         foreach ($n in @('DisableRealtimeMonitoring', 'DisableBehaviorMonitoring')) {
             Remove-ItemProperty -Path $k2 -Name $n -ErrorAction SilentlyContinue
         }
@@ -1469,8 +1528,11 @@ function Enable-DefenderCompleto {
                'DisableIOAVProtection', 'DisableScriptScanning', 'DisableArchiveScanning',
                'DisableEmailScanning', 'DisableRemovableDriveScanning')
     foreach ($p in $prefs) { try { Set-MpPreference -$p $false -ErrorAction SilentlyContinue } catch { } }
-    try { Set-MpPreference -MAPSReporting Advanced -ErrorAction SilentlyContinue } catch { }
-    try { Set-MpPreference -SubmitSamplesConsent SendSafeSamples -ErrorAction SilentlyContinue } catch { }
+    try { Set-MpPreference -MAPSReporting Advanced -ErrorAction SilentlyContinue } catch { }          # Protecao via nuvem
+    try { Set-MpPreference -SubmitSamplesConsent SendSafeSamples -ErrorAction SilentlyContinue } catch { } # Envio de amostras
+    try { Set-MpPreference -PUAProtection Enabled -ErrorAction SilentlyContinue } catch { }            # PUA (padrao: ligado)
+    # Acesso controlado a pastas volta ao padrao do Windows (desligado).
+    try { Set-MpPreference -EnableControlledFolderAccess Disabled -ErrorAction SilentlyContinue } catch { }
 
     try {
         $svc = Get-Service WinDefend -ErrorAction SilentlyContinue
@@ -1479,7 +1541,7 @@ function Enable-DefenderCompleto {
     try { Update-MpSignature -ErrorAction SilentlyContinue } catch { }
 
     $st = Get-EstadoProtecao
-    if ($st.RealtimeAtivo) { Write-Ok 'Defender REATIVADO e assinaturas atualizadas.' }
+    if ($st.RealtimeAtivo) { Write-Ok 'Defender + SmartScreen REATIVADOS e assinaturas atualizadas.' }
     else { Write-Aviso 'Comandos enviados, mas a protecao em tempo real ainda consta inativa. Reinicie e confira.' }
 }
 
