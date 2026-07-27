@@ -3865,12 +3865,29 @@ if ($Ferramenta) {
                 if ($progs.Count -eq 0) { Write-Aviso 'Nenhum programa listavel.' }
                 else {
                     Write-Host ''
-                    # Mostra TODOS de uma vez, em 3 colunas (preenchidas por coluna)
-                    $cols = 3
+                    # Layout ADAPTATIVO: usa a largura da janela para colunas o
+                    # mais LARGAS possivel. Prioriza nao cortar; se os nomes
+                    # gigantes forcariam 1 coluna, cai para 2 colunas cortando
+                    # apenas esses poucos (o resto continua inteiro).
+                    $win = 120
+                    try { if ($Host.UI.RawUI.WindowSize.Width -gt 20) { $win = $Host.UI.RawUI.WindowSize.Width } } catch { }
+                    if ($win -gt 400) { $win = 400 }
+                    $maxLen = ($progs | ForEach-Object { $_.Nome.Length } | Measure-Object -Maximum).Maximum
+                    $pref = 7    # "NNN) "
+                    $gap  = 3
+                    $colWfull = $pref + $maxLen + $gap
+                    $cols = [math]::Max(1, [math]::Floor(($win - 2) / $colWfull))
+                    if ($cols -ge 2) {
+                        $colW = $colWfull ; $nameW = $maxLen              # cabe tudo inteiro
+                    } else {
+                        $cols = 2                                          # forca 2 colunas
+                        $colW = [math]::Floor(($win - 2) / $cols)
+                        $nameW = $colW - $pref - 1                         # corta so os nomes gigantes
+                    }
                     $rows = [math]::Ceiling($progs.Count / $cols)
                     function Fmt-Item($idx) {
                         $nm = $progs[$idx].Nome
-                        if ($nm.Length -gt 25) { $nm = $nm.Substring(0, 23) + '..' }
+                        if ($nm.Length -gt $nameW) { $nm = $nm.Substring(0, $nameW - 2) + '..' }
                         '{0,3}) {1}' -f ($idx + 1), $nm
                     }
                     for ($r = 0; $r -lt $rows; $r++) {
@@ -3879,7 +3896,7 @@ if ($Ferramenta) {
                             $idx = $r + ($c * $rows)
                             if ($idx -lt $progs.Count) {
                                 $cel = Fmt-Item $idx
-                                if ($c -lt ($cols - 1)) { $cel = $cel.PadRight(34) }
+                                if ($c -lt ($cols - 1)) { $cel = $cel.PadRight($colW) }
                                 $linha += $cel
                             }
                         }
