@@ -36,6 +36,7 @@ $menu = @(
 
     # --- MANUTENCAO E LIMPEZA ---
     @{ N=6;  Cat='MANUTENCAO';  Label='Manutencao Completa (tudo)';    Tipo='v2';     Args=@{} }
+    @{ N=45; Cat='MANUTENCAO';  Label='Simular (nao altera nada)';      Tipo='v2';     Args=@{ SomenteRelatorio=$true } }
     @{ N=7;  Cat='MANUTENCAO';  Label='Limpar Temporarios';            Tipo='v2';     Args=@{ Ferramenta='temp' } }
     @{ N=8;  Cat='MANUTENCAO';  Label='Esvaziar Lixeira';              Tipo='v2';     Args=@{ Ferramenta='lixeira' } }
     @{ N=9;  Cat='MANUTENCAO';  Label='Cache dos Navegadores';         Tipo='v2';     Args=@{ Ferramenta='navegadores' } }
@@ -73,6 +74,7 @@ $menu = @(
     @{ N=35; Cat='OTIMIZACAO';  Label='Otimizar Disco (SSD/HDD)';      Tipo='v2';     Args=@{ Ferramenta='otimizar' } }
     @{ N=36; Cat='OTIMIZACAO';  Label='Gerenciar Inicializacao';       Tipo='v2';     Args=@{ Ferramenta='inicializacao' } }
     @{ N=37; Cat='OTIMIZACAO';  Label='Efeitos Visuais + Energia';     Tipo='v2';     Args=@{ Ferramenta='efeitos' } }
+    @{ N=46; Cat='OTIMIZACAO';  Label='Memoria Virtual (pagefile)';    Tipo='v2';     Args=@{ Ferramenta='memoriavirtual' } }
 
     # --- CERTIFICADOS E JURIDICO ---
     @{ N=38; Cat='CERTIFICADOS';Label='Limpar Certificados Vencidos';  Tipo='script'; Alvo='LimparCertificadosVencidos.ps1' }
@@ -107,36 +109,68 @@ $maxOpt = ($menu | ForEach-Object { $_.N } | Measure-Object -Maximum).Maximum
 # FUNCAO: EXIBIR MENU (duas colunas por categoria, cabe na tela)
 # =========================================================================
 
+function Get-LarguraConsole {
+    # Largura util da janela. Se o host nao informar (ISE, redirecionamento),
+    # assume 80, que e' o padrao do console do Windows.
+    $w = 0
+    try { $w = [int]$Host.UI.RawUI.WindowSize.Width } catch { }
+    if ($w -lt 40) { $w = 80 }
+    return $w
+}
+
 function Mostrar-Menu {
     Clear-Host
     $dt = Get-Date -Format 'dd/MM/yyyy  HH:mm:ss'
 
+    # Layout adaptativo: com janela larga usa 2 colunas; estreita, 1 coluna.
+    # Antes a largura era fixa em 64 e os rotulos maiores estouravam a moldura.
+    $largura   = Get-LarguraConsole
+    $celaMax   = ($menu | ForEach-Object { ('[{0,2}] {1}' -f $_.N, $_.Label).Length } |
+                  Measure-Object -Maximum).Maximum
+    $colA      = $celaMax + 2
+    $duasCol   = ($largura -ge ($colA + $celaMax + 4))
+    $miolo     = if ($duasCol) { $colA + $celaMax } else { $celaMax }
+    if ($miolo -lt 60) { $miolo = 60 }
+    if ($miolo -gt ($largura - 4)) { $miolo = $largura - 4 }
+
+    $barra  = '  +' + ('=' * $miolo) + '+'
+    $titulo = '~~~  S U P O R T E . A D V . B R  ~~~'
+    $sub    = 'Suporte Tecnico em TI para Escritorios de Advocacia'
+
+    function Linha-Central { param([string]$t, [string]$cor)
+        $pad = [math]::Max(0, $miolo - $t.Length)
+        $esq = [math]::Floor($pad / 2)
+        Write-Host ('  |' + (' ' * $esq) + $t + (' ' * ($pad - $esq)) + '|') -ForegroundColor $cor
+    }
+
     Write-Host ''
-    Write-Host '  +==============================================================+' -ForegroundColor DarkCyan
-    Write-Host '  |          ~~~  S U P O R T E . A D V . B R  ~~~               |' -ForegroundColor Cyan
-    Write-Host '  |      Suporte Tecnico em TI para Escritorios de Advocacia     |' -ForegroundColor White
-    Write-Host '  +==============================================================+' -ForegroundColor DarkCyan
+    Write-Host $barra -ForegroundColor DarkCyan
+    Linha-Central $titulo 'Cyan'
+    Linha-Central $sub    'White'
+    Write-Host $barra -ForegroundColor DarkCyan
     Write-Host ("  $dt   PC: $env:COMPUTERNAME   User: $env:USERNAME") -ForegroundColor DarkGray
     if ($isAdmin) {
         Write-Host '  Privilegios: [Administrador]' -ForegroundColor Green
     } else {
         Write-Host '  Privilegios: [Usuario Limitado]  AVISO: execute como Administrador!' -ForegroundColor Red
     }
-    Write-Host '  +==============================================================+' -ForegroundColor DarkCyan
+    Write-Host $barra -ForegroundColor DarkCyan
 
     foreach ($cat in $categorias) {
         $itens = @($menu | Where-Object { $_.Cat -eq $cat.Nome } | Sort-Object N)
         if ($itens.Count -eq 0) { continue }
         Write-Host ''
         Write-Host ("  --- {0} " -f $cat.Titulo) -ForegroundColor $cat.Cor -NoNewline
-        Write-Host (('-' * [math]::Max(0, 58 - $cat.Titulo.Length))) -ForegroundColor DarkGray
-        for ($i = 0; $i -lt $itens.Count; $i += 2) {
+        Write-Host (('-' * [math]::Max(0, $miolo - $cat.Titulo.Length - 5))) -ForegroundColor DarkGray
+
+        $passo = if ($duasCol) { 2 } else { 1 }
+        for ($i = 0; $i -lt $itens.Count; $i += $passo) {
             $a = $itens[$i]
             $celA = ('[{0,2}] {1}' -f $a.N, $a.Label)
-            if ($i + 1 -lt $itens.Count) {
+            if ($duasCol -and ($i + 1 -lt $itens.Count)) {
                 $b = $itens[$i + 1]
                 $celB = ('[{0,2}] {1}' -f $b.N, $b.Label)
-                Write-Host ('  ' + $celA.PadRight(37) + $celB) -ForegroundColor $cat.Cor
+                Write-Host ('  ' + $celA.PadRight($colA) + $celB) -ForegroundColor $cat.Cor
             } else {
                 Write-Host ('  ' + $celA) -ForegroundColor $cat.Cor
             }
@@ -144,9 +178,9 @@ function Mostrar-Menu {
     }
 
     Write-Host ''
-    Write-Host '  +==============================================================+' -ForegroundColor DarkCyan
+    Write-Host $barra -ForegroundColor DarkCyan
     Write-Host '  [ 0 ]  Sair' -ForegroundColor DarkGray
-    Write-Host '  +==============================================================+' -ForegroundColor DarkCyan
+    Write-Host $barra -ForegroundColor DarkCyan
     Write-Host ''
 }
 

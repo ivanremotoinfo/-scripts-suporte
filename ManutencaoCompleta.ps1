@@ -54,7 +54,7 @@ param(
     [switch]$PularEfeitosVisuais,
 
     # Etapas opcionais (demoradas ou irreversiveis)
-    [switch]$LimpezaAgressiva,      # WinSxS /ResetBase, cleanmgr, Prefetch
+    [switch]$LimpezaAgressiva,      # WinSxS /ResetBase, cleanmgr
     [switch]$RepararSistema,        # DISM /RestoreHealth + SFC /scannow
     [switch]$ResetarRede,           # winsock/ip reset (exige reboot)
     [switch]$DesativarHibernacao,   # libera hiberfil.sys (nao use em notebook)
@@ -2869,7 +2869,7 @@ function Get-PotencialLimpeza {
     }
 
     $m = Measure-Pasta "$env:SystemRoot\Prefetch" -Filtro '*.pf'
-    Add-Item 'Prefetch' $m.Bytes $m.Arquivos '-LimpezaAgressiva' 'piora os proximos boots'
+    Add-Item 'Prefetch' $m.Bytes $m.Arquivos 'padrao' 'piora os proximos 3-5 boots'
 
     if (Test-Path 'C:\Windows.old') {
         $m = Measure-Pasta 'C:\Windows.old' -IgnorarGuarda
@@ -2994,12 +2994,13 @@ function Clear-Temporarios {
     $b += Remove-Files -Pasta "$env:LOCALAPPDATA\Downloaded Installations" -DiasAntigos 90
     $total += $b; Write-Ok "Instaladores   : $(Format-Tamanho $b)"
 
-    if ($LimpezaAgressiva) {
-        # Prefetch fora do modo agressivo de proposito: apagar libera ~10 MB
-        # e PIORA o boot nos proximos 3-5 inicios ate o Windows reconstruir.
-        Write-Etapa 'Prefetch (modo agressivo)...'
-        $b = Remove-Files -Pasta "$env:SystemRoot\Prefetch" -Filtro '*.pf'
-        $total += $b; Write-Ok "Prefetch       : $(Format-Tamanho $b)"
+    # Prefetch limpo junto com os temporarios, por decisao do operador.
+    # Efeito conhecido: os proximos 3-5 boots ficam mais lentos ate o Windows
+    # reconstruir os arquivos .pf. Nao afeta dados, senhas nem programas.
+    Write-Etapa 'Prefetch...'
+    $b = Remove-Files -Pasta "$env:SystemRoot\Prefetch" -Filtro '*.pf'
+    $total += $b; Write-Ok "Prefetch       : $(Format-Tamanho $b)"
+    if ($b -gt 0) {
         Write-Aviso 'Os proximos 3-5 boots podem ficar mais lentos (cache sendo refeito).'
     }
 
@@ -4034,6 +4035,71 @@ if ($Ferramenta) {
                     Write-Info  'Abra pelo menu Iniciar. Me diga o nome exato do programa que eu incluo na busca.'
                 }
             }
+            'memoriavirtual' {
+                Write-Etapa 'Memoria virtual (arquivo de paginacao)'
+
+                # Situacao atual antes de abrir a tela: evita mexer as cegas.
+                try {
+                    $cs     = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+                    $ramGB  = [math]::Round($cs.TotalPhysicalMemory / 1GB, 1)
+                    Write-Info ("Memoria RAM instalada : $ramGB GB")
+                    if ($cs.AutomaticManagedPagefile) {
+                        Write-Info 'Arquivo de paginacao  : GERENCIADO PELO WINDOWS (automatico)'
+                    } else {
+                        Write-Info 'Arquivo de paginacao  : TAMANHO PERSONALIZADO (definido a mao)'
+                        foreach ($ps in @(Get-CimInstance Win32_PageFileSetting -ErrorAction SilentlyContinue)) {
+                            $ini = if ($ps.InitialSize) { "$($ps.InitialSize) MB" } else { 'sem limite' }
+                            $max = if ($ps.MaximumSize) { "$($ps.MaximumSize) MB" } else { 'sem limite' }
+                            Write-Info ("   $($ps.Name)  inicial: $ini   maximo: $max")
+                        }
+                    }
+                } catch { Write-Aviso "Nao foi possivel ler a configuracao atual: $($_.Exception.Message)" }
+
+                try {
+                    foreach ($pu in @(Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue)) {
+                        $tam  = [math]::Round($pu.AllocatedBaseSize / 1024, 2)
+                        $uso  = [math]::Round($pu.CurrentUsage      / 1024, 2)
+                        $pico = [math]::Round($pu.PeakUsage         / 1024, 2)
+                        Write-Info ("   $($pu.Name)  tamanho: $tam GB   em uso: $uso GB   pico: $pico GB")
+                        # Pico encostando no tamanho = RAM insuficiente, nao pagefile pequeno.
+                        if ($pu.AllocatedBaseSize -gt 0 -and ($pu.PeakUsage / $pu.AllocatedBaseSize) -gt 0.9) {
+                            Add-Alerta 'Pico de uso do arquivo de paginacao acima de 90% - avaliar aumento de RAM.'
+                        }
+                    }
+                } catch { }
+
+                # Espaco livre no disco do sistema: pagefile grande precisa caber.
+                try {
+                    $sys = Get-Volume -DriveLetter ($env:SystemDrive.Substring(0,1)) -ErrorAction SilentlyContinue
+                    if ($sys) { Write-Info ("Livre em $env:SystemDrive        : " + (Format-Tamanho ([long]$sys.SizeRemaining))) }
+                } catch { }
+
+                Write-Host ''
+                $abriu = $false
+                try { Start-Process 'SystemPropertiesPerformance.exe' -ErrorAction Stop; $abriu = $true } catch { }
+                if (-not $abriu) {
+                    # Plano B: Propriedades do Sistema na aba Avancado
+                    try { Start-Process 'control.exe' -ArgumentList 'sysdm.cpl,,3' -ErrorAction Stop; $abriu = $true } catch { }
+                }
+
+                if ($abriu) {
+                    Write-Ok 'Opcoes de Desempenho abertas.'
+                    Write-Info 'Na janela que abriu, siga:'
+                    Write-Info '   1. aba "Avancado"'
+                    Write-Info '   2. secao "Memoria virtual" > botao "Alterar..."'
+                    Write-Info '   3. desmarque "Gerenciar automaticamente..." para definir a mao'
+                    Write-Info '   4. depois de aplicar, o Windows pede para REINICIAR'
+                } else {
+                    Write-Aviso 'Nao foi possivel abrir a tela.'
+                    Write-Info  'Abra a mao: Windows + R > SystemPropertiesPerformance'
+                    Write-Info  '(ou sysdm.cpl > Avancado > Desempenho > Configuracoes > Avancado)'
+                }
+
+                Write-Host ''
+                Write-Info 'Referencia: o padrao do Windows (automatico) atende a maioria dos casos.'
+                Write-Info 'So mexa com motivo: erro de memoria virtual baixa, disco cheio, ou'
+                Write-Info 'exigencia de sistema juridico especifico.'
+            }
             'abrirappdata'  {
                 Write-Etapa 'Abrindo a pasta %appdata% (Roaming) no Explorer...'
                 $roaming = $env:APPDATA
@@ -4066,10 +4132,11 @@ if ($Ferramenta) {
             }
             default         {
                 Write-Falha "Ferramenta desconhecida: $Ferramenta"
-                Write-Info 'Validas: diagnostico, protecaovirus, consoles, abrirappdata, temp, lixeira,'
-                Write-Info 'miniaturas, windowsupdate, navegadores, appcache, anydesk, winsxs, inicializacao,'
-                Write-Info 'appdata, efeitos, rede, horario, defender, spooler, explorer, chkdsk, appx,'
-                Write-Info 'gpupdate, ip, proxy, otimizar, sfc, smart, perfis, topprocessos, programas, desinstalar.'
+                Write-Info 'Validas: diagnostico, protecaovirus, consoles, abrirappdata, memoriavirtual,'
+                Write-Info 'temp, lixeira, miniaturas, windowsupdate, navegadores, appcache, anydesk,'
+                Write-Info 'winsxs, inicializacao, appdata, efeitos, rede, horario, defender, spooler,'
+                Write-Info 'explorer, chkdsk, appx, gpupdate, ip, proxy, otimizar, sfc, smart, perfis,'
+                Write-Info 'topprocessos, programas, desinstalar.'
             }
         }
     } catch { Write-Falha "Erro na ferramenta '$chave': $($_.Exception.Message)" }
@@ -4081,7 +4148,7 @@ if ($Ferramenta) {
     }
     Write-Host ''
     # Ferramentas somente-leitura nao deixam log salvo.
-    if ($chave -notin @('diagnostico', 'protecaovirus', 'consoles', 'abrirappdata')) {
+    if ($chave -notin @('diagnostico', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual')) {
         Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
     }
     Write-Host ('=' * 68) -ForegroundColor Green
@@ -4089,7 +4156,7 @@ if ($Ferramenta) {
     # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
     if ($chave -eq 'diagnostico') { Publicar-RelatorioTemp -RemoverPastaLog }
     # protecaovirus/consoles: so abriram telas; nao deixam pasta de log.
-    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata')) {
+    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual')) {
         Remove-Item -LiteralPath (Join-Path $script:pastaExec 'manutencao.log') -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 200
         if ($script:pastaExec -and (Test-Path -LiteralPath $script:pastaExec)) {
