@@ -977,6 +977,38 @@ function Get-ProgramasInstalados {
         Sort-Object Programa -Unique
 }
 
+function Get-ProgramasDesinstalaveis {
+    <#
+      Lista os programas do jeito que aparecem em "Programas e Recursos" do
+      Painel de Controle (appwiz.cpl): exclui componentes de sistema,
+      atualizacoes/hotfixes/KBs e entradas sem desinstalador. Traz tambem o
+      comando de desinstalacao para poder remover.
+    #>
+    $chaves = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    Get-ItemProperty $chaves -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.DisplayName -and
+            -not $_.SystemComponent -and
+            -not $_.ParentKeyName -and
+            -not $_.ParentDisplayName -and
+            ($_.ReleaseType -notin @('Security Update', 'Update Rollup', 'Hotfix', 'Update')) -and
+            ($_.UninstallString -or $_.WindowsInstaller) -and
+            ($_.DisplayName -notmatch '^KB\d{6,}')
+        } |
+        Select-Object @{n='Nome'; e={$_.DisplayName.Trim()}},
+                      @{n='Versao'; e={$_.DisplayVersion}},
+                      @{n='Fabricante'; e={$_.Publisher}},
+                      @{n='Desinstalar'; e={$_.UninstallString}},
+                      @{n='QuietUninstall'; e={$_.QuietUninstallString}},
+                      @{n='MSI'; e={[bool]$_.WindowsInstaller}},
+                      @{n='Codigo'; e={$_.PSChildName}} |
+        Sort-Object Nome
+}
+
 function Show-DiagnosticoCompleto {
     <# Diagnostico completo, SOMENTE LEITURA (nao altera nada). #>
     Write-Titulo 'DIAGNOSTICO COMPLETO DO PC'
@@ -3827,6 +3859,42 @@ if ($Ferramenta) {
             'perfis'        { Get-PerfisAntigos -DiasSemUso 180 -Medir | Format-Table -AutoSize | Out-Host }
             'topprocessos'  { Get-TopProcessos -Por Memoria -Top 12 | Format-Table -AutoSize | Out-Host }
             'programas'     { Get-ProgramasInstalados | Format-Table -AutoSize | Out-Host }
+            'desinstalar'   {
+                $progs = @(Get-ProgramasDesinstalaveis)
+                Write-Info ("{0} programas instalados (estilo Painel de Controle)." -f $progs.Count)
+                if ($progs.Count -eq 0) { Write-Aviso 'Nenhum programa listavel.' }
+                elseif ($SemInteracao) {
+                    $progs | Select-Object Nome, Versao, Fabricante | Format-Table -AutoSize | Out-Host
+                } else {
+                    $termo = (Read-Host '  Filtrar por nome (Enter = listar todos)').Trim()
+                    if ($termo) { $progs = @($progs | Where-Object { $_.Nome -match [regex]::Escape($termo) }) }
+                    if ($progs.Count -eq 0) { Write-Aviso 'Nada com esse nome.' }
+                    else {
+                        Write-Host ''
+                        for ($i = 0; $i -lt $progs.Count; $i++) {
+                            Write-Host ('   {0,3}) {1}  {2}' -f ($i + 1), $progs[$i].Nome, $progs[$i].Versao) -ForegroundColor White
+                        }
+                        Write-Host ''
+                        $sel = (Read-Host '  Numero do programa para DESINSTALAR (Enter cancela)').Trim()
+                        if ($sel -match '^\d+$' -and [int]$sel -ge 1 -and [int]$sel -le $progs.Count) {
+                            $p = $progs[[int]$sel - 1]
+                            Write-Aviso ("Vai desinstalar: {0} {1}" -f $p.Nome, $p.Versao)
+                            $c = (Read-Host '  Confirmar? (S/N)').Trim()
+                            if ($c -match '^[SsYy]') {
+                                $cmd = if ($p.QuietUninstall) { $p.QuietUninstall } else { $p.Desinstalar }
+                                if ($p.MSI -or $cmd -match 'msiexec') {
+                                    $cod = if ($p.Codigo -match '^\{.*\}$') { $p.Codigo } else { [regex]::Match($cmd, '\{[0-9A-Fa-f\-]+\}').Value }
+                                    if ($cod) { Start-Process 'msiexec.exe' -ArgumentList "/x $cod" -ErrorAction SilentlyContinue }
+                                    else { Start-Process 'cmd.exe' -ArgumentList '/c', $cmd -ErrorAction SilentlyContinue }
+                                } else {
+                                    Start-Process 'cmd.exe' -ArgumentList '/c', $cmd -ErrorAction SilentlyContinue
+                                }
+                                Write-Ok ("Desinstalador de '{0}' iniciado. Siga as instrucoes na janela dele." -f $p.Nome)
+                            } else { Write-Aviso 'Cancelado.' }
+                        } else { Write-Aviso 'Cancelado (nenhum numero valido).' }
+                    }
+                }
+            }
             'diagnostico'   { Show-DiagnosticoCompleto }
             'consoles'      {
                 Write-Etapa 'Abrindo Dispositivos, Servicos, Desinstalar Programa e Token Administration...'
@@ -3860,7 +3928,7 @@ if ($Ferramenta) {
                 Write-Info 'Validas: diagnostico, protecaovirus, consoles, temp, lixeira, miniaturas,'
                 Write-Info 'windowsupdate, navegadores, appcache, anydesk, winsxs, inicializacao, appdata,'
                 Write-Info 'efeitos, rede, horario, defender, spooler, explorer, chkdsk, appx, gpupdate,'
-                Write-Info 'ip, proxy, otimizar, sfc, smart, perfis, topprocessos, programas.'
+                Write-Info 'ip, proxy, otimizar, sfc, smart, perfis, topprocessos, programas, desinstalar.'
             }
         }
     } catch { Write-Falha "Erro na ferramenta '$chave': $($_.Exception.Message)" }

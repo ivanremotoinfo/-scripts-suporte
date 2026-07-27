@@ -80,7 +80,7 @@ $menu = @(
     @{ N=40; Cat='CERTIFICADOS';Label='Configurar Ambiente PJe';       Tipo='script'; Alvo='ConfigurarPJe.ps1' }
 
     # --- PROGRAMAS ---
-    @{ N=41; Cat='PROGRAMAS';   Label='Desinstalar Programa';          Tipo='script'; Alvo='DesinstalarPrograma.ps1' }
+    @{ N=41; Cat='PROGRAMAS';   Label='Desinstalar Programa';          Tipo='v2';     Args=@{ Ferramenta='desinstalar' } }
     @{ N=42; Cat='PROGRAMAS';   Label='Remover Impressora';            Tipo='script'; Alvo='ReinstalarImpressora.ps1' }
 
     # --- ATALHOS ADMIN ---
