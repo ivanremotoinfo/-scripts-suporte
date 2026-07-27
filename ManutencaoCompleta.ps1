@@ -3771,12 +3771,25 @@ if ($Ferramenta) {
             'topprocessos'  { Get-TopProcessos -Por Memoria -Top 12 | Format-Table -AutoSize | Out-Host }
             'programas'     { Get-ProgramasInstalados | Format-Table -AutoSize | Out-Host }
             'diagnostico'   { Show-DiagnosticoCompleto }
+            'protecaovirus' {
+                Write-Etapa 'Abrindo Seguranca do Windows > Protecao contra virus e ameacas...'
+                $ab = $false
+                try { Start-Process 'windowsdefender://threatsettings' -ErrorAction Stop; $ab = $true } catch { }
+                if (-not $ab) { try { Start-Process 'windowsdefender:' -ErrorAction Stop; $ab = $true } catch { } }
+                if (-not $ab) { try { Start-Process 'windowsdefender://' -ErrorAction SilentlyContinue; $ab = $true } catch { } }
+                if ($ab) {
+                    Write-Ok 'Tela aberta. Ali voce gerencia as Configuracoes de protecao contra virus e ameacas'
+                    Write-Info '(inclusive a Protecao contra adulteracao, que precisa ser desligada a mao).'
+                } else {
+                    Write-Aviso 'Nao consegui abrir. Abra manualmente: Iniciar > Seguranca do Windows.'
+                }
+            }
             default         {
                 Write-Falha "Ferramenta desconhecida: $Ferramenta"
-                Write-Info 'Validas: diagnostico, temp, lixeira, miniaturas, windowsupdate, navegadores,'
-                Write-Info 'appcache, anydesk, winsxs, inicializacao, appdata, efeitos, rede, horario,'
-                Write-Info 'defender, spooler, explorer, chkdsk, appx, gpupdate, ip, proxy, otimizar,'
-                Write-Info 'sfc, smart, perfis, topprocessos, programas.'
+                Write-Info 'Validas: diagnostico, protecaovirus, temp, lixeira, miniaturas, windowsupdate,'
+                Write-Info 'navegadores, appcache, anydesk, winsxs, inicializacao, appdata, efeitos, rede,'
+                Write-Info 'horario, defender, spooler, explorer, chkdsk, appx, gpupdate, ip, proxy,'
+                Write-Info 'otimizar, sfc, smart, perfis, topprocessos, programas.'
             }
         }
     } catch { Write-Falha "Erro na ferramenta '$chave': $($_.Exception.Message)" }
@@ -3787,13 +3800,22 @@ if ($Ferramenta) {
         foreach ($a in $script:alertas) { Write-Host "     - $a" -ForegroundColor Red }
     }
     Write-Host ''
-    if ($chave -ne 'diagnostico') {
+    # Ferramentas somente-leitura nao deixam log salvo.
+    if ($chave -notin @('diagnostico', 'protecaovirus')) {
         Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
     }
     Write-Host ('=' * 68) -ForegroundColor Green
     try { Stop-Transcript | Out-Null } catch { }
     # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
     if ($chave -eq 'diagnostico') { Publicar-RelatorioTemp -RemoverPastaLog }
+    # protecaovirus: so abriu uma tela; nao deixa pasta de log.
+    elseif ($chave -eq 'protecaovirus') {
+        Remove-Item -LiteralPath (Join-Path $script:pastaExec 'manutencao.log') -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 200
+        if ($script:pastaExec -and (Test-Path -LiteralPath $script:pastaExec)) {
+            Remove-Item -LiteralPath $script:pastaExec -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
     exit 0
 }
 

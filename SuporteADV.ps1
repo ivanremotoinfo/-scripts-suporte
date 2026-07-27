@@ -51,36 +51,37 @@ $menu = @(
     @{ N=17; Cat='SEGURANCA';   Label='Restaurar Quarentena';          Tipo='v2';     Args=@{ RestaurarQuarentena=$true } }
     @{ N=18; Cat='SEGURANCA';   Label='Desativar Antivirus+Firewall';  Tipo='v2';     Args=@{ DesativarDefender=$true; DesativarFirewall=$true } }
     @{ N=19; Cat='SEGURANCA';   Label='Reativar Antivirus+Firewall';   Tipo='v2';     Args=@{ ReativarTudo=$true } }
+    @{ N=20; Cat='SEGURANCA';   Label='Abrir Protecao Virus/Ameacas';  Tipo='v2';     Args=@{ Ferramenta='protecaovirus' } }
 
     # --- REPAROS ---
-    @{ N=20; Cat='REPAROS';     Label='Reparar Sistema (SFC/DISM)';    Tipo='script'; Alvo='RepararSistema.ps1' }
-    @{ N=21; Cat='REPAROS';     Label='Corrigir Rede e Internet';      Tipo='script'; Alvo='CorrigirRede.ps1' }
-    @{ N=22; Cat='REPAROS';     Label='Corrigir Proxy e Certif. Rede'; Tipo='script'; Alvo='CorrigirProxy.ps1' }
-    @{ N=23; Cat='REPAROS';     Label='Reparar Fila de Impressao';     Tipo='v2';     Args=@{ Ferramenta='spooler' } }
-    @{ N=24; Cat='REPAROS';     Label='Reparar acesso a %appdata%';    Tipo='v2';     Args=@{ Ferramenta='appdata' } }
-    @{ N=25; Cat='REPAROS';     Label='Reiniciar Explorer';            Tipo='v2';     Args=@{ Ferramenta='explorer' } }
-    @{ N=26; Cat='REPAROS';     Label='Agendar Chkdsk (verif. disco)'; Tipo='v2';     Args=@{ Ferramenta='chkdsk' } }
-    @{ N=27; Cat='REPAROS';     Label='Reparar Apps da Store (AppX)';  Tipo='v2';     Args=@{ Ferramenta='appx' } }
-    @{ N=28; Cat='REPAROS';     Label='Sincronizar Horario (NTP)';     Tipo='v2';     Args=@{ Ferramenta='horario' } }
-    @{ N=29; Cat='REPAROS';     Label='Renovar IP (DHCP)';             Tipo='v2';     Args=@{ Ferramenta='ip' } }
-    @{ N=30; Cat='REPAROS';     Label='Atualizar GPO (dominio)';       Tipo='v2';     Args=@{ Ferramenta='gpupdate' } }
-    @{ N=31; Cat='REPAROS';     Label='Permissoes do PowerShell';      Tipo='script'; Alvo='CorrigirPermissoesPowerShell.ps1' }
-    @{ N=32; Cat='REPAROS';     Label='Reparar Audio e Microfone';     Tipo='script'; Alvo='RepararAudio.ps1' }
-    @{ N=33; Cat='REPAROS';     Label='Reparar Webcam';                Tipo='script'; Alvo='RepararWebcam.ps1' }
+    @{ N=21; Cat='REPAROS';     Label='Reparar Sistema (SFC/DISM)';    Tipo='script'; Alvo='RepararSistema.ps1' }
+    @{ N=22; Cat='REPAROS';     Label='Corrigir Rede e Internet';      Tipo='script'; Alvo='CorrigirRede.ps1' }
+    @{ N=23; Cat='REPAROS';     Label='Corrigir Proxy e Certif. Rede'; Tipo='script'; Alvo='CorrigirProxy.ps1' }
+    @{ N=24; Cat='REPAROS';     Label='Reparar Fila de Impressao';     Tipo='v2';     Args=@{ Ferramenta='spooler' } }
+    @{ N=25; Cat='REPAROS';     Label='Reparar acesso a %appdata%';    Tipo='v2';     Args=@{ Ferramenta='appdata' } }
+    @{ N=26; Cat='REPAROS';     Label='Reiniciar Explorer';            Tipo='v2';     Args=@{ Ferramenta='explorer' } }
+    @{ N=27; Cat='REPAROS';     Label='Agendar Chkdsk (verif. disco)'; Tipo='v2';     Args=@{ Ferramenta='chkdsk' } }
+    @{ N=28; Cat='REPAROS';     Label='Reparar Apps da Store (AppX)';  Tipo='v2';     Args=@{ Ferramenta='appx' } }
+    @{ N=29; Cat='REPAROS';     Label='Sincronizar Horario (NTP)';     Tipo='v2';     Args=@{ Ferramenta='horario' } }
+    @{ N=30; Cat='REPAROS';     Label='Renovar IP (DHCP)';             Tipo='v2';     Args=@{ Ferramenta='ip' } }
+    @{ N=31; Cat='REPAROS';     Label='Atualizar GPO (dominio)';       Tipo='v2';     Args=@{ Ferramenta='gpupdate' } }
+    @{ N=32; Cat='REPAROS';     Label='Permissoes do PowerShell';      Tipo='script'; Alvo='CorrigirPermissoesPowerShell.ps1' }
+    @{ N=33; Cat='REPAROS';     Label='Reparar Audio e Microfone';     Tipo='script'; Alvo='RepararAudio.ps1' }
+    @{ N=34; Cat='REPAROS';     Label='Reparar Webcam';                Tipo='script'; Alvo='RepararWebcam.ps1' }
 
     # --- OTIMIZACAO ---
-    @{ N=34; Cat='OTIMIZACAO';  Label='Otimizar Disco (SSD/HDD)';      Tipo='v2';     Args=@{ Ferramenta='otimizar' } }
-    @{ N=35; Cat='OTIMIZACAO';  Label='Gerenciar Inicializacao';       Tipo='v2';     Args=@{ Ferramenta='inicializacao' } }
-    @{ N=36; Cat='OTIMIZACAO';  Label='Efeitos Visuais + Energia';     Tipo='v2';     Args=@{ Ferramenta='efeitos' } }
+    @{ N=35; Cat='OTIMIZACAO';  Label='Otimizar Disco (SSD/HDD)';      Tipo='v2';     Args=@{ Ferramenta='otimizar' } }
+    @{ N=36; Cat='OTIMIZACAO';  Label='Gerenciar Inicializacao';       Tipo='v2';     Args=@{ Ferramenta='inicializacao' } }
+    @{ N=37; Cat='OTIMIZACAO';  Label='Efeitos Visuais + Energia';     Tipo='v2';     Args=@{ Ferramenta='efeitos' } }
 
     # --- CERTIFICADOS E JURIDICO ---
-    @{ N=37; Cat='CERTIFICADOS';Label='Limpar Certificados Vencidos';  Tipo='script'; Alvo='LimparCertificadosVencidos.ps1' }
-    @{ N=38; Cat='CERTIFICADOS';Label='Configurar Java (Juridico)';    Tipo='script'; Alvo='ConfigurarJava.ps1' }
-    @{ N=39; Cat='CERTIFICADOS';Label='Configurar Ambiente PJe';       Tipo='script'; Alvo='ConfigurarPJe.ps1' }
+    @{ N=38; Cat='CERTIFICADOS';Label='Limpar Certificados Vencidos';  Tipo='script'; Alvo='LimparCertificadosVencidos.ps1' }
+    @{ N=39; Cat='CERTIFICADOS';Label='Configurar Java (Juridico)';    Tipo='script'; Alvo='ConfigurarJava.ps1' }
+    @{ N=40; Cat='CERTIFICADOS';Label='Configurar Ambiente PJe';       Tipo='script'; Alvo='ConfigurarPJe.ps1' }
 
     # --- PROGRAMAS ---
-    @{ N=40; Cat='PROGRAMAS';   Label='Desinstalar Programa';          Tipo='script'; Alvo='DesinstalarPrograma.ps1' }
-    @{ N=41; Cat='PROGRAMAS';   Label='Remover Impressora';            Tipo='script'; Alvo='ReinstalarImpressora.ps1' }
+    @{ N=41; Cat='PROGRAMAS';   Label='Desinstalar Programa';          Tipo='script'; Alvo='DesinstalarPrograma.ps1' }
+    @{ N=42; Cat='PROGRAMAS';   Label='Remover Impressora';            Tipo='script'; Alvo='ReinstalarImpressora.ps1' }
 )
 # Converte para objetos (hashtable nao ordena/mede por chave nos cmdlets)
 $menu = $menu | ForEach-Object { [pscustomobject]$_ }
