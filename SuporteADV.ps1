@@ -159,9 +159,14 @@ function Get-ScriptTemp {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $conteudo = (Invoke-RestMethod -Uri $url -UseBasicParsing -TimeoutSec 90 -ErrorAction Stop).ToString()
     if ($conteudo.Length -lt 20) { throw 'Arquivo vazio ou nao encontrado no repositorio.' }
+    # O GitHub raw devolve o BOM como caractere (U+FEFF). Se regravassemos com
+    # BOM, o arquivo ganharia BOM duplo e o param()/CmdletBinding deixaria de
+    # ser a 1a instrucao -> erro de parse. Removemos o BOM e gravamos sem BOM.
+    $conteudo = $conteudo.TrimStart([char]0xFEFF)
+    $encSemBom = New-Object System.Text.UTF8Encoding($false)
 
     $tmp = [System.IO.Path]::GetTempPath() + 'sadv_' + [System.Guid]::NewGuid().ToString('N') + '.ps1'
-    [System.IO.File]::WriteAllText($tmp, $conteudo, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($tmp, $conteudo, $encSemBom)
     Unblock-File $tmp -ErrorAction SilentlyContinue
     if ($Cachear) { $script:v2Tmp = $tmp }
     return $tmp
