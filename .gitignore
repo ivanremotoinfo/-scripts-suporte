@@ -12,6 +12,7 @@
 !SuporteADV.ps1
 !ManutencaoCompleta.ps1
 !README.md
+!MANUAL.txt
 !.gitignore
 
 # 4) reforco: nunca versionar segredo, nem que alguem libere acima

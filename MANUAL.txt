@@ -1,0 +1,698 @@
+﻿================================================================================
+                    S U P O R T E A D V  -  M A N U A L
+              Ferramentas de suporte tecnico - suporte.adv.br
+                        Versao 2026.07.27  |  48 opcoes
+================================================================================
+
+
+SUMARIO
+-------
+  1. O que e este sistema
+  2. Como executar
+  3. Regras que valem para tudo
+  4. Guia rapido: qual opcao usar para cada problema
+  5. As 48 opcoes, uma a uma
+       DIAGNOSTICO ................ 1 a 5
+       MANUTENCAO E LIMPEZA ....... 6 a 16
+       SEGURANCA E ANTIVIRUS ...... 17 a 21
+       REPAROS .................... 22 a 37
+       OTIMIZACAO ................. 38 a 41
+       CERTIFICADOS E JURIDICO .... 42 a 44
+       PROGRAMAS .................. 45 e 46
+       ATALHOS ADMINISTRATIVOS .... 47 e 48
+  6. A Manutencao Completa em detalhe (16 etapas)
+  7. Uso por linha de comando
+  8. Onde ficam os logs e como reverter
+  9. Avisos importantes
+
+
+================================================================================
+1. O QUE E ESTE SISTEMA
+================================================================================
+
+Conjunto de ferramentas em PowerShell para atendimento tecnico em escritorios
+de advocacia. Reune num menu unico as tarefas do dia a dia: diagnostico,
+limpeza, reparos do Windows, antivirus e o ambiente juridico (certificado
+digital, token, Java, PJe).
+
+Sao apenas dois arquivos:
+
+  SuporteADV.ps1            o menu, com as 48 opcoes
+  ManutencaoCompleta.ps1    o motor, que faz todo o trabalho
+
+O menu baixa o motor uma vez por sessao e o guarda em pasta temporaria. Toda
+opcao do menu e uma chamada ao motor com um parametro diferente.
+
+
+================================================================================
+2. COMO EXECUTAR
+================================================================================
+
+Na maquina do cliente, abra o PowerShell COMO ADMINISTRADOR e rode:
+
+  irm https://raw.githubusercontent.com/ivanremotoinfo/-scripts-suporte/main/SuporteADV.ps1 | iex
+
+O menu abre. Digite o numero da opcao e ENTER. Digite 0 para sair.
+
+Se abrir sem ser administrador, o menu avisa em vermelho. Varias opcoes nao
+funcionam sem privilegio elevado.
+
+O menu se adapta a largura da janela: em janela estreita passa a mostrar uma
+coluna so, em vez de duas.
+
+
+================================================================================
+3. REGRAS QUE VALEM PARA TUDO
+================================================================================
+
+SENHAS E SESSOES DE NAVEGADOR NUNCA SAO APAGADAS
+  Nenhuma limpeza toca em senha salva, cookie, sessao logada, favorito ou
+  historico. A limpeza de navegador so entra numa lista fechada de pastas de
+  cache, e ainda passa por duas verificacoes que barram os arquivos de
+  credencial (Login Data, Cookies, logins.json, key4.db, DPAPI e afins).
+  No fim da manutencao completa o sistema confere as credenciais contra uma
+  foto tirada no inicio e avisa se algo sumiu.
+
+NADA DESTRUTIVO SEM CONFIRMACAO
+  Toda acao que remove algo importante pergunta S/N antes, com a consequencia
+  escrita na tela. Voce sempre le o que vai acontecer antes de confirmar.
+
+O QUE NAO DA PARA FAZER POR SCRIPT, ABRE A TELA DO WINDOWS
+  Quando o Windows nao permite a alteracao por script (caso da Protecao contra
+  Adulteracao do Defender), a ferramenta abre a tela certa e mostra o passo a
+  passo para fazer a mao.
+
+RELATORIOS NAO FICAM SALVOS
+  Diagnosticos abrem no Bloco de Notas a partir de arquivo temporario. Se
+  quiser guardar, use Arquivo > Salvar Como. Ja os backups necessarios para
+  desfazer alteracoes (registro, credenciais) ficam salvos na pasta de log.
+
+MODO SIMULACAO
+  A opcao 7 roda a manutencao inteira sem alterar nada: mostra o que seria
+  feito e quanto espaco seria liberado. Boa para rodar na frente do cliente
+  antes de autorizar.
+
+
+================================================================================
+4. GUIA RAPIDO: QUAL OPCAO USAR PARA CADA PROBLEMA
+================================================================================
+
+  O cliente diz...                              Use a opcao
+  --------------------------------------------  ------------------------------
+  "O PC esta lento"                             1 (diagnostico), depois 6
+  "Esta sem espaco em disco"                    7 (simular) para ver o quanto,
+                                                depois 6 ou 8
+  "Falta VCRUNTIME140.dll" / "falta uma DLL"    23
+  "Nao abre o programa, erro de side-by-side"   23
+  "Deu tela azul"                               5 (ANTES de rodar a 6)
+  "Windows dando erro estranho, travando"       22
+  "Rodei o SFC e ele nao conseguiu reparar"     24
+  "Sem internet"                                25
+  "Nao abre site do tribunal / erro de          26
+   certificado"
+  "Nao imprime"                                 27, depois 46 se persistir
+  "Nao consigo abrir a pasta %appdata%"         28 (reparar) ou 48 (so abrir)
+  "Icones sumiram / area de trabalho travou"    29
+  "PC desligou na tomada varias vezes"          30 (chkdsk) e 2 (SMART)
+  "Apps da Microsoft Store nao abrem"           31
+  "Certificado/assinatura recusada"             32 (horario errado quebra
+                                                assinatura digital), 4, 26
+  "Sem microfone na audiencia" (URGENTE)        36
+  "Sem camera na audiencia" (URGENTE)           37
+  "PJe nao assina / Java nao carrega"           44, depois 43
+  "Token nao aparece"                           47, depois 4
+  "Suspeita de virus"                           17
+  "Preciso instalar programa e o antivirus      19 (e 20 depois, sempre)
+   bloqueia"
+  "Erro de memoria virtual baixa"               41
+  "Nao aparece miniatura das fotos/documentos"  40
+  "PC demora para ligar"                        39
+
+
+================================================================================
+5. AS 48 OPCOES, UMA A UMA
+================================================================================
+
+--------------------------------------------------------------------------------
+DIAGNOSTICO
+--------------------------------------------------------------------------------
+
+[1] DIAGNOSTICO COMPLETO DO PC
+    Levantamento geral da maquina: modelo, processador, memoria, discos e
+    espaco livre, saude SMART, versao do Windows, tempo ligado, rede, antivirus,
+    programas na inicializacao e maiores consumidores de memoria.
+    NAO ALTERA NADA. Abre o relatorio no Bloco de Notas (arquivo temporario).
+    Use no inicio de todo atendimento, para saber com o que esta lidando.
+
+[2] SAUDE DOS DISCOS (SMART)
+    Le o status SMART de cada disco e avisa se algum esta prevendo falha.
+    NAO ALTERA NADA.
+    Use quando houver travamento, lentidao subita ou suspeita de disco ruim.
+    Disco com alerta SMART: faca backup do cliente ANTES de qualquer reparo.
+
+[3] MAIORES CONSUMIDORES DE RAM
+    Lista os processos que mais consomem memoria no momento.
+    NAO ALTERA NADA.
+    Use quando o cliente reclama de lentidao para descobrir o culpado.
+
+[4] LISTAR CERTIFICADOS DIGITAIS
+    Lista os certificados das lojas Pessoal do usuario e da maquina, com nome,
+    CPF/CNPJ formatado, emissor, validade e - o mais importante - se o
+    certificado TEM CHAVE PRIVADA (so com ela o certificado assina documento).
+    Avisa quais estao vencidos ou vencem nos proximos 30 dias.
+    NAO ALTERA NADA.
+    Certificado A3 (token) so aparece com o token espetado e o middleware
+    instalado. Nao aparecer aqui nao significa que o certificado nao exista.
+
+[5] ANALISAR TELA AZUL (BSOD)
+    Analisa as telas azuis dos ultimos 30 dias: le os arquivos de dump, o log
+    de eventos, identifica o codigo do erro, explica em portugues o que ele
+    significa e aponta os drivers suspeitos. Verifica tambem SMART e se houve
+    teste de memoria recente.
+    NAO ALTERA NADA. Abre o relatorio no Bloco de Notas.
+    IMPORTANTE: rode esta opcao ANTES da manutencao completa. A limpeza apaga
+    dumps com mais de 30 dias, e o dump e a unica evidencia da tela azul.
+
+--------------------------------------------------------------------------------
+MANUTENCAO E LIMPEZA
+--------------------------------------------------------------------------------
+
+[6] MANUTENCAO COMPLETA (TUDO)
+    A rotina completa, com 16 etapas. Detalhada na secao 6 deste manual.
+    Faz ponto de restauracao e backup do registro antes de mexer em qualquer
+    coisa. Ao final abre o relatorio e confere se nenhuma senha sumiu.
+
+[7] SIMULAR (NAO ALTERA NADA)
+    Roda a manutencao completa em modo simulacao: percorre todas as etapas,
+    calcula quanto espaco seria liberado, lista o que seria desativado - e nao
+    altera absolutamente nada.
+    Use antes da opcao 6 para mostrar ao cliente o que vai acontecer.
+
+[8] LIMPAR TEMPORARIOS
+    Apaga: pasta TEMP do usuario, TEMP do sistema, relatorios de erro do
+    Windows (WER), dumps de aplicativos, Prefetch, logs do CBS com mais de 7
+    dias e caches de instaladores com mais de 90 dias.
+    PRESERVA os minidumps de tela azul dos ultimos 30 dias, para a opcao 5
+    continuar funcionando. O MEMORY.DMP (dump completo, varios GB) e apagado.
+    Efeito conhecido do Prefetch: os 3 a 5 boots seguintes ficam um pouco mais
+    lentos ate o Windows reconstruir o cache.
+
+[9] ESVAZIAR LIXEIRA
+    Esvazia a lixeira de todos os discos fixos e mostra quanto liberou.
+    Confirme com o cliente antes: pode haver algo que ele pretenda recuperar.
+
+[10] CACHE DOS NAVEGADORES
+    Limpa somente o cache de Chrome, Edge, Brave, Vivaldi, Opera e Firefox.
+    Senhas, cookies, sessoes logadas, favoritos e historico sao preservados.
+    Se o navegador estiver ABERTO, ele e pulado (evita corromper o perfil):
+    feche o navegador e rode de novo.
+
+[11] CACHE DE APLICATIVOS
+    Limpa cache de Java, PjeOffice, Teams e Office.
+    Util quando o PJe ou o Java comecam a se comportar de forma estranha.
+
+[12] CACHE DO WINDOWS UPDATE
+    Para os servicos de atualizacao, limpa a pasta SoftwareDistribution e
+    reinicia os servicos.
+    Use quando o Windows Update fica travado ou dando erro.
+
+[13] MINIATURAS DO EXPLORER
+    Apaga o cache de miniaturas e icones. O Windows refaz sozinho.
+    Use quando a miniatura mostra a imagem errada ou os icones ficam brancos.
+    Isto NAO desliga as miniaturas - so limpa o cache delas.
+
+[14] LIMPEZA PESADA (WINSXS)
+    Limpa componentes antigos do Windows (WinSxS) e roda a limpeza de disco.
+    Libera bastante espaco, mas demora e, depois dela, nao da mais para
+    desinstalar as atualizacoes ja aplicadas.
+    Use so quando o disco estiver realmente apertado.
+
+[15] APAGAR PASTA DO ANYDESK
+    Apaga a pasta INTEIRA do AnyDesk em %APPDATA% e %LOCALAPPDATA%.
+    ATENCAO: o ID da maquina no AnyDesk e a senha de acesso nao supervisionado
+    SAO PERDIDOS - sera gerado um ID novo. Se voce usa esse AnyDesk para
+    atender o cliente, vai precisar reconfigurar o acesso.
+    Pede confirmacao S/N. Se o AnyDesk estiver aberto, pergunta antes de
+    encerrar - e avisa que, se voce estiver atendendo por ele, a sessao cai.
+    Um backup da pasta e gravado na pasta de log antes de apagar.
+
+[16] VISUAL C++ REDISTRIBUIVEIS
+    Verifica quais redistribuiveis Visual C++ estao instalados (2005 ate
+    2015-2022, x86 e x64) e instala os que faltam.
+    Antes de executar cada instalador baixado, confere a ASSINATURA DIGITAL da
+    Microsoft - se nao conferir, aborta e descarta o arquivo.
+    Use quando um sistema juridico antigo se recusa a abrir.
+
+--------------------------------------------------------------------------------
+SEGURANCA E ANTIVIRUS
+--------------------------------------------------------------------------------
+
+[17] ESCANEAR VIRUS (CLAMAV + VIRUSTOTAL)
+    Varredura independente do antivirus instalado. Baixa o ClamAV, atualiza as
+    assinaturas, varre a maquina e envia os hashes suspeitos ao VirusTotal para
+    confirmacao com dezenas de motores.
+    Arquivos confirmados como ameaca vao para quarentena (nao sao apagados).
+    Use para segunda opiniao, quando o antivirus do cliente nao acusa nada mas
+    a maquina se comporta de forma suspeita.
+
+[18] RESTAURAR QUARENTENA
+    Devolve ao lugar original arquivos que a opcao 17 colocou em quarentena.
+    Use quando um falso positivo tirou do ar um sistema do cliente.
+
+[19] DESATIVAR ANTIVIRUS + FIREWALL
+    Desativa firewall, SmartScreen, protecao por reputacao, bloqueio de PUA e
+    acesso controlado a pastas. Pede confirmacao S/N.
+    LIMITE IMPORTANTE: se a Protecao contra Adulteracao (Tamper Protection)
+    estiver ligada - e por padrao esta -, o NUCLEO do Defender (protecao em
+    tempo real) NAO pode ser desligado por script. Nenhum programa consegue.
+    A opcao abre a tela do Windows com o passo a passo para voce desligar a
+    Tamper Protection a mao antes. Mesmo assim o Defender tende a religar
+    sozinho depois de algum tempo.
+    SEMPRE rode a opcao 20 ao terminar o servico.
+
+[20] REATIVAR ANTIVIRUS + FIREWALL
+    Religa tudo que a opcao 19 desativou.
+    Nao deixe a maquina do cliente desprotegida: rode sempre ao final.
+
+[21] ABRIR PROTECAO VIRUS/AMEACAS
+    Abre direto a tela de Protecao contra virus e ameacas do Windows, onde
+    ficam as configuracoes e a Protecao contra Adulteracao.
+    NAO ALTERA NADA, so abre a tela.
+
+--------------------------------------------------------------------------------
+REPAROS
+--------------------------------------------------------------------------------
+
+[22] REPARAR SISTEMA (SFC/DISM)
+    Repara arquivos do proprio Windows. Roda o DISM em escada - CheckHealth,
+    depois ScanHealth so se precisar, depois RestoreHealth so se confirmar
+    corrupcao - e por fim o SFC. Numa maquina sadia isso economiza os 10 a 30
+    minutos do RestoreHealth.
+    Ao final diz o resultado real de cada etapa, lendo o CBS.log.
+    Pode levar de 5 a 40 minutos. Nao feche a janela.
+    Use quando o Windows apresenta erros estranhos, servicos que nao iniciam,
+    telas azuis recorrentes.
+
+[23] FALTA DLL (ACHAR O PACOTE)
+    Para o erro "nao foi possivel iniciar o programa porque falta X.dll".
+    IMPORTANTE: esse erro quase nunca e arquivo do Windows corrompido. A DLL
+    vem de um REDISTRIBUIVEL que nao foi instalado - por isso rodar SFC/DISM
+    (opcao 22) nao resolve.
+    A ferramenta oferece tres caminhos:
+      1) procurar sozinha no log de eventos dos ultimos 60 dias e listar os
+         arquivos citados em falhas, ordenados por numero de ocorrencias;
+      2) voce digita o nome que apareceu na mensagem de erro;
+      3) so listar os redistribuiveis ja instalados na maquina.
+    Depois ela:
+      - diz de qual pacote a DLL vem (Visual C++ por versao, Universal C
+        Runtime, DirectX antigo, Visual Basic 6, controles OCX, .NET, Java);
+      - verifica se o arquivo existe em System32 e SysWOW64;
+      - avisa quando so uma das arquiteturas esta presente. Essa e a causa que
+        mais engana: se a DLL so existe em System32 (64 bits) e o programa e de
+        32 bits, o erro continua mesmo com o arquivo "presente";
+      - checa se o antivirus colocou o arquivo em quarentena;
+      - oferece instalar o pacote na hora.
+    NUNCA baixe DLL avulsa de site de download de DLL: e fonte comum de
+    malware. Instale sempre o pacote oficial.
+
+[24] REPARO AVANCADO (ISO/CBS)
+    Para quando a opcao 22 encontrou corrupcao e NAO conseguiu reparar.
+      - Le o CBS.log e mostra EXATAMENTE quais arquivos falharam no reparo
+        (antes voce so sabia que "algo" falhou);
+      - Repara usando uma ISO ou DVD do Windows como fonte. Detecta midia ja
+        montada, monta o arquivo .iso sozinha se voce informar o caminho, e usa
+        /LimitAccess para nao depender do Windows Update;
+      - Repara um arquivo especifico (sfc /scanfile);
+      - Reconstroi o repositorio de componentes (StartComponentCleanup
+        /ResetBase).
+    A edicao e a versao da ISO precisam bater com as da maquina, senao o DISM
+    recusa a fonte. Confira com o comando winver.
+
+[25] CORRIGIR REDE E INTERNET
+    Dois niveis, voce escolhe:
+      BASICO   - limpa cache DNS e ARP e renova o IP. NAO derruba a conexao.
+                 Resolve a maioria dos casos.
+      PROFUNDO - o basico mais reset de TCP/IP e do Winsock. DERRUBA A CONEXAO
+                 e exige reiniciar o computador.
+    Antes de tudo, mostra a configuracao de rede atual e avisa se a maquina usa
+    IP FIXO - o modo profundo apaga essa configuracao e devolve o adaptador
+    para DHCP, entao anote os dados antes.
+    Detecta se ha AnyDesk, TeamViewer ou sessao RDP em uso e avisa em vermelho:
+    NO MODO PROFUNDO VOCE PERDE O ACESSO REMOTO NA HORA.
+
+[26] CORRIGIR PROXY E CERTIFICADOS DE REDE
+    Feita para o erro de acesso a site de tribunal.
+      - Mostra e, se voce autorizar, limpa as configuracoes de proxy (usuario,
+        sistema, WinHTTP e proxy por conexao do IE/Edge);
+      - Habilita os protocolos TLS. TLS 1.0 e 1.1 sao habilitados apenas do
+        lado cliente, que e o que a maquina usa para acessar sistemas antigos;
+      - Atualiza os certificados raiz do Windows pelo Windows Update;
+      - Limpa o CryptnetUrlCache (cache de CRL/OCSP), causa comum de erro de
+        certificado que "some sozinho" depois;
+      - Lista certificados vencidos nas lojas;
+      - Testa o acesso a PJe, PROJUDI e eProc e diz se o problema e proxy, TLS
+        ou certificado.
+    As alteracoes de TLS so valem por completo apos reiniciar.
+
+[27] REPARAR FILA DE IMPRESSAO
+    Para o servico de spool, limpa os trabalhos travados e religa o servico.
+    Primeira coisa a tentar quando "nao imprime" ou o documento fica preso na
+    fila.
+
+[28] REPARAR ACESSO A %APPDATA%
+    Corrige o caso em que digitar %appdata% no Executar nao abre a pasta.
+    Repara as variaveis de ambiente e as permissoes, e cria atalhos.
+
+[29] REINICIAR EXPLORER
+    Reinicia o Windows Explorer. Recria barra de tarefas, icones e miniaturas
+    na hora, sem precisar reiniciar a maquina.
+    Use quando a area de trabalho trava, some a barra ou os icones ficam
+    brancos.
+
+[30] AGENDAR CHKDSK (VERIFICACAO DE DISCO)
+    Agenda a verificacao e correcao do disco C: para o proximo boot.
+    Use apos desligamento abrupto, ou quando ha erro de leitura/gravacao.
+    Avise o cliente: o proximo boot vai demorar bem mais.
+
+[31] REPARAR APPS DA STORE (APPX)
+    Reregistra os aplicativos da Microsoft Store.
+    Use quando Calculadora, Fotos, Configuracoes ou o Menu Iniciar param de
+    abrir.
+
+[32] SINCRONIZAR HORARIO (NTP)
+    Acerta o relogio pelo servidor de horario e corrige o servico de tempo.
+    MAIS IMPORTANTE DO QUE PARECE: relogio errado quebra assinatura digital,
+    HTTPS e login em sistema de tribunal. Se o cliente reclama de certificado
+    recusado, confira o horario antes de qualquer outra coisa.
+
+[33] RENOVAR IP (DHCP)
+    Libera e renova o endereco IP. Versao rapida, sem os resets da opcao 25.
+
+[34] ATUALIZAR GPO (DOMINIO)
+    Forca a aplicacao das politicas de grupo (gpupdate).
+    So faz sentido em maquina que esta num dominio.
+
+[35] PERMISSOES DO POWERSHELL
+    Resolve os bloqueios que impedem rodar script: ajusta a ExecutionPolicy em
+    todos os escopos para RemoteSigned, corrige o registro (64 e 32 bits),
+    desbloqueia arquivos .ps1 marcados como vindos da internet (Zone.Identifier)
+    e detecta bloqueio por GPO de dominio, avisando que so o administrador do
+    dominio pode liberar.
+    Usa RemoteSigned de proposito, e nao Unrestricted: libera o que e criado na
+    propria maquina e mantem a exigencia de assinatura no que vem da internet.
+
+[36] REPARAR AUDIO E MICROFONE
+    Diagnostico e reparo em 8 etapas: reabilita dispositivos desativados,
+    conserta e reinicia os servicos de audio, corrige as permissoes de
+    microfone (inclusive para programas Win32 e navegadores, que e o que
+    costuma faltar em audiencia por videoconferencia), limpa filtros de
+    registro invalidos e forca nova deteccao de hardware.
+    Para assim que o audio volta a funcionar - nao executa etapas a toa.
+
+[37] REPARAR WEBCAM
+    Mesma logica da opcao 36, para camera: reabilita dispositivos, reinstala
+    driver com problema, corrige permissoes de camera do sistema e do usuario
+    (inclusive para programas de desktop) e limpa filtros invalidos.
+    Use antes de audiencia por videoconferencia.
+
+--------------------------------------------------------------------------------
+OTIMIZACAO
+--------------------------------------------------------------------------------
+
+[38] OTIMIZAR DISCO (SSD/HDD)
+    Identifica o tipo de disco e aplica o tratamento certo: TRIM em SSD,
+    desfragmentacao em HD. Pergunta quais discos alem do C: devem entrar.
+    Nunca desfragmenta SSD (isso so gastaria a vida do disco).
+
+[39] GERENCIAR INICIALIZACAO
+    Lista os programas que sobem com o Windows, marca como MANTIDO os que sao
+    protegidos (antivirus, audio, agentes essenciais) e pede confirmacao S/N
+    antes de desativar os demais.
+    Use quando o PC demora para ligar.
+    Para reverter: Gerenciador de Tarefas > Inicializar, ou o RESTAURAR.cmd
+    gravado na pasta de log.
+
+[40] EFEITOS VISUAIS + ENERGIA
+    Desliga animacoes e efeitos que pesam, MANTENDO o ClearType (texto continua
+    legivel), e ativa o plano de energia de Alto Desempenho.
+    Tambem GARANTE AS MINIATURAS LIGADAS: forca a exibicao de miniaturas e
+    remove as politicas que as escondem - inclusive a que desliga miniaturas
+    apenas em PASTAS DE REDE, que passa despercebida em escritorio com servidor
+    de arquivos.
+    Algumas mudancas so aparecem apos logoff/logon.
+    Observacao: esta opcao muda a aparencia do Windows sem perguntar. Se o
+    cliente for sensivel a isso, avise antes.
+
+[41] MEMORIA VIRTUAL (PAGEFILE)
+    Mostra a memoria RAM instalada, como esta o arquivo de paginacao
+    (automatico ou tamanho fixo), quanto dele esta em uso, o pico historico e
+    o espaco livre em disco. Avisa quando o pico passa de 90% do tamanho - o
+    que indica falta de RAM, e nao pagefile pequeno.
+    Depois abre a tela de Opcoes de Desempenho com o passo a passo.
+    O padrao do Windows (gerenciado automaticamente) atende a maioria dos
+    casos. So mexa com motivo: erro de memoria virtual baixa, disco cheio ou
+    exigencia de um sistema especifico.
+
+--------------------------------------------------------------------------------
+CERTIFICADOS E JURIDICO
+--------------------------------------------------------------------------------
+
+[42] LIMPAR CERTIFICADOS VENCIDOS
+    Organiza a loja Pessoal do usuario, separando em tres categorias:
+      A) ICP-Brasil e ICP-Portugal validos - sempre MANTIDOS;
+      B) ICP vencidos - voce decide;
+      C) Desconhecidos - voce decide.
+    NADA e removido sem a sua confirmacao. Certificados com CHAVE PRIVADA (A1)
+    sao sinalizados em vermelho e exigem um S/N adicional, porque remover e
+    PERMANENTE se o cliente nao tiver o arquivo .pfx guardado.
+    Antes de qualquer remocao, exporta para a Area de Trabalho uma pasta com a
+    lista em CSV e um arquivo .cer de cada certificado. Atencao: o .cer guarda
+    apenas a parte publica - a chave privada NAO e recuperavel.
+
+[43] CONFIGURAR JAVA (JURIDICO)
+    Prepara o Java 8 para os sistemas juridicos: localiza a instalacao, faz
+    backup do deployment.properties, ajusta o nivel de seguranca, remove os
+    bloqueios (.locked) que travam o painel do Java, desativa o aviso de "Java
+    desatualizado" que costuma travar o usuario, cadastra as URLs de excecao
+    (Shodo, Shomei, PJe, PROJUDI dos estados, eProc) e limpa o cache do Java.
+
+[44] CONFIGURAR AMBIENTE PJE
+    Versao completa da anterior, aplicada a TODOS os perfis de usuario da
+    maquina. Alem do Java e das excecoes, verifica os servicos Shodo e Shomei
+    (necessarios para assinatura) e tenta inicia-los se estiverem parados, e
+    testa a conectividade com o PJe.
+    Use quando o PJe nao assina ou o applet nao carrega.
+
+--------------------------------------------------------------------------------
+PROGRAMAS
+--------------------------------------------------------------------------------
+
+[45] DESINSTALAR PROGRAMA
+    Lista os programas instalados igual ao Painel de Controle - sem o lixo de
+    componentes de sistema que aparece em outras listagens. Permite filtrar
+    por nome, selecionar pelo numero e desinstalar. As colunas se ajustam a
+    largura da janela para os nomes aparecerem inteiros.
+
+[46] REMOVER IMPRESSORA
+    Remocao completa de impressora e do driver: identifica os arquivos do
+    driver no registro, remove a impressora, remove o driver (varios metodos),
+    limpa a fila (perguntando antes, porque isso descarta documentos pendentes
+    de todas as impressoras), apaga arquivos residuais e limpa o registro.
+    Se o driver estiver em uso por outra impressora, ele e mantido.
+    Ao final mostra o nome exato da impressora e do driver, para voce baixar o
+    correto no site do fabricante.
+
+--------------------------------------------------------------------------------
+ATALHOS ADMINISTRATIVOS
+--------------------------------------------------------------------------------
+
+[47] DISPOSITIVOS, SERVICOS E TOKEN
+    Abre de uma vez: Gerenciador de Dispositivos, Servicos do Windows,
+    Desinstalar um Programa (Painel de Controle) e o administrador de token de
+    certificado (SafeNet, eToken, Gemalto e outros).
+    NAO ALTERA NADA, so abre as telas.
+    Se o app do token nao abrir, ele procura pelo atalho no Menu Iniciar. Se
+    ainda assim nao achar, informe o nome exato do programa para ser incluido.
+
+[48] ABRIR PASTA %APPDATA%
+    Abre a pasta Roaming do usuario no Explorer (shell:AppData) e informa o
+    caminho da pasta Local.
+    NAO ALTERA NADA.
+    Equivalente manual: tecla Windows + R, digitar shell:AppData.
+
+
+================================================================================
+6. A MANUTENCAO COMPLETA EM DETALHE (OPCAO 6)
+================================================================================
+
+Sao 16 etapas. Rodando pelo menu, 11 executam e 5 ficam de fora - estas ultimas
+so entram se voce chamar o motor por linha de comando com o parametro
+correspondente.
+
+ANTES DE COMECAR
+  Faz o diagnostico da maquina, mostra a previsao de quanto da para liberar em
+  C:, lista perfis de usuario sem uso ha mais de 180 dias (apenas lista, nao
+  remove), pergunta se deve otimizar outros discos alem do C: e tira uma foto
+  das credenciais salvas para conferir no final.
+
+ETAPAS QUE RODAM
+   1. Backup: ponto de restauracao, backup do registro e das credenciais.
+   2. Arquivos temporarios (ver opcao 8).
+   3. Lixeira de todos os discos.
+   4. Cache de miniaturas.
+   5. Cache do Windows Update.
+   6. Cache de navegadores - senhas e sessoes preservadas.
+   7. Cache de aplicativos: Java, PjeOffice, Teams, Office.
+  10. Programas na inicializacao - lista e PERGUNTA antes de desativar.
+  12. Efeitos visuais e plano de energia, com miniaturas garantidas.
+  13. Rede, horario e Defender: limpa DNS, mede latencia, acerta o relogio e
+      atualiza as assinaturas do antivirus.
+  16. Otimizacao de disco (TRIM ou desfragmentacao).
+
+ETAPAS QUE NAO RODAM PELO MENU
+   8. AnyDesk .................. use a opcao 15
+   9. WinSxS / limpeza pesada .. use a opcao 14
+  11. Acesso a %appdata% ....... use a opcao 28
+  14. Reparos rapidos .......... use as opcoes 27, 29, 30, 31
+  15. DISM + SFC ............... use a opcao 22
+
+  ATENCAO: a Manutencao Completa NAO roda SFC/DISM. Se o chamado for corrupcao
+  do Windows, e preciso rodar a opcao 22 separadamente.
+
+AO FINAL
+  Compara as credenciais com a foto do inicio (nenhuma senha pode ter sumido),
+  monta o relatorio com o que foi feito e quanto foi liberado, e abre em TXT
+  temporario no Bloco de Notas.
+
+
+================================================================================
+7. USO POR LINHA DE COMANDO
+================================================================================
+
+O motor pode ser chamado direto, sem o menu:
+
+  .\ManutencaoCompleta.ps1                         manutencao completa
+  .\ManutencaoCompleta.ps1 -SomenteRelatorio       simula, nao altera nada
+  .\ManutencaoCompleta.ps1 -Ferramenta diagnostico roda so uma ferramenta
+
+FERRAMENTAS (-Ferramenta <nome>)
+
+  Diagnostico, nao alteram nada:
+    diagnostico   bsod          certificados   smart
+    topprocessos  perfis        programas
+
+  Limpeza:
+    temp          lixeira       miniaturas     windowsupdate
+    navegadores   appcache      anydesk        winsxs
+
+  Reparos:
+    sfc           dll           reparoavancado corrigirrede
+    proxycert     spooler       appdata        explorer
+    chkdsk        appx          gpupdate       ip
+    proxy         rede          horario        defender
+    audio         webcam        permissoesps   impressora
+
+  Juridico:
+    java          pje           limparcerts
+
+  Otimizacao:
+    otimizar      inicializacao efeitos        desinstalar     visualc
+
+  Abrem tela do Windows:
+    protecaovirus consoles      abrirappdata   memoriavirtual
+
+  CUIDADO com dois pares parecidos:
+    appdata  = repara o acesso a pasta   |  abrirappdata = so abre a pasta
+    rede     = manutencao leve de rede   |  corrigirrede = a ferramenta completa
+
+MODOS INDEPENDENTES
+  -EscanearVirus          varredura ClamAV + VirusTotal
+  -RestaurarQuarentena    devolve arquivos da quarentena
+  -DesativarDefender      desativa o antivirus (limitado pela Tamper Protection)
+  -DesativarFirewall      desativa o firewall
+  -ReativarTudo           religa antivirus e firewall
+
+PARAMETROS UTEIS
+  -SemInteracao           nunca pergunta nada (para execucao desatendida)
+  -SemPontoRestauracao    nao cria ponto de restauracao (nao recomendado)
+  -PularLimpeza           pula as etapas de limpeza
+  -PularNavegadores       nao mexe em cache de navegador
+  -PularInicializacao     nao mexe nos programas de inicializacao
+  -PularOtimizacao        nao otimiza disco
+  -PularEfeitosVisuais    nao altera aparencia nem plano de energia
+  -LimpezaAgressiva       inclui WinSxS e limpeza de disco
+  -RepararSistema         inclui DISM + SFC na manutencao completa
+  -LimparAnyDesk          inclui a limpeza do AnyDesk
+  -AnyDeskModo Completo   apaga a pasta inteira (padrao: SomenteLogs)
+  -AplicarInicializacao   desativa a inicializacao sem perguntar
+  -RepararAppData         inclui o reparo do acesso a %appdata%
+
+
+================================================================================
+8. ONDE FICAM OS LOGS E COMO REVERTER
+================================================================================
+
+PASTA DE LOG
+  C:\ProgramData\SuporteTI\Logs\<MAQUINA>_<data>_<hora>\
+
+  Cada execucao que altera algo cria a sua pasta, com o log completo, os
+  backups do registro e das credenciais e, quando aplicavel, o backup da pasta
+  do AnyDesk.
+  Ferramentas que so leem (diagnostico, BSOD, certificados) ou que so abrem
+  tela nao deixam pasta de log.
+
+COMO DESFAZER
+  Ponto de restauracao ....... criado no inicio da manutencao completa. Use a
+                               Restauracao do Sistema do Windows.
+  Registro ................... arquivos .reg na pasta de log. Ha um
+                               RESTAURAR.cmd que aplica tudo de volta.
+  Inicializacao .............. Gerenciador de Tarefas > Inicializar, ou o
+                               RESTAURAR.cmd.
+  Quarentena do antivirus .... opcao 18.
+  AnyDesk .................... copie de volta a pasta backup-anydesk da pasta
+                               de log.
+  Certificados removidos ..... a pasta CertificadosBackup_<data> na Area de
+                               Trabalho tem a lista e os arquivos .cer. A
+                               chave privada NAO e recuperavel por ali.
+
+RELATORIOS
+  Abrem no Bloco de Notas a partir de arquivo temporario e nao ficam salvos.
+  Para guardar, use Arquivo > Salvar Como.
+
+
+================================================================================
+9. AVISOS IMPORTANTES
+================================================================================
+
+ORDEM IMPORTA EM DOIS CASOS
+  Tela azul: rode a opcao 5 ANTES da manutencao completa.
+  Antivirus: se usar a 19, SEMPRE rode a 20 ao terminar.
+
+DISCO COM ALERTA SMART
+  Se a opcao 1 ou 2 acusar falha prevista no disco, faca backup do cliente
+  ANTES de rodar qualquer reparo. Desfragmentar ou rodar chkdsk num disco que
+  esta morrendo pode acelerar a perda dos dados.
+
+TAMPER PROTECTION
+  A protecao contra adulteracao do Windows impede, POR DESIGN, que qualquer
+  script desligue o nucleo do Defender. Nao e limitacao desta ferramenta.
+  So desligando a mao na tela que a opcao 19 abre.
+
+DLL AVULSA
+  Nunca baixe DLL de site de download de DLL. Instale o pacote oficial que a
+  contem (a opcao 23 identifica qual e). Em escritorio de advocacia, malware
+  significa dado de processo exposto.
+
+MAQUINA EM DOMINIO
+  Politicas de grupo sobrepoem varias configuracoes. As ferramentas detectam
+  e avisam quando o bloqueio vem de GPO - nesse caso so o administrador do
+  dominio resolve.
+
+ACESSO REMOTO
+  A opcao 25 no modo PROFUNDO e a opcao 15 derrubam a conexao remota. Ambas
+  avisam antes, mas confirme que ha alguem no local se for arriscado.
+
+
+================================================================================
+                    suporte.adv.br  -  atualizado em 27/07/2026
+================================================================================
