@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
 =============================================================================
  MANUTENCAO COMPLETA DO PC - v2.0
@@ -79,6 +79,9 @@ param(
 
     # Inclui a analise do WinSxS via DISM na estimativa (leva 1 a 3 min)
     [switch]$EstimativaCompleta,
+
+    # --- Ferramenta unica (chamado pelo menu SuporteADV; roda so ela e sai) ---
+    [string]$Ferramenta,
 
     # --- Reparos rapidos (opt-in) ---
     [switch]$RepararSpooler,        # limpa fila de impressao travada
@@ -3562,6 +3565,63 @@ if ($SomenteRelatorio) {
 }
 Write-Host ''
 Write-Host '  Senhas salvas e sessoes de navegador SEMPRE preservadas.' -ForegroundColor DarkGray
+
+# --- Modo standalone: FERRAMENTA UNICA (chamado pelo menu SuporteADV) ----
+# Roda uma unica ferramenta e sai, sem a manutencao completa. Reaproveita as
+# mesmas funcoes usadas nas etapas (fonte de verdade unica).
+if ($Ferramenta) {
+    $chave = $Ferramenta.ToLower().Trim()
+    Write-Titulo "FERRAMENTA: $chave"
+    try {
+        switch ($chave) {
+            'temp'          { Clear-Temporarios | Out-Null }
+            'lixeira'       { Clear-LixeiraTodosDiscos | Out-Null }
+            'miniaturas'    { Clear-Miniaturas | Out-Null }
+            'windowsupdate' { Clear-WindowsUpdate | Out-Null }
+            'navegadores'   { Clear-CacheNavegadores | Out-Null }
+            'appcache'      { Clear-CacheAplicativos | Out-Null }
+            'anydesk'       { Remove-PastaAnyDesk -Modo $AnyDeskModo -Forcar:$ForcarFecharAnyDesk | Out-Null }
+            'winsxs'        { Clear-ComponentesWindows | Out-Null }
+            'inicializacao' { Invoke-EtapaInicializacao | Out-Null }
+            'appdata'       { Repair-AcessoAppData | Out-Null }
+            'efeitos'       { Set-EfeitosVisuais | Out-Null; Set-DesempenhoEnergia | Out-Null }
+            'rede'          { Invoke-ManutencaoRede | Out-Null }
+            'horario'       { Sync-HorarioSistema }
+            'defender'      { Update-Defender | Out-Null }
+            'spooler'       { Repair-Spooler | Out-Null }
+            'explorer'      { Restart-Explorer }
+            'chkdsk'        { Request-Chkdsk -Letra 'C' }
+            'appx'          { Repair-AppXPackages }
+            'gpupdate'      { Invoke-GPUpdate }
+            'ip'            { Update-EnderecoIP }
+            'proxy'         { Reset-ProxyManual }
+            'otimizar'      { Invoke-OtimizacaoDiscos -Letras @('C') | Out-Null }
+            'sfc'           { Repair-Sistema | Out-Null }
+            'smart'         { Test-SaudeDiscos | Format-Table -AutoSize | Out-Host }
+            'perfis'        { Get-PerfisAntigos -DiasSemUso 180 -Medir | Format-Table -AutoSize | Out-Host }
+            'topprocessos'  { Get-TopProcessos -Por Memoria -Top 12 | Format-Table -AutoSize | Out-Host }
+            'programas'     { Get-ProgramasInstalados | Format-Table -AutoSize | Out-Host }
+            default         {
+                Write-Falha "Ferramenta desconhecida: $Ferramenta"
+                Write-Info 'Validas: temp, lixeira, miniaturas, windowsupdate, navegadores, appcache,'
+                Write-Info 'anydesk, winsxs, inicializacao, appdata, efeitos, rede, horario, defender,'
+                Write-Info 'spooler, explorer, chkdsk, appx, gpupdate, ip, proxy, otimizar, sfc, smart,'
+                Write-Info 'perfis, topprocessos, programas.'
+            }
+        }
+    } catch { Write-Falha "Erro na ferramenta '$chave': $($_.Exception.Message)" }
+
+    if ($script:alertas.Count -gt 0) {
+        Write-Host ''
+        Write-Host '  ATENCAO:' -ForegroundColor Red
+        foreach ($a in $script:alertas) { Write-Host "     - $a" -ForegroundColor Red }
+    }
+    Write-Host ''
+    Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
+    Write-Host ('=' * 68) -ForegroundColor Green
+    try { Stop-Transcript | Out-Null } catch { }
+    exit 0
+}
 
 # --- Modo standalone: restaurar quarentena ------------------------------
 if ($RestaurarQuarentena) {

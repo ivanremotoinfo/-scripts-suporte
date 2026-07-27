@@ -1,12 +1,11 @@
 # SuporteADV.ps1
-# Menu interativo de suporte tecnico para escritorios de advocacia
-# Todos os scripts sao baixados do GitHub em tempo de execucao
+# Menu unico de suporte tecnico para escritorios de advocacia.
+# Reune num so menu as ferramentas proprias (baixadas do GitHub) e todas as
+# ferramentas da ManutencaoCompleta.ps1 (v2), acionadas por parametro.
 # Para executar:  powershell.exe -ExecutionPolicy Bypass -File SuporteADV.ps1
 # Ou via web:     irm https://raw.githubusercontent.com/ivanremotoinfo/-scripts-suporte/main/SuporteADV.ps1 | iex
 
 $ErrorActionPreference = 'Continue'
-
-# Liberar execucao de scripts nesta sessao
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue
 
 # =========================================================================
@@ -14,101 +13,131 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -ErrorAction S
 # =========================================================================
 
 $baseUrl = 'https://raw.githubusercontent.com/ivanremotoinfo/-scripts-suporte/main/'
+$scriptV2 = 'ManutencaoCompleta.ps1'   # motor com ~40 ferramentas
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator
 )
 
-$mapaScripts = @{
-    1  = 'DiagnosticoCompleto.ps1'
-    2  = 'ListarCertificados.ps1'
-    3  = 'AnalisarBSOD.ps1'
-    4  = 'ManutencaoCompleta.ps1'
-    5  = 'LimparCacheNavegadores.ps1'
-    6  = 'LimparFilaImpressao.ps1'
-    7  = 'InstalarVisualC.ps1'
-    8  = 'RepararSistema.ps1'
-    9  = 'CorrigirRede.ps1'
-    10 = 'CorrigirProxy.ps1'
-    11 = 'CorrigirPermissoesPowerShell.ps1'
-    12 = 'RepararAudio.ps1'
-    13 = 'RepararWebcam.ps1'
-    14 = 'LimparCertificadosVencidos.ps1'
-    15 = 'ConfigurarJava.ps1'
-    16 = 'ConfigurarPJe.ps1'
-    17 = 'DesinstalarPrograma.ps1'
-    18 = 'ReinstalarImpressora.ps1'
-}
+# Cada item do menu:
+#   N     = numero
+#   Cat   = categoria (agrupa e colore)
+#   Label = texto curto (cabe em 2 colunas)
+#   Tipo  = 'v2' (chama o motor v2)  |  'script' (baixa um .ps1 proprio)
+#   Alvo  = nome do .ps1 (quando Tipo='script')
+#   Args  = parametros passados ao v2 (quando Tipo='v2')
+$menu = @(
+    # --- DIAGNOSTICO ---   (Args e' hashtable p/ splat correto no v2)
+    @{ N=1;  Cat='DIAGNOSTICO'; Label='Diagnostico Completo do PC';    Tipo='script'; Alvo='DiagnosticoCompleto.ps1' }
+    @{ N=2;  Cat='DIAGNOSTICO'; Label='Saude dos Discos (SMART)';      Tipo='v2';     Args=@{ Ferramenta='smart' } }
+    @{ N=3;  Cat='DIAGNOSTICO'; Label='Maiores Consumidores de RAM';   Tipo='v2';     Args=@{ Ferramenta='topprocessos' } }
+    @{ N=4;  Cat='DIAGNOSTICO'; Label='Listar Certificados Digitais';  Tipo='script'; Alvo='ListarCertificados.ps1' }
+    @{ N=5;  Cat='DIAGNOSTICO'; Label='Analisar Tela Azul (BSOD)';     Tipo='script'; Alvo='AnalisarBSOD.ps1' }
+
+    # --- MANUTENCAO E LIMPEZA ---
+    @{ N=6;  Cat='MANUTENCAO';  Label='Manutencao Completa (tudo)';    Tipo='v2';     Args=@{} }
+    @{ N=7;  Cat='MANUTENCAO';  Label='Limpar Temporarios';            Tipo='v2';     Args=@{ Ferramenta='temp' } }
+    @{ N=8;  Cat='MANUTENCAO';  Label='Esvaziar Lixeira';              Tipo='v2';     Args=@{ Ferramenta='lixeira' } }
+    @{ N=9;  Cat='MANUTENCAO';  Label='Cache dos Navegadores';         Tipo='v2';     Args=@{ Ferramenta='navegadores' } }
+    @{ N=10; Cat='MANUTENCAO';  Label='Cache de Aplicativos';          Tipo='v2';     Args=@{ Ferramenta='appcache' } }
+    @{ N=11; Cat='MANUTENCAO';  Label='Cache do Windows Update';       Tipo='v2';     Args=@{ Ferramenta='windowsupdate' } }
+    @{ N=12; Cat='MANUTENCAO';  Label='Miniaturas do Explorer';        Tipo='v2';     Args=@{ Ferramenta='miniaturas' } }
+    @{ N=13; Cat='MANUTENCAO';  Label='Limpeza Pesada (WinSxS)';       Tipo='v2';     Args=@{ Ferramenta='winsxs' } }
+    @{ N=14; Cat='MANUTENCAO';  Label='Dados do AnyDesk';              Tipo='v2';     Args=@{ Ferramenta='anydesk' } }
+    @{ N=15; Cat='MANUTENCAO';  Label='Visual C++ Redistribuiveis';    Tipo='script'; Alvo='InstalarVisualC.ps1' }
+
+    # --- SEGURANCA E ANTIVIRUS ---
+    @{ N=16; Cat='SEGURANCA';   Label='Escanear Virus (ClamAV+VT)';    Tipo='v2';     Args=@{ EscanearVirus=$true } }
+    @{ N=17; Cat='SEGURANCA';   Label='Restaurar Quarentena';          Tipo='v2';     Args=@{ RestaurarQuarentena=$true } }
+    @{ N=18; Cat='SEGURANCA';   Label='Desativar Antivirus+Firewall';  Tipo='v2';     Args=@{ DesativarDefender=$true; DesativarFirewall=$true } }
+    @{ N=19; Cat='SEGURANCA';   Label='Reativar Antivirus+Firewall';   Tipo='v2';     Args=@{ ReativarTudo=$true } }
+
+    # --- REPAROS ---
+    @{ N=20; Cat='REPAROS';     Label='Reparar Sistema (SFC/DISM)';    Tipo='script'; Alvo='RepararSistema.ps1' }
+    @{ N=21; Cat='REPAROS';     Label='Corrigir Rede e Internet';      Tipo='script'; Alvo='CorrigirRede.ps1' }
+    @{ N=22; Cat='REPAROS';     Label='Corrigir Proxy e Certif. Rede'; Tipo='script'; Alvo='CorrigirProxy.ps1' }
+    @{ N=23; Cat='REPAROS';     Label='Reparar Fila de Impressao';     Tipo='v2';     Args=@{ Ferramenta='spooler' } }
+    @{ N=24; Cat='REPAROS';     Label='Reparar acesso a %appdata%';    Tipo='v2';     Args=@{ Ferramenta='appdata' } }
+    @{ N=25; Cat='REPAROS';     Label='Reiniciar Explorer';            Tipo='v2';     Args=@{ Ferramenta='explorer' } }
+    @{ N=26; Cat='REPAROS';     Label='Agendar Chkdsk (verif. disco)'; Tipo='v2';     Args=@{ Ferramenta='chkdsk' } }
+    @{ N=27; Cat='REPAROS';     Label='Reparar Apps da Store (AppX)';  Tipo='v2';     Args=@{ Ferramenta='appx' } }
+    @{ N=28; Cat='REPAROS';     Label='Sincronizar Horario (NTP)';     Tipo='v2';     Args=@{ Ferramenta='horario' } }
+    @{ N=29; Cat='REPAROS';     Label='Renovar IP (DHCP)';             Tipo='v2';     Args=@{ Ferramenta='ip' } }
+    @{ N=30; Cat='REPAROS';     Label='Atualizar GPO (dominio)';       Tipo='v2';     Args=@{ Ferramenta='gpupdate' } }
+    @{ N=31; Cat='REPAROS';     Label='Permissoes do PowerShell';      Tipo='script'; Alvo='CorrigirPermissoesPowerShell.ps1' }
+    @{ N=32; Cat='REPAROS';     Label='Reparar Audio e Microfone';     Tipo='script'; Alvo='RepararAudio.ps1' }
+    @{ N=33; Cat='REPAROS';     Label='Reparar Webcam';                Tipo='script'; Alvo='RepararWebcam.ps1' }
+
+    # --- OTIMIZACAO ---
+    @{ N=34; Cat='OTIMIZACAO';  Label='Otimizar Disco (SSD/HDD)';      Tipo='v2';     Args=@{ Ferramenta='otimizar' } }
+    @{ N=35; Cat='OTIMIZACAO';  Label='Gerenciar Inicializacao';       Tipo='v2';     Args=@{ Ferramenta='inicializacao' } }
+    @{ N=36; Cat='OTIMIZACAO';  Label='Efeitos Visuais + Energia';     Tipo='v2';     Args=@{ Ferramenta='efeitos' } }
+
+    # --- CERTIFICADOS E JURIDICO ---
+    @{ N=37; Cat='CERTIFICADOS';Label='Limpar Certificados Vencidos';  Tipo='script'; Alvo='LimparCertificadosVencidos.ps1' }
+    @{ N=38; Cat='CERTIFICADOS';Label='Configurar Java (Juridico)';    Tipo='script'; Alvo='ConfigurarJava.ps1' }
+    @{ N=39; Cat='CERTIFICADOS';Label='Configurar Ambiente PJe';       Tipo='script'; Alvo='ConfigurarPJe.ps1' }
+
+    # --- PROGRAMAS ---
+    @{ N=40; Cat='PROGRAMAS';   Label='Desinstalar Programa';          Tipo='script'; Alvo='DesinstalarPrograma.ps1' }
+    @{ N=41; Cat='PROGRAMAS';   Label='Remover Impressora';            Tipo='script'; Alvo='ReinstalarImpressora.ps1' }
+)
+# Converte para objetos (hashtable nao ordena/mede por chave nos cmdlets)
+$menu = $menu | ForEach-Object { [pscustomobject]$_ }
+
+$categorias = @(
+    @{ Nome='DIAGNOSTICO';  Titulo='DIAGNOSTICO';           Cor='Cyan' }
+    @{ Nome='MANUTENCAO';   Titulo='MANUTENCAO E LIMPEZA';  Cor='Green' }
+    @{ Nome='SEGURANCA';    Titulo='SEGURANCA E ANTIVIRUS'; Cor='Red' }
+    @{ Nome='REPAROS';      Titulo='REPAROS';               Cor='Yellow' }
+    @{ Nome='OTIMIZACAO';   Titulo='OTIMIZACAO';            Cor='White' }
+    @{ Nome='CERTIFICADOS'; Titulo='CERTIFICADOS E JURIDICO'; Cor='Magenta' }
+    @{ Nome='PROGRAMAS';    Titulo='PROGRAMAS';             Cor='Blue' }
+)
+
+$maxOpt = ($menu | ForEach-Object { $_.N } | Measure-Object -Maximum).Maximum
 
 # =========================================================================
-# FUNCAO: EXIBIR MENU
+# FUNCAO: EXIBIR MENU (duas colunas por categoria, cabe na tela)
 # =========================================================================
 
 function Mostrar-Menu {
     Clear-Host
+    $dt = Get-Date -Format 'dd/MM/yyyy  HH:mm:ss'
 
-    $dt      = Get-Date -Format 'dd/MM/yyyy  HH:mm:ss'
-    $pcNome  = $env:COMPUTERNAME
-    $usuario = $env:USERNAME
-
-    # -- Cabecalho ---------------------------------------------------------
     Write-Host ''
     Write-Host '  +==============================================================+' -ForegroundColor DarkCyan
-    Write-Host '  |                                                              |' -ForegroundColor DarkCyan
-    Write-Host '  |      ~~~  S U P O R T E  .  A D V  .  B R  ~~~             |' -ForegroundColor Cyan
-    Write-Host '  |      Suporte Tecnico em TI para Escritorios de Advocacia    |' -ForegroundColor White
-    Write-Host '  |                                                              |' -ForegroundColor DarkCyan
+    Write-Host '  |          ~~~  S U P O R T E . A D V . B R  ~~~               |' -ForegroundColor Cyan
+    Write-Host '  |      Suporte Tecnico em TI para Escritorios de Advocacia     |' -ForegroundColor White
     Write-Host '  +==============================================================+' -ForegroundColor DarkCyan
-
-    Write-Host ("  Data: $dt    PC: $pcNome    User: $usuario") -ForegroundColor DarkGray
-
+    Write-Host ("  $dt   PC: $env:COMPUTERNAME   User: $env:USERNAME") -ForegroundColor DarkGray
     if ($isAdmin) {
         Write-Host '  Privilegios: [Administrador]' -ForegroundColor Green
     } else {
         Write-Host '  Privilegios: [Usuario Limitado]  AVISO: execute como Administrador!' -ForegroundColor Red
     }
-
     Write-Host '  +==============================================================+' -ForegroundColor DarkCyan
-    Write-Host ''
 
-    # -- Categoria: DIAGNOSTICO --------------------------------------------
-    Write-Host '  --- DIAGNOSTICO -----------------------------------------------' -ForegroundColor Cyan
-    Write-Host '  [ 1 ]  Diagnostico Completo do PC' -ForegroundColor Cyan
-    Write-Host '  [ 2 ]  Listar Certificados Digitais' -ForegroundColor Cyan
-    Write-Host '  [ 3 ]  Analisar Tela Azul (BSOD)' -ForegroundColor Cyan
-    Write-Host ''
+    foreach ($cat in $categorias) {
+        $itens = @($menu | Where-Object { $_.Cat -eq $cat.Nome } | Sort-Object N)
+        if ($itens.Count -eq 0) { continue }
+        Write-Host ''
+        Write-Host ("  --- {0} " -f $cat.Titulo) -ForegroundColor $cat.Cor -NoNewline
+        Write-Host (('-' * [math]::Max(0, 58 - $cat.Titulo.Length))) -ForegroundColor DarkGray
+        for ($i = 0; $i -lt $itens.Count; $i += 2) {
+            $a = $itens[$i]
+            $celA = ('[{0,2}] {1}' -f $a.N, $a.Label)
+            if ($i + 1 -lt $itens.Count) {
+                $b = $itens[$i + 1]
+                $celB = ('[{0,2}] {1}' -f $b.N, $b.Label)
+                Write-Host ('  ' + $celA.PadRight(37) + $celB) -ForegroundColor $cat.Cor
+            } else {
+                Write-Host ('  ' + $celA) -ForegroundColor $cat.Cor
+            }
+        }
+    }
 
-    # -- Categoria: MANUTENCAO ---------------------------------------------
-    Write-Host '  --- MANUTENCAO ------------------------------------------------' -ForegroundColor Green
-    Write-Host '  [ 4 ]  Manutencao Completa do PC' -ForegroundColor Green
-    Write-Host '  [ 5 ]  Limpar Cache dos Navegadores' -ForegroundColor Green
-    Write-Host '  [ 6 ]  Limpar Fila de Impressao' -ForegroundColor Green
-    Write-Host '  [ 7 ]  Instalar Visual C++ Redistribuiveis' -ForegroundColor Green
     Write-Host ''
-
-    # -- Categoria: REPAROS ------------------------------------------------
-    Write-Host '  --- REPAROS ---------------------------------------------------' -ForegroundColor Yellow
-    Write-Host '  [ 8 ]  Reparar Arquivos do Sistema (SFC / DISM)' -ForegroundColor Yellow
-    Write-Host '  [ 9 ]  Corrigir Rede e Internet' -ForegroundColor Yellow
-    Write-Host '  [10 ]  Corrigir Proxy e Certificados de Rede' -ForegroundColor Yellow
-    Write-Host '  [11 ]  Corrigir Permissoes do PowerShell' -ForegroundColor Yellow
-    Write-Host '  [12 ]  Reparar Audio e Microfone' -ForegroundColor Yellow
-    Write-Host '  [13 ]  Reparar Webcam' -ForegroundColor Yellow
-    Write-Host ''
-
-    # -- Categoria: CERTIFICADOS -------------------------------------------
-    Write-Host '  --- CERTIFICADOS ----------------------------------------------' -ForegroundColor Magenta
-    Write-Host '  [14 ]  Limpar Certificados Vencidos' -ForegroundColor Magenta
-    Write-Host '  [15 ]  Configurar Java para Sistemas Juridicos' -ForegroundColor Magenta
-    Write-Host '  [16 ]  Configurar Ambiente PJe Completo' -ForegroundColor Magenta
-    Write-Host ''
-
-    # -- Categoria: PROGRAMAS ----------------------------------------------
-    Write-Host '  --- PROGRAMAS -------------------------------------------------' -ForegroundColor Blue
-    Write-Host '  [17 ]  Desinstalar Programa Completamente' -ForegroundColor Blue
-    Write-Host '  [18 ]  Remover Impressora Completamente' -ForegroundColor Blue
-    Write-Host ''
-
     Write-Host '  +==============================================================+' -ForegroundColor DarkCyan
     Write-Host '  [ 0 ]  Sair' -ForegroundColor DarkGray
     Write-Host '  +==============================================================+' -ForegroundColor DarkCyan
@@ -116,99 +145,119 @@ function Mostrar-Menu {
 }
 
 # =========================================================================
-# FUNCAO: BAIXAR E EXECUTAR SCRIPT DO GITHUB
+# DOWNLOAD (com cache do v2 na sessao para nao rebaixar 181 KB toda vez)
 # =========================================================================
 
-function Executar-Script {
-    param([int]$numero)
+$script:v2Tmp = $null
 
-    $arquivo = $mapaScripts[$numero]
-    $url     = $baseUrl + $arquivo
+function Get-ScriptTemp {
+    param([string]$Arquivo, [switch]$Cachear)
+
+    if ($Cachear -and $script:v2Tmp -and (Test-Path $script:v2Tmp)) { return $script:v2Tmp }
+
+    $url = $baseUrl + $Arquivo
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $conteudo = (Invoke-RestMethod -Uri $url -UseBasicParsing -TimeoutSec 90 -ErrorAction Stop).ToString()
+    if ($conteudo.Length -lt 20) { throw 'Arquivo vazio ou nao encontrado no repositorio.' }
+
+    $tmp = [System.IO.Path]::GetTempPath() + 'sadv_' + [System.Guid]::NewGuid().ToString('N') + '.ps1'
+    [System.IO.File]::WriteAllText($tmp, $conteudo, [System.Text.Encoding]::UTF8)
+    Unblock-File $tmp -ErrorAction SilentlyContinue
+    if ($Cachear) { $script:v2Tmp = $tmp }
+    return $tmp
+}
+
+# =========================================================================
+# EXECUTAR UM ITEM DO MENU
+# =========================================================================
+
+function Executar-Item {
+    param($item)
+
+    $ehV2   = ($item.Tipo -eq 'v2')
+    $arquivo = if ($ehV2) { $scriptV2 } else { $item.Alvo }
+    $argsV2  = if ($ehV2 -and $item.Args -is [hashtable]) { $item.Args } else { @{} }
+    $descArgs = ($argsV2.GetEnumerator() | ForEach-Object {
+        if ($_.Value -is [bool]) { "-$($_.Key)" } else { "-$($_.Key) $($_.Value)" }
+    }) -join ' '
 
     Write-Host ''
     Write-Host ('  +' + ('=' * 62) + '+') -ForegroundColor DarkCyan
-    Write-Host ("  |  Aguarde... baixando $arquivo do GitHub") -ForegroundColor Yellow
-    Write-Host ("  |  $url") -ForegroundColor DarkGray
+    Write-Host ("  |  [{0}] {1}" -f $item.N, $item.Label) -ForegroundColor Yellow
+    Write-Host ("  |  Baixando $arquivo do GitHub...") -ForegroundColor DarkGray
     Write-Host ('  +' + ('=' * 62) + '+') -ForegroundColor DarkCyan
     Write-Host ''
 
-    $baixouOk = $false
-    $tmpArq   = ''
-
+    $tmp = $null
     try {
-        $resposta = Invoke-RestMethod -Uri $url -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
-        $conteudo = $resposta.ToString()
-
-        if ($conteudo.Length -lt 20) {
-            throw 'Arquivo vazio ou nao encontrado no repositorio.'
-        }
-
-        $tmpArq = [System.IO.Path]::GetTempPath() + 'sadv_' + [System.Guid]::NewGuid().ToString('N') + '.ps1'
-        [System.IO.File]::WriteAllText($tmpArq, $conteudo, [System.Text.Encoding]::UTF8)
-        Unblock-File $tmpArq -ErrorAction SilentlyContinue
-
-        $baixouOk = $true
-
+        $tmp = Get-ScriptTemp -Arquivo $arquivo -Cachear:$ehV2
     } catch {
         Write-Host '  [ERRO] Nao foi possivel baixar o script.' -ForegroundColor Red
         Write-Host ("  Arquivo : $arquivo") -ForegroundColor DarkRed
         Write-Host ("  Erro    : $($_.Exception.Message)") -ForegroundColor DarkGray
-        Write-Host ''
-        Write-Host '  Verifique se existe conexao com a internet e se o arquivo' -ForegroundColor Yellow
-        Write-Host ("  ja foi publicado no repositorio GitHub.") -ForegroundColor Yellow
-        Write-Host ("  URL esperada: $url") -ForegroundColor DarkGray
+        Write-Host '  Verifique a conexao com a internet e se o arquivo existe no repositorio.' -ForegroundColor Yellow
+        return
     }
 
-    if ($baixouOk) {
-        Write-Host ("  >> Executando: $arquivo") -ForegroundColor Green
-        Write-Host ('  ' + ('-' * 62)) -ForegroundColor DarkGray
-        Write-Host ''
-
-        try {
-            & $tmpArq
-        } catch {
-            Write-Host ''
-            Write-Host ("  [ERRO durante execucao] $($_.Exception.Message)") -ForegroundColor Red
-        }
-
-        if ($tmpArq -and (Test-Path $tmpArq)) {
-            Remove-Item $tmpArq -Force -ErrorAction SilentlyContinue
-        }
-    }
-
-    Write-Host ''
+    Write-Host ('  >> Executando...' + $(if ($descArgs) { " ($descArgs)" } else { '' })) -ForegroundColor Green
     Write-Host ('  ' + ('-' * 62)) -ForegroundColor DarkGray
-    Write-Host '  Pressione ENTER para voltar ao menu principal...' -ForegroundColor DarkGray
-    $null = Read-Host
+    Write-Host ''
+    try {
+        if ($argsV2.Count) { & $tmp @argsV2 } else { & $tmp }
+    } catch {
+        Write-Host ''
+        Write-Host ("  [ERRO durante execucao] $($_.Exception.Message)") -ForegroundColor Red
+    }
+
+    # Scripts proprios (nao-v2) usam arquivo temporario descartavel
+    if (-not $ehV2 -and $tmp -and (Test-Path $tmp)) {
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # =========================================================================
-# LOOP PRINCIPAL DO MENU
+# LOOP PRINCIPAL
 # =========================================================================
 
-while ($true) {
-    Mostrar-Menu
+if (-not $isAdmin) {
+    Write-Host ''
+    Write-Host '  AVISO: varias opcoes exigem Administrador. Feche e reabra o PowerShell' -ForegroundColor Yellow
+    Write-Host '  como Administrador para o funcionamento completo.' -ForegroundColor Yellow
+    Start-Sleep -Seconds 2
+}
 
-    $entrada = Read-Host '  Opcao'
-    $entrada = $entrada.Trim()
+try {
+    while ($true) {
+        Mostrar-Menu
+        $entrada = (Read-Host '  Opcao').Trim()
 
-    if ($entrada -eq '0') {
-        Clear-Host
+        if ($entrada -eq '0') {
+            Clear-Host
+            Write-Host ''
+            Write-Host '  Ate logo!  suporte.adv.br' -ForegroundColor Cyan
+            Write-Host ''
+            break
+        }
+
+        $num = 0
+        if ([int]::TryParse($entrada, [ref]$num)) {
+            $item = $menu | Where-Object { $_.N -eq $num } | Select-Object -First 1
+            if ($item) {
+                Executar-Item -item $item
+                Write-Host ''
+                Write-Host ('  ' + ('-' * 62)) -ForegroundColor DarkGray
+                Write-Host '  Pressione ENTER para voltar ao menu principal...' -ForegroundColor DarkGray
+                $null = Read-Host
+                continue
+            }
+        }
         Write-Host ''
-        Write-Host '  Ate logo!  suporte.adv.br' -ForegroundColor Cyan
-        Write-Host ''
-        break
-    }
-
-    # Validar numero
-    $num = 0
-    $valido = [int]::TryParse($entrada, [ref]$num)
-
-    if ($valido -and $num -ge 1 -and $num -le 18) {
-        Executar-Script -numero $num
-    } else {
-        Write-Host ''
-        Write-Host ("  Opcao invalida: '$entrada'  |  Digite um numero de 0 a 18.") -ForegroundColor Red
+        Write-Host ("  Opcao invalida: '$entrada'  |  Digite um numero de 0 a $maxOpt.") -ForegroundColor Red
         Start-Sleep -Milliseconds 1500
+    }
+} finally {
+    # Limpa o cache do v2 ao sair
+    if ($script:v2Tmp -and (Test-Path $script:v2Tmp)) {
+        Remove-Item $script:v2Tmp -Force -ErrorAction SilentlyContinue
     }
 }
