@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 <#
 =============================================================================
  MANUTENCAO COMPLETA DO PC - v2.0
@@ -129,7 +129,10 @@ param(
     [string]$PastaLog = "$env:ProgramData\SuporteTI\Logs",
 
     # Copia o relatorio HTML para um compartilhamento de rede
-    [string]$DestinoRelatorio
+    [string]$DestinoRelatorio,
+
+    # Nao abrir o log em txt automaticamente ao terminar a manutencao
+    [switch]$NaoAbrirLog
 )
 
 $ErrorActionPreference = 'Continue'
@@ -315,6 +318,42 @@ function Write-Aviso { param([string]$t) Write-Host "     [!]  $t" -ForegroundCo
 function Write-Falha { param([string]$t) Write-Host "     [X]  $t" -ForegroundColor Red }
 function Write-Info  { param([string]$t) Write-Host "     $t" -ForegroundColor Gray }
 function Write-Simul { param([string]$t) Write-Host "     [SIMULACAO] $t" -ForegroundColor DarkYellow }
+
+function Read-HostComTimeout {
+    <#
+      Read-Host com tempo limite: se o operador nao digitar nada em N segundos,
+      retorna vazio e o fluxo segue (evita a manutencao ficar "presa" num
+      prompt quando roda pela opcao 4 do menu). Cai para Read-Host normal se o
+      host nao suportar leitura de tecla (ISE, remoto, etc.).
+    #>
+    param([string]$Prompt, [int]$Segundos = 20)
+
+    # Sem RawUI (ex.: ISE) ou modo desatendido -> comportamento simples
+    if ($SemInteracao) { return '' }
+    $temRaw = $false
+    try { $null = $Host.UI.RawUI.KeyAvailable; $temRaw = $true } catch { $temRaw = $false }
+    if (-not $temRaw) { try { return (Read-Host $Prompt) } catch { return '' } }
+
+    Write-Host -NoNewline ("{0} (segue sozinho em {1}s): " -f $Prompt, $Segundos)
+    $sb  = New-Object System.Text.StringBuilder
+    $fim = (Get-Date).AddSeconds($Segundos)
+    while ((Get-Date) -lt $fim) {
+        if ($Host.UI.RawUI.KeyAvailable) {
+            $k = $Host.UI.RawUI.ReadKey('IncludeKeyDown,NoEcho')
+            if ($k.VirtualKeyCode -eq 13) { Write-Host ''; return $sb.ToString().Trim() }   # Enter
+            elseif ($k.VirtualKeyCode -eq 8) {                                                # Backspace
+                if ($sb.Length -gt 0) { [void]$sb.Remove($sb.Length - 1, 1); Write-Host -NoNewline "`b `b" }
+            } elseif ($k.Character) {
+                [void]$sb.Append($k.Character); Write-Host -NoNewline $k.Character
+            }
+            $fim = (Get-Date).AddSeconds($Segundos)   # cada tecla reinicia a contagem
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    Write-Host ''
+    Write-Info 'Tempo esgotado - seguindo apenas com o disco C:.'
+    return $sb.ToString().Trim()
+}
 
 function Format-Tamanho {
     param([long]$Bytes)
@@ -2410,11 +2449,18 @@ function Clear-CacheNavegadores {
 }
 
 # =========================================================================
-# REGIAO: ESTIMATIVA DE ESPACO RECUPERAVEL
-# Percorre os mesmos alvos da limpeza, mas SO MEDE - nao remove nada.
-# Roda em qualquer modo, inclusive antes de uma limpeza real, para o tecnico
-# saber o que esperar e poder mostrar o numero ao cliente.
+# REGIAO: ESTIMATIVA DE ESPACO RECUPERAVEL (somente disco C:)
+# So MEDE, nao remove. Escopada ao C: a pedido - medir a lixeira de todos os
+# discos deixava o sistema lento.
 # =========================================================================
+
+$script:fso = $null
+function Get-FSO {
+    # FileSystemObject reaproveitado: calcula o tamanho recursivo de uma pasta
+    # numa unica chamada nativa (~12x mais rapido que Get-ChildItem -Recurse).
+    if (-not $script:fso) { try { $script:fso = New-Object -ComObject Scripting.FileSystemObject } catch { } }
+    return $script:fso
+}
 
 function Measure-Pasta {
     param([string]$Caminho, [string]$Filtro = '*', [int]$DiasAntigos = 0, [switch]$IgnorarGuarda)
@@ -2422,14 +2468,27 @@ function Measure-Pasta {
     if ([string]::IsNullOrWhiteSpace($Caminho) -or -not (Test-Path -LiteralPath $Caminho)) {
         return [pscustomobject]@{ Bytes = [long]0; Arquivos = 0 }
     }
+
+    # Caminho RAPIDO: pasta inteira, sem filtro nem corte por data -> FSO.
+    # So mede (nunca apaga), entao dispensar a guarda de credencial aqui e
+    # inofensivo; a limpeza real (Remove-Files) mantem a guarda.
+    if ($Filtro -eq '*' -and $DiasAntigos -eq 0) {
+        $fso = Get-FSO
+        if ($fso) {
+            try {
+                $sz = [long]$fso.GetFolder($Caminho).Size
+                return [pscustomobject]@{ Bytes = $sz; Arquivos = 0 }
+            } catch { }  # cai para o metodo preciso em caso de erro/permissao
+        }
+    }
+
+    # Caminho PRECISO: com filtro ou idade (pastas pequenas) -> Get-ChildItem.
     try {
         $itens = @(Get-ChildItem -LiteralPath $Caminho -Recurse -File -Filter $Filtro -Force -ErrorAction SilentlyContinue)
         if ($DiasAntigos -gt 0) {
             $limite = (Get-Date).AddDays(-$DiasAntigos)
             $itens = @($itens | Where-Object { $_.LastWriteTime -lt $limite })
         }
-        # A estimativa respeita a mesma guarda de credenciais da limpeza,
-        # senao prometeria espaco que nunca seria liberado.
         if (-not $IgnorarGuarda) {
             $itens = @($itens | Where-Object { -not (Test-CaminhoProtegido $_.FullName) })
         }
@@ -2452,9 +2511,8 @@ function Get-PotencialLimpeza {
         })
     }
 
-    Write-Etapa 'Calculando espaco recuperavel (somente leitura)...'
+    Write-Etapa 'Calculando espaco recuperavel no disco C: (somente leitura)...'
 
-    # --- Sempre incluidos na execucao padrao -----------------------------
     $m = Measure-Pasta $env:TEMP
     Add-Item 'TEMP do usuario' $m.Bytes $m.Arquivos 'padrao'
 
@@ -2475,13 +2533,9 @@ function Get-PotencialLimpeza {
     $bytes += $m.Bytes; $qtd += $m.Arquivos
     Add-Item 'Relatorios de erro e dumps' $bytes $qtd 'padrao'
 
-    $bytes = [long]0; $qtd = 0
-    foreach ($v in @(Get-Volume -ErrorAction SilentlyContinue |
-                     Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter })) {
-        $lix = Measure-Pasta (("{0}:\" -f $v.DriveLetter) + '$Recycle.Bin') -IgnorarGuarda
-        $bytes += $lix.Bytes; $qtd += $lix.Arquivos
-    }
-    Add-Item 'Lixeira (todos os discos)' $bytes $qtd 'padrao'
+    # Lixeira: SOMENTE C: (medir todos os discos deixava lento).
+    $lix = Measure-Pasta ('C:\' + '$Recycle.Bin') -IgnorarGuarda
+    Add-Item 'Lixeira (C:)' $lix.Bytes $lix.Arquivos 'padrao'
 
     $bytes = [long]0; $qtd = 0
     foreach ($f in @('thumbcache_*.db', 'iconcache_*.db')) {
@@ -2498,7 +2552,6 @@ function Get-PotencialLimpeza {
     $m2 = Measure-Pasta "$env:LOCALAPPDATA\Downloaded Installations" -DiasAntigos 90
     Add-Item 'Instaladores antigos (90 dias)' ($m.Bytes + $m2.Bytes) ($m.Arquivos + $m2.Arquivos) 'padrao'
 
-    # --- Navegadores: detalhado por navegador ----------------------------
     $abertos = Get-NavegadoresAbertos
     $porNavegador = @{}
     foreach ($c in (Get-CaminhosCacheNavegador)) {
@@ -2515,7 +2568,6 @@ function Get-PotencialLimpeza {
         Add-Item "Cache: $nav" $d.Bytes $d.Arquivos 'padrao' $obs
     }
 
-    # --- Cache de aplicativos --------------------------------------------
     $apps = [ordered]@{
         'Java Deployment' = "$env:LOCALAPPDATA\Sun\Java\Deployment\cache"
         'PjeOffice logs'  = "$env:USERPROFILE\.pjeoffice-pro\logs"
@@ -2534,7 +2586,6 @@ function Get-PotencialLimpeza {
     }
     Add-Item 'Cache de aplicativos' $bytes $qtd 'padrao'
 
-    # --- AnyDesk (opt-in) -------------------------------------------------
     $adLogs = [long]0; $adTotal = [long]0; $adQtd = 0
     foreach ($b in @($env:APPDATA, $env:LOCALAPPDATA, $env:ProgramData)) {
         $p = Join-Path $b 'AnyDesk'
@@ -2552,7 +2603,6 @@ function Get-PotencialLimpeza {
         Add-Item 'AnyDesk: pasta completa'    $adTotal $adQtd '-AnyDeskModo Completo' 'RESETA o ID da maquina'
     }
 
-    # --- Modo agressivo ---------------------------------------------------
     $m = Measure-Pasta "$env:SystemRoot\Prefetch" -Filtro '*.pf'
     Add-Item 'Prefetch' $m.Bytes $m.Arquivos '-LimpezaAgressiva' 'piora os proximos boots'
 
@@ -2572,7 +2622,6 @@ function Get-PotencialLimpeza {
     if ($Completa) {
         Write-Info 'Analisando WinSxS via DISM (1 a 3 minutos)...'
         $saida = (& dism.exe /Online /Cleanup-Image /AnalyzeComponentStore 2>$null) -join "`n"
-        $mt = [regex]::Match($saida, '(?im)^\s*(?:Reclaimable Packages|Pacotes recuperaveis|Recuperavel).*?:\s*(.+)$')
         $mt2 = [regex]::Match($saida, '(?im)Actual Size of Component Store\s*:\s*([\d\.,]+)\s*(MB|GB)')
         $obs = if ($mt2.Success) { "WinSxS atual: $($mt2.Groups[1].Value) $($mt2.Groups[2].Value)" } else { 'ver saida do DISM' }
         Add-Item 'WinSxS (componentes)' 0 0 '-LimpezaAgressiva' $obs
@@ -2590,19 +2639,18 @@ function Show-PotencialLimpeza {
     if ($comDados.Count -eq 0) { Write-Ok 'Nada relevante a liberar - sistema ja esta limpo.'; return }
 
     Write-Host ''
-    Write-Host ('     {0,-32} {1,12} {2,9}  {3}' -f 'Categoria', 'Tamanho', 'Arquivos', 'Requer') -ForegroundColor White
-    Write-Host ('     ' + ('-' * 76)) -ForegroundColor DarkGray
+    Write-Host ('     {0,-34} {1,12}  {2}' -f 'Categoria', 'Tamanho', 'Requer') -ForegroundColor White
+    Write-Host ('     ' + ('-' * 72)) -ForegroundColor DarkGray
 
     foreach ($i in $comDados) {
         $cor = switch ($i.Quando) {
             'padrao' { 'Green' }
             default  { 'DarkYellow' }
         }
-        Write-Host ('     {0,-32} {1,12} {2,9}  {3}' -f $i.Categoria, $i.Tamanho, $i.Arquivos, $i.Quando) -ForegroundColor $cor
+        Write-Host ('     {0,-34} {1,12}  {2}' -f $i.Categoria, $i.Tamanho, $i.Quando) -ForegroundColor $cor
         if ($i.Observacao) { Write-Host ("        ^ $($i.Observacao)") -ForegroundColor DarkGray }
     }
 
-    # 'AnyDesk: pasta completa' engloba os logs - nao somar os dois.
     $padrao = [long](($comDados | Where-Object { $_.Quando -eq 'padrao' } | Measure-Object Bytes -Sum).Sum)
     $extra  = [long](($comDados | Where-Object { $_.Quando -ne 'padrao' -and $_.Categoria -ne 'AnyDesk: pasta completa' } |
                       Measure-Object Bytes -Sum).Sum)
@@ -3415,13 +3463,13 @@ function Export-RelatorioHtml {
             $pExtra  = [long](($comDados | Where-Object { $_.Quando -ne 'padrao' -and $_.Categoria -ne 'AnyDesk: pasta completa' } | Measure-Object Bytes -Sum).Sum)
             [void]$sb.AppendLine('<h2>Espaco recuperavel (previsao)</h2>')
             [void]$sb.AppendLine("<div class='destaque'>Potencial total: $(Format-Tamanho ($pPadrao + $pExtra))</div>")
-            [void]$sb.AppendLine('<table><tr><th>Categoria</th><th>Tamanho</th><th>Arquivos</th><th>Requer</th><th>Observacao</th></tr>')
+            [void]$sb.AppendLine('<table><tr><th>Categoria</th><th>Tamanho</th><th>Requer</th><th>Observacao</th></tr>')
             foreach ($i in $comDados) {
                 $cls = if ($i.Quando -eq 'padrao') { 'ok' } else { 'aviso' }
-                [void]$sb.AppendLine("<tr><td>$($i.Categoria)</td><td>$($i.Tamanho)</td><td>$($i.Arquivos)</td><td class='$cls'>$($i.Quando)</td><td>$($i.Observacao)</td></tr>")
+                [void]$sb.AppendLine("<tr><td>$($i.Categoria)</td><td>$($i.Tamanho)</td><td class='$cls'>$($i.Quando)</td><td>$($i.Observacao)</td></tr>")
             }
-            [void]$sb.AppendLine("<tr><td><b>Subtotal execucao padrao</b></td><td colspan='4'><b>$(Format-Tamanho $pPadrao)</b></td></tr>")
-            [void]$sb.AppendLine("<tr><td><b>Subtotal etapas opcionais</b></td><td colspan='4'><b>$(Format-Tamanho $pExtra)</b></td></tr>")
+            [void]$sb.AppendLine("<tr><td><b>Subtotal execucao padrao</b></td><td colspan='3'><b>$(Format-Tamanho $pPadrao)</b></td></tr>")
+            [void]$sb.AppendLine("<tr><td><b>Subtotal etapas opcionais</b></td><td colspan='3'><b>$(Format-Tamanho $pExtra)</b></td></tr>")
             [void]$sb.AppendLine('</table>')
         }
     }
@@ -3513,7 +3561,7 @@ if ($SomenteRelatorio) {
     Write-Host '  *** MODO SOMENTE RELATORIO - NADA SERA ALTERADO ***' -ForegroundColor Yellow
 }
 Write-Host ''
-Write-Host '  Senhas salvas e sessoes de navegador SEMPRE preservadas.' -ForegroundColor Green
+Write-Host '  Senhas salvas e sessoes de navegador SEMPRE preservadas.' -ForegroundColor DarkGray
 
 # --- Modo standalone: restaurar quarentena ------------------------------
 if ($RestaurarQuarentena) {
@@ -3662,8 +3710,8 @@ if ($histUpdates.Count -gt 0) {
 $programas = @(Get-ProgramasInstalados)
 Write-Info "$($programas.Count) programa(s) instalado(s) - lista completa no relatorio HTML."
 
-# --- Quanto da para liberar ---------------------------------------------
-Write-Titulo 'ESPACO RECUPERAVEL - PREVISAO'
+# --- Quanto da para liberar (somente disco C:) --------------------------
+Write-Titulo 'ESPACO RECUPERAVEL - PREVISAO (C:)'
 $potencial = @(Get-PotencialLimpeza -Completa:$EstimativaCompleta)
 Show-PotencialLimpeza -Itens $potencial -Letra 'C'
 
@@ -3697,8 +3745,8 @@ if (-not $PularOtimizacao) {
             $idx++
         }
         Write-Host ''
-        Write-Info 'Numeros separados por virgula (ex: 1,2) ou Enter para somente C:'
-        $resposta = (Read-Host '  Discos adicionais').Trim()
+        Write-Info 'Numeros separados por virgula (ex: 1,2), ou apenas ENTER para otimizar so o C:.'
+        $resposta = (Read-HostComTimeout -Prompt '  Discos adicionais' -Segundos 20).Trim()
         foreach ($parte in ($resposta -split ',')) {
             $n = $parte.Trim()
             if ($n -match '^\d+$' -and $mapaDiscos.ContainsKey([int]$n)) { $discosParaOtimizar.Add($mapaDiscos[[int]$n]) }
@@ -3812,7 +3860,7 @@ if ($SomenteRelatorio) {
     Write-Host ("  POTENCIAL com etapas opcionais        : $(Format-Tamanho ([long]($script:potencialPadrao + $script:potencialExtra)))") -ForegroundColor Green
     Write-Host  '  (nada foi alterado - modo somente relatorio)' -ForegroundColor Yellow
 } else {
-    Write-Host ("  Previsto antes de iniciar             : $(Format-Tamanho ([long]$script:potencialPadrao))") -ForegroundColor Gray
+    Write-Host ("  Previsto antes de iniciar (C:)        : $(Format-Tamanho ([long]$script:potencialPadrao))") -ForegroundColor Gray
 }
 Write-Host ("  Espaco liberado (medido no volume C:) : $(Format-Tamanho $liberadoReal)") -ForegroundColor Cyan
 Write-Host ("  Soma contabilizada pelas etapas       : $(Format-Tamanho $somaEtapas)") -ForegroundColor Gray
@@ -3857,9 +3905,24 @@ if ($DestinoRelatorio -and (Test-Path $DestinoRelatorio)) {
     } catch { Write-Aviso "Falha ao copiar relatorio: $($_.Exception.Message)" }
 }
 
+$logTxt = Join-Path $script:pastaExec 'relatorio-completo.txt'
 Write-Host ''
+Write-Host ("  Log completo (txt): $logTxt") -ForegroundColor Cyan
 Write-Host ("  Concluido em: $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')") -ForegroundColor Gray
 Write-Host ('=' * 68) -ForegroundColor Green
 Write-Host ''
 
 try { Stop-Transcript | Out-Null } catch { }
+
+# --- Log em TXT + abertura automatica -----------------------------------
+# O console rola e a parte de cima some; por isso salvamos TUDO num .txt e o
+# abrimos no Bloco de Notas ao terminar (a menos de -NaoAbrirLog).
+try {
+    $transcricao = Join-Path $script:pastaExec 'manutencao.log'
+    if (Test-Path -LiteralPath $transcricao) {
+        Copy-Item -LiteralPath $transcricao -Destination $logTxt -Force -ErrorAction SilentlyContinue
+    }
+    if ((Test-Path -LiteralPath $logTxt) -and -not $NaoAbrirLog -and -not $SemInteracao) {
+        Start-Process -FilePath 'notepad.exe' -ArgumentList "`"$logTxt`"" -ErrorAction SilentlyContinue
+    }
+} catch { }
