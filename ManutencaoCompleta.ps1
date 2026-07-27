@@ -3574,7 +3574,12 @@ function Set-EfeitosVisuais {
         @{ Chave = $chaveAdv; Nome = 'ListviewShadow';     Valor = 0; Tipo = 'DWord';  Desc = 'Sombra nos rotulos de icones' },
         # Legibilidade preservada:
         @{ Chave = $chaveDsk; Nome = 'FontSmoothing';      Valor = '2'; Tipo = 'String'; Desc = 'ClearType MANTIDO ligado' },
-        @{ Chave = $chaveDsk; Nome = 'FontSmoothingType';  Valor = 2; Tipo = 'DWord';  Desc = 'Suavizacao ClearType' }
+        @{ Chave = $chaveDsk; Nome = 'FontSmoothingType';  Valor = 2; Tipo = 'DWord';  Desc = 'Suavizacao ClearType' },
+        # Miniaturas LIGADAS: o escritorio navega em pastas de documentos e
+        # imagens e precisa da pre-visualizacao sem abrir o arquivo.
+        # IconsOnly=1 e' o que o modo "melhor desempenho" (usado pela v1)
+        # deixava ligado, escondendo as miniaturas. Aqui isso e' revertido.
+        @{ Chave = $chaveAdv; Nome = 'IconsOnly';          Valor = 0; Tipo = 'DWord';  Desc = 'Miniaturas LIGADAS (nao mostrar so icones)' }
     )
 
     foreach ($a in $ajustes) {
@@ -3587,9 +3592,38 @@ function Set-EfeitosVisuais {
         }
     }
 
+    # --- Politicas que escondem miniaturas -------------------------------
+    # DisableThumbnails apaga a pre-visualizacao em qualquer pasta;
+    # DisableThumbnailsOnNetworkFolders so nas pastas de rede - esse pega
+    # o servidor de arquivos do escritorio e costuma passar despercebido.
+    $polUser = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'
+    $polMaq  = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'
+
+    foreach ($nome in @('DisableThumbnails', 'DisableThumbnailsOnNetworkFolders')) {
+        $valUser = (Get-ItemProperty -Path $polUser -Name $nome -ErrorAction SilentlyContinue).$nome
+        if ($valUser -eq 1) {
+            try {
+                Remove-ItemProperty -Path $polUser -Name $nome -ErrorAction Stop
+                Write-Ok "Politica '$nome' removida do usuario - miniaturas liberadas."
+                $qtd++
+            } catch {
+                Write-Aviso "Nao foi possivel remover a politica '$nome': $($_.Exception.Message)"
+            }
+        }
+
+        # HKLM normalmente vem de GPO de dominio: so avisa, nao mexe.
+        $valMaq = (Get-ItemProperty -Path $polMaq -Name $nome -ErrorAction SilentlyContinue).$nome
+        if ($valMaq -eq 1) {
+            Write-Aviso "Politica de MAQUINA '$nome' esta ativa - miniaturas continuam escondidas."
+            Add-Alerta "Miniaturas bloqueadas por politica de maquina ($nome). Se houver dominio, ajustar via GPO."
+        }
+    }
+
     try { & rundll32.exe user32.dll,UpdatePerUserSystemParameters 1 True } catch { }
     Write-Ok "$qtd configuracao(s) aplicada(s)."
     Write-Aviso 'Algumas mudancas exigem logoff/logon para efeito completo.'
+    Write-Info  'Miniaturas: ligadas. Se o cache estiver corrompido, use a opcao de'
+    Write-Info  'limpeza de miniaturas - o Windows refaz na proxima abertura da pasta.'
     return [long]0
 }
 
