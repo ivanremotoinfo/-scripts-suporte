@@ -1035,25 +1035,39 @@ function Publicar-RelatorioTemp {
       tambem a pasta de logs inteira (usado no diagnostico, que so le).
     #>
     param([switch]$RemoverPastaLog)
+
+    $tmp = $null
     try {
         $origem = Join-Path $script:pastaExec 'manutencao.log'
         $tmp = Join-Path $env:TEMP ('Diagnostico_' + $env:COMPUTERNAME + '_' + (Get-Date -Format 'yyyyMMdd_HHmmss') + '.txt')
         if (Test-Path -LiteralPath $origem) {
-            Copy-Item -LiteralPath $origem -Destination $tmp -Force -ErrorAction SilentlyContinue
+            Copy-Item -LiteralPath $origem -Destination $tmp -Force -ErrorAction Stop
             Remove-Item -LiteralPath $origem -Force -ErrorAction SilentlyContinue   # nao deixa copia salva
         }
-        if (Test-Path -LiteralPath $tmp) {
-            Write-Host ''
-            Write-Host ("  Relatorio aberto (TEMPORARIO, nao salvo): $tmp") -ForegroundColor Cyan
-            Write-Host '  Para guardar: no Bloco de Notas use Arquivo > Salvar Como.' -ForegroundColor DarkGray
-            if (-not $NaoAbrirLog -and -not $SemInteracao) {
-                Start-Process -FilePath 'notepad.exe' -ArgumentList "`"$tmp`"" -ErrorAction SilentlyContinue
+    } catch { }
+
+    Write-Host ''
+    if ($tmp -and (Test-Path -LiteralPath $tmp)) {
+        Write-Host '  >>> RELATORIO (temporario, nao salvo):' -ForegroundColor Cyan
+        Write-Host ("      $tmp") -ForegroundColor White
+        Write-Host '      Para guardar: no Bloco de Notas use Arquivo > Salvar Como.' -ForegroundColor DarkGray
+        if (-not $NaoAbrirLog -and -not $SemInteracao) {
+            # Tenta varios metodos ate abrir; avisa se nenhum funcionar.
+            $aberto = $false
+            try { Start-Process -FilePath 'notepad.exe' -ArgumentList "`"$tmp`"" -ErrorAction Stop; $aberto = $true } catch { }
+            if (-not $aberto) { try { Invoke-Item -LiteralPath $tmp -ErrorAction Stop; $aberto = $true } catch { } }
+            if (-not $aberto) { try { Start-Process -FilePath $tmp -ErrorAction Stop; $aberto = $true } catch { } }
+            if (-not $aberto) {
+                Write-Host '      [!] Nao consegui abrir automaticamente - abra o caminho acima manualmente.' -ForegroundColor Yellow
             }
         }
-        if ($RemoverPastaLog -and (Test-Path -LiteralPath $script:pastaExec)) {
-            Remove-Item -LiteralPath $script:pastaExec -Recurse -Force -ErrorAction SilentlyContinue
-        }
-    } catch { }
+    } else {
+        Write-Host '  [!] Nao foi possivel gerar o relatorio TXT temporario.' -ForegroundColor Yellow
+    }
+
+    if ($RemoverPastaLog -and $script:pastaExec -and (Test-Path -LiteralPath $script:pastaExec)) {
+        Remove-Item -LiteralPath $script:pastaExec -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Get-HistoricoUpdates {
