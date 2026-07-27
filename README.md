@@ -22,9 +22,11 @@ O menu abre com as opções numeradas. Digite o número, ENTER.
 
 | Arquivo | Papel |
 |---|---|
-| `SuporteADV.ps1` | O menu. Cada opção chama o motor com um parâmetro ou baixa um sub-script. |
-| `ManutencaoCompleta.ps1` | O motor. Manutenção completa (16 etapas) e ~35 ferramentas avulsas. |
-| os demais `.ps1` | Sub-scripts chamados por opções específicas do menu. |
+| `SuporteADV.ps1` | O menu (46 opções). Toda opção chama o motor com um parâmetro. |
+| `ManutencaoCompleta.ps1` | O motor. Manutenção completa (16 etapas) e 45 ferramentas avulsas. |
+
+São só esses dois: o menu baixa o motor uma vez por sessão e todas as opções
+saem dele. Não há mais sub-script solto para manter em sincronia.
 
 ### O motor
 
@@ -39,12 +41,27 @@ O menu abre com as opções numeradas. Digite o número, ENTER.
 .\ManutencaoCompleta.ps1 -SomenteRelatorio
 ```
 
-Ferramentas: `diagnostico`, `protecaovirus`, `consoles`, `abrirappdata`,
-`memoriavirtual`, `temp`, `lixeira`, `miniaturas`, `windowsupdate`,
-`navegadores`, `appcache`, `anydesk`, `winsxs`, `inicializacao`, `appdata`,
-`efeitos`, `rede`, `horario`, `defender`, `spooler`, `explorer`, `chkdsk`,
-`appx`, `gpupdate`, `ip`, `proxy`, `otimizar`, `sfc`, `smart`, `perfis`,
-`topprocessos`, `programas`, `desinstalar`.
+**Diagnóstico (não alteram nada):** `diagnostico`, `bsod`, `certificados`,
+`smart`, `topprocessos`, `perfis`, `programas`.
+
+**Limpeza:** `temp`, `lixeira`, `miniaturas`, `windowsupdate`, `navegadores`,
+`appcache`, `anydesk`, `winsxs`.
+
+**Reparos:** `sfc`, `corrigirrede`, `proxycert`, `spooler`, `appdata`,
+`explorer`, `chkdsk`, `appx`, `gpupdate`, `ip`, `proxy`, `rede`, `horario`,
+`defender`, `audio`, `webcam`, `permissoesps`, `impressora`.
+
+**Jurídico:** `java`, `pje`, `limparcerts`.
+
+**Otimização:** `otimizar`, `inicializacao`, `efeitos`, `desinstalar`,
+`visualc`.
+
+**Abrem tela do Windows:** `protecaovirus`, `consoles`, `abrirappdata`,
+`memoriavirtual`.
+
+> Cuidado com dois pares parecidos: `appdata` repara o acesso à pasta,
+> `abrirappdata` só abre ela; `rede` é a manutenção leve usada dentro da
+> manutenção completa, `corrigirrede` é a ferramenta com modo básico/profundo.
 
 Modos independentes: `-EscanearVirus` (ClamAV + VirusTotal),
 `-RestaurarQuarentena`, `-DesativarDefender`, `-DesativarFirewall`,
