@@ -11,16 +11,6 @@
 # 3) libera explicitamente o que e' publicado
 !SuporteADV.ps1
 !ManutencaoCompleta.ps1
-!AnalisarBSOD.ps1
-!ConfigurarJava.ps1
-!ConfigurarPJe.ps1
-!CorrigirPermissoesPowerShell.ps1
-!CorrigirProxy.ps1
-!InstalarVisualC.ps1
-!LimparCertificadosVencidos.ps1
-!ReinstalarImpressora.ps1
-!RepararAudio.ps1
-!RepararWebcam.ps1
 !README.md
 !.gitignore
 

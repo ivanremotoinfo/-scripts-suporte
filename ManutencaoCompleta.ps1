@@ -3434,6 +3434,5235 @@ function Show-CertificadosInstalados {
     return [long]0
 }
 
+function Install-VisualCRedist {
+    <#
+      Instala os redistribuiveis Visual C++ que faltam (veio de InstalarVisualC.ps1).
+      Confere a assinatura da Microsoft antes de executar cada instalador.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Verificaria e instalaria os redistribuiveis Visual C++ que faltam.'; return [long]0 }
+
+
+
+    # =========================================================================
+    # Cabecalho
+    # =========================================================================
+
+    Write-Etapa 'Redistribuiveis Visual C++ para sistemas juridicos'
+
+
+    # =========================================================================
+    # Definicao dos pacotes necessarios
+    # =========================================================================
+
+    $pacotes = @(
+        [PSCustomObject]@{
+            Nome    = 'Visual C++ 2005 SP1'
+            Ano     = '2005'
+            Arq     = 'x86'
+            Padroes = @('2005')
+            URL     = 'https://download.microsoft.com/download/8/B/4/8B42259F-5D70-43F4-AC2E-4B208FD8D66A/vcredist_x86.EXE'
+            Arquivo = 'vcredist_2005_x86.exe'
+            Params  = '/q:a /r:n'
+        }
+        [PSCustomObject]@{
+            Nome    = 'Visual C++ 2005 SP1'
+            Ano     = '2005'
+            Arq     = 'x64'
+            Padroes = @('2005')
+            URL     = 'https://download.microsoft.com/download/6/B/B/6BB661D6-A8AE-4819-B79F-236472F6070C/vcredist_x64.EXE'
+            Arquivo = 'vcredist_2005_x64.exe'
+            Params  = '/q:a /r:n'
+        }
+        [PSCustomObject]@{
+            Nome    = 'Visual C++ 2008 SP1'
+            Ano     = '2008'
+            Arq     = 'x86'
+            Padroes = @('2008')
+            URL     = 'https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x86.exe'
+            Arquivo = 'vcredist_2008_x86.exe'
+            Params  = '/q'
+        }
+        [PSCustomObject]@{
+            Nome    = 'Visual C++ 2008 SP1'
+            Ano     = '2008'
+            Arq     = 'x64'
+            Padroes = @('2008')
+            URL     = 'https://download.microsoft.com/download/5/D/8/5D8C65CB-C849-4025-8E95-C3966CAFD8AE/vcredist_x64.exe'
+            Arquivo = 'vcredist_2008_x64.exe'
+            Params  = '/q'
+        }
+        [PSCustomObject]@{
+            Nome    = 'Visual C++ 2010 SP1'
+            Ano     = '2010'
+            Arq     = 'x86'
+            Padroes = @('2010')
+            URL     = 'https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x86.exe'
+            Arquivo = 'vcredist_2010_x86.exe'
+            Params  = '/quiet /norestart'
+        }
+        [PSCustomObject]@{
+            Nome    = 'Visual C++ 2010 SP1'
+            Ano     = '2010'
+            Arq     = 'x64'
+            Padroes = @('2010')
+            URL     = 'https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe'
+            Arquivo = 'vcredist_2010_x64.exe'
+            Params  = '/quiet /norestart'
+        }
+        [PSCustomObject]@{
+            Nome    = 'Visual C++ 2012 Update 4'
+            Ano     = '2012'
+            Arq     = 'x86'
+            Padroes = @('2012')
+            URL     = 'https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x86.exe'
+            Arquivo = 'vcredist_2012_x86.exe'
+            Params  = '/quiet /norestart'
+        }
+        [PSCustomObject]@{
+            Nome    = 'Visual C++ 2012 Update 4'
+            Ano     = '2012'
+            Arq     = 'x64'
+            Padroes = @('2012')
+            URL     = 'https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe'
+            Arquivo = 'vcredist_2012_x64.exe'
+            Params  = '/quiet /norestart'
+        }
+        [PSCustomObject]@{
+            Nome    = 'Visual C++ 2013 Update 5'
+            Ano     = '2013'
+            Arq     = 'x86'
+            Padroes = @('2013')
+            URL     = 'https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x86.exe'
+            Arquivo = 'vcredist_2013_x86.exe'
+            Params  = '/install /quiet /norestart'
+        }
+        [PSCustomObject]@{
+            Nome    = 'Visual C++ 2013 Update 5'
+            Ano     = '2013'
+            Arq     = 'x64'
+            Padroes = @('2013')
+            URL     = 'https://download.microsoft.com/download/2/E/6/2E61CFA4-993B-4DD4-91DA-3737CD5CD6E3/vcredist_x64.exe'
+            Arquivo = 'vcredist_2013_x64.exe'
+            Params  = '/install /quiet /norestart'
+        }
+        [PSCustomObject]@{
+            Nome    = 'Visual C++ 2015-2022'
+            Ano     = '2015-2022'
+            Arq     = 'x86'
+            Padroes = @('2015', '2017', '2019', '2022', '2015-2022')
+            URL     = 'https://aka.ms/vs/17/release/vc_redist.x86.exe'
+            Arquivo = 'vcredist_2015_2022_x86.exe'
+            Params  = '/install /quiet /norestart'
+        }
+        [PSCustomObject]@{
+            Nome    = 'Visual C++ 2015-2022'
+            Ano     = '2015-2022'
+            Arq     = 'x64'
+            Padroes = @('2015', '2017', '2019', '2022', '2015-2022')
+            URL     = 'https://aka.ms/vs/17/release/vc_redist.x64.exe'
+            Arquivo = 'vcredist_2015_2022_x64.exe'
+            Params  = '/install /quiet /norestart'
+        }
+    )
+
+    # =========================================================================
+    # ETAPA 1 - Listar redistribuiveis ja instalados
+    # =========================================================================
+
+    Write-Etapa '1. Listando redistribuiveis Visual C++ ja instalados...'
+    Write-Host ''
+
+    $regPaths = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+
+    $instalados = [System.Collections.Generic.List[PSObject]]::new()
+    $nomesUnicos = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    foreach ($regPath in $regPaths) {
+        $itens = Get-ChildItem -Path $regPath -ErrorAction SilentlyContinue |
+            Get-ItemProperty -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -match 'Microsoft Visual C\+\+' }
+        foreach ($item in $itens) {
+            $chave = "$($item.DisplayName)|$($item.DisplayVersion)"
+            if ($nomesUnicos.Add($chave)) {
+                $instalados.Add($item)
+            }
+        }
+    }
+
+    if ($instalados.Count -gt 0) {
+        $instalados | Sort-Object DisplayName | ForEach-Object {
+            $arqLabel = if ($_.DisplayName -match '\(x64\)' -or $_.DisplayName -match '- x64') { 'x64' }
+                        elseif ($_.DisplayName -match '\(x86\)' -or $_.DisplayName -match '- x86') { 'x86' }
+                        else { '   ' }
+            Write-Host ("   {0,-6}  {1}" -f "[$arqLabel]", $_.DisplayName) -ForegroundColor White
+            if ($_.DisplayVersion) {
+                Write-Host ("          Versao: {0}" -f $_.DisplayVersion) -ForegroundColor DarkGray
+            }
+        }
+    } else {
+        Write-Aviso 'Nenhum redistribuivel Visual C++ encontrado.'
+    }
+
+    # Funcao de verificacao de instalacao
+    function Test-VCInstalado {
+        param([string[]]$Padroes, [string]$Arq)
+        foreach ($regPath in $regPaths) {
+            $itens = Get-ChildItem -Path $regPath -ErrorAction SilentlyContinue |
+                Get-ItemProperty -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -match 'Microsoft Visual C\+\+' }
+            foreach ($item in $itens) {
+                $nome = $item.DisplayName
+                # Pacotes antigos (2005/2008) nomeiam so a versao x64; a x86 vem
+                # sem sufixo nenhum. Sem este tratamento a x86 nunca era vista
+                # como instalada e o script rebaixava e reinstalava toda vez.
+                $marcaX64 = ($nome -match [regex]::Escape('(x64)') -or $nome -match '[\s-]x64[\s\.]' -or $nome -match 'x64$')
+                $marcaX86 = ($nome -match [regex]::Escape('(x86)') -or $nome -match '[\s-]x86[\s\.]' -or $nome -match 'x86$')
+
+                if ($Arq -eq 'x64') {
+                    if (-not $marcaX64) { continue }
+                } else {
+                    # x86 = tem marca x86, ou nao tem marca alguma de arquitetura
+                    if ($marcaX64) { continue }
+                }
+                foreach ($p in $Padroes) {
+                    if ($nome -match [regex]::Escape($p)) { return $true }
+                }
+            }
+        }
+        return $false
+    }
+
+    # =========================================================================
+    # ETAPA 2 - Verificar quais versoes essenciais estao faltando
+    # =========================================================================
+
+    Write-Etapa '2. Verificando versoes essenciais necessarias...'
+    Write-Host ''
+
+    $faltando = [System.Collections.Generic.List[PSObject]]::new()
+
+    foreach ($pkg in $pacotes) {
+        $estaInstalado = Test-VCInstalado -Padroes $pkg.Padroes -Arq $pkg.Arq
+        if ($estaInstalado) {
+            Write-Ok "$($pkg.Nome) ($($pkg.Arq)) - ja instalado"
+        } else {
+            Write-Aviso "$($pkg.Nome) ($($pkg.Arq)) - FALTANDO"
+            $faltando.Add($pkg)
+        }
+    }
+
+    if ($faltando.Count -eq 0) {
+        Write-Host ''
+        Write-Ok 'Todos os redistribuiveis necessarios ja estao instalados.'
+        Write-Host ''
+        Write-Host ''
+            return [long]0
+    }
+
+    Write-Host ''
+    Write-Aviso "$($faltando.Count) pacote(s) serao baixados e instalados."
+
+    # =========================================================================
+    # ETAPAS 3 e 4 - Baixar e instalar os pacotes faltando
+    # =========================================================================
+
+    Write-Etapa "3/4. Baixando e instalando $($faltando.Count) pacote(s)..."
+
+    $tmpDir = $env:TEMP
+    $resumoInstalados  = [System.Collections.Generic.List[string]]::new()
+    $resumoFalhas      = [System.Collections.Generic.List[string]]::new()
+    $num = 0
+
+    foreach ($pkg in $faltando) {
+        $num++
+        $destino = Join-Path $tmpDir $pkg.Arquivo
+        $label   = "$($pkg.Nome) ($($pkg.Arq))"
+
+        Write-Host ''
+        Write-Host ("   [{0}/{1}]  {2}" -f $num, $faltando.Count, $label) -ForegroundColor Cyan
+
+        # ----- Download -----
+        $downloadOk = $false
+        Write-Info "Baixando de: $($pkg.URL)"
+
+        # Tentativa 1: BITS Transfer (mostra progresso nativo)
+        try {
+            Import-Module BitsTransfer -ErrorAction Stop
+            Start-BitsTransfer -Source $pkg.URL -Destination $destino `
+                -Description "Baixando $label" -Priority Normal -ErrorAction Stop
+            $downloadOk = $true
+            Write-Ok 'Download concluido.'
+        } catch {
+            Write-Aviso "BITS indisponivel, usando WebRequest..."
+            # Tentativa 2: Invoke-WebRequest com progresso manual
+            try {
+                $ProgressPreference = 'SilentlyContinue'
+                Invoke-WebRequest -Uri $pkg.URL -OutFile $destino `
+                    -UseBasicParsing -ErrorAction Stop
+                $ProgressPreference = 'Continue'
+                $downloadOk = $true
+                Write-Ok 'Download concluido.'
+            } catch {
+                Write-Falha "Erro no download: $_"
+                $resumoFalhas.Add("$label  (falha no download)")
+                continue
+            }
+        }
+
+        if (-not $downloadOk -or -not (Test-Path $destino)) {
+            Write-Falha 'Arquivo nao encontrado apos o download.'
+            $resumoFalhas.Add("$label  (arquivo nao baixado)")
+            continue
+        }
+
+        $tamanhoMB = [math]::Round((Get-Item $destino).Length / 1MB, 1)
+        Write-Info "Arquivo: $($pkg.Arquivo)  ($tamanhoMB MB)"
+
+        # ----- Conferir a assinatura digital antes de executar -----
+        # O arquivo veio da internet e vai rodar como Administrador. Se o
+        # download for interceptado ou o link redirecionado, sem esta checagem
+        # o script executaria um binario qualquer com privilegio total.
+        $assinaturaOk = $false
+        try {
+            $sig = Get-AuthenticodeSignature -FilePath $destino -ErrorAction Stop
+            if ($sig.Status -eq 'Valid' -and $sig.SignerCertificate -and
+                $sig.SignerCertificate.Subject -match 'O=Microsoft Corporation') {
+                $assinaturaOk = $true
+                Write-Ok 'Assinatura digital conferida: Microsoft Corporation.'
+            } else {
+                $quem = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { 'sem assinatura' }
+                Write-Falha "Assinatura invalida ou nao e da Microsoft (status: $($sig.Status))."
+                Write-Info  "Assinante: $quem"
+            }
+        } catch {
+            Write-Falha "Nao foi possivel verificar a assinatura: $_"
+        }
+
+        if (-not $assinaturaOk) {
+            Write-Aviso 'Instalacao ABORTADA por seguranca. Arquivo descartado.'
+            Remove-Item -Path $destino -Force -ErrorAction SilentlyContinue
+            $resumoFalhas.Add("$label  (assinatura digital nao confere)")
+            continue
+        }
+
+        # ----- Instalacao -----
+        Write-Info "Instalando silenciosamente..."
+        try {
+            $proc = Start-Process -FilePath $destino `
+                -ArgumentList $pkg.Params `
+                -Wait -PassThru -NoNewWindow -ErrorAction Stop
+
+            switch ($proc.ExitCode) {
+                0    {
+                    Write-Ok "Instalado com sucesso."
+                    $resumoInstalados.Add($label)
+                }
+                3010 {
+                    Write-Ok "Instalado com sucesso. (reinicio necessario)"
+                    $resumoInstalados.Add("$label  [reinicio necessario]")
+                    $script:precisaReiniciar = $true
+                }
+                1638 {
+                    Write-Ok "Versao mais recente ja instalada (codigo 1638)."
+                    $resumoInstalados.Add("$label  [versao mais recente ja presente]")
+                }
+                default {
+                    Write-Falha "Instalacao encerrada com codigo: $($proc.ExitCode)"
+                    $resumoFalhas.Add("$label  (codigo de saida: $($proc.ExitCode))")
+                }
+            }
+        } catch {
+            Write-Falha "Erro ao executar instalador: $_"
+            $resumoFalhas.Add("$label  (erro ao executar)")
+        }
+
+        # Remover arquivo temporario
+        Remove-Item -Path $destino -Force -ErrorAction SilentlyContinue
+    }
+
+    # =========================================================================
+    # ETAPA 5 - Relatorio final
+    # =========================================================================
+
+    Write-Host ''
+    Write-Host '   RELATORIO FINAL                              ' -ForegroundColor Green
+    Write-Host ''
+
+    $jaInstalados = $pacotes.Count - $faltando.Count
+    Write-Host "   Ja instalados antes  : $jaInstalados de $($pacotes.Count)" -ForegroundColor White
+    Write-Host "   Instalados agora     : $($resumoInstalados.Count)" -ForegroundColor White
+    Write-Host "   Falhas               : $($resumoFalhas.Count)" -ForegroundColor White
+    Write-Host ''
+
+    if ($resumoInstalados.Count -gt 0) {
+        Write-Host '   Instalados nesta execucao:' -ForegroundColor Green
+        foreach ($linha in $resumoInstalados) {
+            Write-Host "   + $linha" -ForegroundColor Green
+        }
+        Write-Host ''
+    }
+
+    if ($resumoFalhas.Count -gt 0) {
+        Write-Host '   Falhas:' -ForegroundColor Red
+        foreach ($linha in $resumoFalhas) {
+            Write-Host "   x $linha" -ForegroundColor Red
+        }
+        Write-Host ''
+        Write-Aviso 'Para os pacotes com falha, verifique a conexao com a internet e execute novamente.'
+        Write-Host ''
+    }
+
+    if ($script:precisaReiniciar) {
+        Write-Host '   IMPORTANTE: Reinicie o computador para concluir a instalacao.' -ForegroundColor Yellow
+        Write-Host ''
+    }
+
+    if ($resumoFalhas.Count -eq 0 -and $resumoInstalados.Count -ge 0) {
+        Write-Host '   Todos os redistribuiveis Visual C++ necessarios estao instalados.' -ForegroundColor Green
+        Write-Host ''
+    }
+
+    Write-Host ''
+    return [long]0
+}
+
+function Set-JavaJuridico {
+    <#
+      Veio de ConfigurarJava.ps1.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Configuraria o Java 8 para os sistemas juridicos (security level, exception.sites, cache).'; return [long]0 }
+    # ConfigurarJava.ps1
+    # Configura Java 8 para sistemas juridicos brasileiros (PJe, PROJUDI, eProc, Shodo, Shomei)
+
+    $resumo = [System.Collections.Generic.List[string]]::new()
+
+
+    function Add-Resumo  { param([string]$l) $script:resumo.Add($l) }
+
+    # Escreve arquivo de texto sem BOM (Java nao suporta BOM em .properties)
+    function Write-TextFile {
+        param([string]$Caminho, [object]$Linhas)
+        $enc = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllLines($Caminho, [string[]]$Linhas, $enc)
+    }
+
+    # =========================================================================
+    # Cabecalho
+    # =========================================================================
+
+    Write-Host ''
+    Write-Host '  Java 8 - Configuracao para Sistemas Juridicos ' -ForegroundColor Cyan
+    Write-Host ''
+
+    # =========================================================================
+    # ETAPA 1 - Verificar Java 8
+    # =========================================================================
+
+    Write-Etapa '1. Verificando instalacao do Java 8...'
+
+    $javaHome = $null
+
+    # Busca no registro (64-bit e 32-bit)
+    $regRaizes = @(
+        'HKLM:\SOFTWARE\JavaSoft\Java Runtime Environment',
+        'HKLM:\SOFTWARE\WOW6432Node\JavaSoft\Java Runtime Environment'
+    )
+    foreach ($raiz in $regRaizes) {
+        if (-not (Test-Path $raiz -ErrorAction SilentlyContinue)) { continue }
+        Get-ChildItem -Path $raiz -ErrorAction SilentlyContinue | ForEach-Object {
+            if ($_.PSChildName -like '1.8*' -and -not $javaHome) {
+                $p = Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue
+                if ($p.JavaHome -and (Test-Path "$($p.JavaHome)\bin\java.exe")) {
+                    $javaHome = $p.JavaHome
+                }
+            }
+        }
+        if ($javaHome) { break }
+    }
+
+    # Busca em caminhos comuns de instalacao
+    if (-not $javaHome) {
+        foreach ($base in @('C:\Program Files\Java', 'C:\Program Files (x86)\Java')) {
+            if (-not (Test-Path $base)) { continue }
+            $dir = Get-ChildItem -Path $base -Directory -ErrorAction SilentlyContinue |
+                   Where-Object { $_.Name -like 'jre1.8*' -or $_.Name -like 'jdk1.8*' } |
+                   Sort-Object Name -Descending |
+                   Select-Object -First 1
+            if ($dir -and (Test-Path "$($dir.FullName)\bin\java.exe")) {
+                $javaHome = $dir.FullName
+                break
+            }
+        }
+    }
+
+    if (-not $javaHome) {
+        Write-Falha 'Java 8 (JRE 1.8.x) nao encontrado neste computador.'
+        Write-Info  'Baixe e instale em: https://www.java.com'
+        Write-Info  'Execute este script novamente apos a instalacao.'
+        Write-Host ''
+            return [long]0
+    }
+
+    $javaBin  = "$javaHome\bin\java.exe"
+    $verRaw   = & "$javaBin" -version 2>&1
+    $verLinha = ($verRaw | Select-Object -First 1).ToString()
+    Write-Ok "Versao encontrada: $verLinha"
+    Write-Info "Diretorio: $javaHome"
+    Add-Resumo "Java 8 encontrado: $verLinha"
+    Add-Resumo "Diretorio Java: $javaHome"
+
+    # =========================================================================
+    # ETAPA 2 - Localizar deployment.properties
+    # =========================================================================
+
+    Write-Etapa '2. Localizando arquivo deployment.properties...'
+
+    $possiveis = @(
+        "$env:USERPROFILE\AppData\LocalLow\Sun\Java\Deployment\deployment.properties",
+        "$env:APPDATA\Sun\Java\Deployment\deployment.properties",
+        "$env:USERPROFILE\.java\deployment\deployment.properties",
+        'C:\Windows\Sun\Java\Deployment\deployment.properties'
+    )
+
+    $deployProps = $null
+    $deployDir   = $null
+
+    foreach ($candidato in $possiveis) {
+        if (Test-Path $candidato) {
+            $deployProps = $candidato
+            $deployDir   = Split-Path -Parent $candidato
+            Write-Ok "Encontrado: $deployProps"
+            break
+        }
+    }
+
+    if (-not $deployProps) {
+        $deployDir   = "$env:USERPROFILE\AppData\LocalLow\Sun\Java\Deployment"
+        $deployProps = "$deployDir\deployment.properties"
+        if (-not (Test-Path $deployDir)) {
+            New-Item -ItemType Directory -Path $deployDir -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        Write-TextFile -Caminho $deployProps -Linhas @()
+        Write-Aviso "Nao encontrado em nenhum local padrao."
+        Write-Ok   "Criado novo arquivo em: $deployProps"
+    }
+
+    Add-Resumo "deployment.properties: $deployProps"
+
+    # =========================================================================
+    # ETAPA 3 - Backup do deployment.properties
+    # =========================================================================
+
+    Write-Etapa '3. Criando backup do deployment.properties...'
+
+    $ts         = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $backupPath = "$deployProps.bak.$ts"
+
+    try {
+        Copy-Item -Path $deployProps -Destination $backupPath -Force -ErrorAction Stop
+        Write-Ok "Backup criado: $backupPath"
+        Add-Resumo "Backup: $backupPath"
+    } catch {
+        Write-Aviso "Nao foi possivel criar backup: $_"
+    }
+
+    # =========================================================================
+    # ETAPA 4 - Configurar nivel de seguranca MEDIUM
+    # =========================================================================
+
+    Write-Etapa '4. Configurando nivel de seguranca do Java...'
+
+    # MEDIUM foi removido do Java a partir do 8u20: os unicos niveis validos sao
+    # HIGH e VERY_HIGH. Gravar MEDIUM faz o Java ignorar e cair de volta em HIGH.
+    # Quem realmente libera os sistemas juridicos e' o exception.sites (etapa 5).
+    $chaveNivel  = 'deployment.security.level'
+    $chaveLocked = 'deployment.security.level.locked'
+    $chaveExpira = 'deployment.expiration.check.enabled'
+    $chaveWebJava = 'deployment.webjava.enabled'
+
+    $linhasDP   = [System.IO.File]::ReadAllLines($deployProps)
+    $novaDP     = [System.Collections.Generic.List[string]]::new()
+    $achouNivel = $false
+
+    foreach ($linha in $linhasDP) {
+        # Qualquer chave .locked trava o painel do Java: removida do arquivo.
+        if ($linha -match '^\s*deployment\..*\.locked\s*=') {
+            Write-Aviso ('Removendo bloqueio: ' + ($linha -split '=')[0].Trim())
+            continue
+        }
+        if ($linha -match "^\s*$chaveNivel\s*=") {
+            $novaDP.Add("$chaveNivel=HIGH")
+            $achouNivel = $true
+        } elseif ($linha -match "^\s*$chaveExpira\s*=" -or $linha -match "^\s*$chaveWebJava\s*=") {
+            continue
+        } else {
+            $novaDP.Add($linha)
+        }
+    }
+    if (-not $achouNivel) { $novaDP.Add("$chaveNivel=HIGH") }
+
+    # Evita o aviso "Java desatualizado" que trava o usuario, e garante applets.
+    $novaDP.Add("$chaveExpira=false")
+    $novaDP.Add("$chaveWebJava=true")
+
+    Write-TextFile -Caminho $deployProps -Linhas $novaDP
+
+    if ($achouNivel) {
+        Write-Ok 'deployment.security.level atualizado para HIGH.'
+    } else {
+        Write-Ok 'deployment.security.level=HIGH adicionado.'
+    }
+    Write-Info 'Bloqueios (.locked) removidos e verificacao de expiracao desativada.'
+    Add-Resumo 'Seguranca: deployment.security.level=HIGH (bloqueios removidos)'
+
+    # =========================================================================
+    # ETAPA 5 - Configurar excecoes de sites
+    # =========================================================================
+
+    Write-Etapa '5. Configurando excecoes de sites para sistemas juridicos...'
+
+    $urlsNecessarias = [ordered]@{
+        'https://127.0.0.1:9000'         = 'Shodo'
+        'https://127.0.0.1:9003'         = 'Shomei'
+        'http://127.0.0.1'               = 'PJe / PROJUDI local'
+        'https://pje.jus.br'             = 'PJe nacional'
+        'https://projudi.tjgo.jus.br'    = 'PROJUDI TJGO'
+        'https://projudi.tjam.jus.br'    = 'PROJUDI TJAM'
+        'https://projudi.tjrr.jus.br'    = 'PROJUDI TJRR'
+        'https://projudi.tjap.jus.br'    = 'PROJUDI TJAP'
+        'https://projudi.tjba.jus.br'    = 'PROJUDI TJBA'
+        'https://projudi.tjpa.jus.br'    = 'PROJUDI TJPA'
+        'https://projudi.tjmt.jus.br'    = 'PROJUDI TJMT'
+        'https://projudi.tjms.jus.br'    = 'PROJUDI TJMS'
+        'https://projudi.tjto.jus.br'    = 'PROJUDI TJTO'
+        'https://projudi.tjpi.jus.br'    = 'PROJUDI TJPI'
+        'https://projudi.tjma.jus.br'    = 'PROJUDI TJMA'
+        'https://projudi.tjal.jus.br'    = 'PROJUDI TJAL'
+        'https://projudi.tjse.jus.br'    = 'PROJUDI TJSE'
+        'https://projudi.tjpb.jus.br'    = 'PROJUDI TJPB'
+        'https://projudi.tjrn.jus.br'    = 'PROJUDI TJRN'
+        'https://projudi.tjce.jus.br'    = 'PROJUDI TJCE'
+        'https://projudi.tjpe.jus.br'    = 'PROJUDI TJPE'
+        'https://projudi.tjac.jus.br'    = 'PROJUDI TJAC'
+        'https://projudi.tjro.jus.br'    = 'PROJUDI TJRO'
+        'https://projudi.tjrj.jus.br'    = 'PROJUDI TJRJ'
+        'https://projudi.tjes.jus.br'    = 'PROJUDI TJES'
+        'https://projudi.tjmg.jus.br'    = 'PROJUDI TJMG'
+        'https://projudi.tjsp.jus.br'    = 'PROJUDI TJSP'
+        'https://projudi.tjpr.jus.br'    = 'PROJUDI TJPR'
+        'https://projudi.tjsc.jus.br'    = 'PROJUDI TJSC'
+        'https://projudi.tjrs.jus.br'    = 'PROJUDI TJRS'
+        'https://projudi.tjdft.jus.br'   = 'PROJUDI TJDFT'
+        'https://eproc.jfrs.jus.br'      = 'eProc JFRS'
+        'https://eproc1.trf4.jus.br'     = 'eProc TRF4 (1)'
+        'https://eproc2.trf4.jus.br'     = 'eProc TRF4 (2)'
+    }
+
+    # Determina caminho do exception.sites a partir do deployment.properties
+    $chaveExcecoes = 'deployment.user.security.exception.sites'
+    $pathExcecoes  = $null
+
+    $dpAtual = [System.IO.File]::ReadAllLines($deployProps)
+    foreach ($linha in $dpAtual) {
+        if ($linha -match "^$chaveExcecoes\s*=\s*(.+)$") {
+            $pathExcecoes = ($Matches[1].Trim()) -replace '/', '\'
+            break
+        }
+    }
+
+    if (-not $pathExcecoes) {
+        $pathExcecoes = "$deployDir\security\exception.sites"
+    }
+
+    # Cria o diretorio se nao existir
+    $dirExcecoes = Split-Path -Parent $pathExcecoes
+    if (-not (Test-Path $dirExcecoes)) {
+        New-Item -ItemType Directory -Path $dirExcecoes -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+
+    # Le URLs ja existentes no arquivo
+    $urlsExistentes = @()
+    if (Test-Path $pathExcecoes) {
+        $urlsExistentes = [System.IO.File]::ReadAllLines($pathExcecoes) |
+                          Where-Object { $_.Trim() -ne '' } |
+                          ForEach-Object { $_.Trim() }
+    }
+
+    $conjExistentes = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    foreach ($u in $urlsExistentes) { [void]$conjExistentes.Add($u) }
+
+    $listaFinal = [System.Collections.Generic.List[string]]::new()
+    foreach ($u in $urlsExistentes) { $listaFinal.Add($u) }
+
+    $qtdAdicionados = 0
+    $qtdJaExistiam  = 0
+
+    foreach ($url in $urlsNecessarias.Keys) {
+        $label = $urlsNecessarias[$url]
+        if ($conjExistentes.Contains($url)) {
+            Write-Aviso "Ja existe:  $url  ($label)"
+            $qtdJaExistiam++
+        } else {
+            $listaFinal.Add($url)
+            Write-Ok   "Adicionado: $url  ($label)"
+            $qtdAdicionados++
+        }
+    }
+
+    Write-TextFile -Caminho $pathExcecoes -Linhas $listaFinal
+
+    # Garante que deployment.properties aponta para o exception.sites
+    $pathExcecoesJava = $pathExcecoes -replace '\\', '/'
+    $dpAtual2   = [System.IO.File]::ReadAllLines($deployProps)
+    $dpLista2   = [System.Collections.Generic.List[string]]::new()
+    $achouChave = $false
+    foreach ($linha in $dpAtual2) {
+        if ($linha -match "^$chaveExcecoes\s*=") {
+            $dpLista2.Add("$chaveExcecoes=$pathExcecoesJava")
+            $achouChave = $true
+        } else {
+            $dpLista2.Add($linha)
+        }
+    }
+    if (-not $achouChave) { $dpLista2.Add("$chaveExcecoes=$pathExcecoesJava") }
+    Write-TextFile -Caminho $deployProps -Linhas $dpLista2
+
+    Write-Info "Arquivo exception.sites: $pathExcecoes"
+    Write-Info "Adicionados: $qtdAdicionados  |  Ja existiam: $qtdJaExistiam  |  Total na lista: $($listaFinal.Count)"
+    Add-Resumo "Excecoes: $qtdAdicionados URL(s) adicionada(s), $qtdJaExistiam ja existiam"
+    Add-Resumo "exception.sites: $pathExcecoes"
+
+    # =========================================================================
+    # ETAPA 6 - Limpar cache do Java
+    # =========================================================================
+
+    Write-Etapa '6. Limpando cache do Java...'
+
+    $dirsCache = @(
+        "$env:USERPROFILE\AppData\LocalLow\Sun\Java\Deployment\cache",
+        "$env:APPDATA\Sun\Java\Deployment\cache"
+    )
+
+    $totalBytes  = [long]0
+    $cacheLimpos = 0
+
+    foreach ($dir in $dirsCache) {
+        if (-not (Test-Path $dir)) { continue }
+        try {
+            $arquivos = Get-ChildItem -Path $dir -Recurse -File -ErrorAction SilentlyContinue
+            $bytes    = ($arquivos | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+            if ($bytes) { $totalBytes += [long]$bytes }
+            Remove-Item -Path "$dir\*" -Recurse -Force -ErrorAction SilentlyContinue
+            $cacheLimpos++
+            $tamanho = if ($bytes -ge 1MB) { '{0:N1} MB' -f ($bytes / 1MB) } `
+                       elseif ($bytes -ge 1KB) { '{0:N0} KB' -f ($bytes / 1KB) } `
+                       else { "$bytes bytes" }
+            Write-Ok "Cache limpo: $dir  ($tamanho)"
+        } catch {
+            Write-Aviso "Nao foi possivel limpar cache em: $dir"
+        }
+    }
+
+    if ($cacheLimpos -eq 0) {
+        Write-Info 'Pasta de cache nao encontrada ou ja estava vazia.'
+        Add-Resumo 'Cache Java: nenhum arquivo encontrado'
+    } else {
+        $totalStr = if ($totalBytes -ge 1MB) { '{0:N1} MB' -f ($totalBytes / 1MB) } `
+                    elseif ($totalBytes -ge 1KB) { '{0:N0} KB' -f ($totalBytes / 1KB) } `
+                    else { "$totalBytes bytes" }
+        Add-Resumo "Cache Java limpo: $totalStr removidos"
+    }
+
+    # =========================================================================
+    # RESUMO FINAL
+    # =========================================================================
+
+    Write-Host ''
+    Write-Host '   Configuracao concluida com sucesso!          ' -ForegroundColor Green
+    Write-Host ''
+
+    foreach ($linha in $resumo) {
+        Write-Host "  $linha" -ForegroundColor Gray
+    }
+
+    Write-Host ''
+    Write-Host '  Proximos passos recomendados:' -ForegroundColor Cyan
+    Write-Host '  1. Feche todos os navegadores abertos' -ForegroundColor White
+    Write-Host '  2. Acesse o sistema juridico normalmente' -ForegroundColor White
+    Write-Host '  3. Se aparecer aviso de seguranca Java, clique em Executar' -ForegroundColor White
+    Write-Host '  4. Se ainda houver problemas, verifique o token/certificado' -ForegroundColor White
+    Write-Host ''
+    Write-Host ''
+    return [long]0
+}
+
+function Remove-ImpressoraEDriver {
+    <#
+      Veio de ReinstalarImpressora.ps1.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Listaria as impressoras para remocao de impressora e driver.'; return [long]0 }
+    # ReinstalarImpressora.ps1
+    # Remove e reinstala driver de impressora com limpeza completa
+
+
+
+
+    # =========================================================================
+    # Cabecalho
+    # =========================================================================
+
+    Write-Host ''
+    Write-Host '   Remocao e Limpeza de Driver de Impressora    ' -ForegroundColor Cyan
+    Write-Host ''
+
+    # Verificar privilegios de administrador
+
+    # =========================================================================
+    # ETAPA 1 - Listar impressoras instaladas
+    # =========================================================================
+
+    Write-Etapa '1. Listando impressoras instaladas...'
+    Write-Host ''
+
+    $impressoras = @(Get-Printer -ErrorAction SilentlyContinue | Sort-Object Name)
+
+    if ($impressoras.Count -eq 0) {
+        Write-Aviso 'Nenhuma impressora encontrada no sistema.'
+        Write-Host ''
+            return [long]0
+    }
+
+    $i = 1
+    foreach ($imp in $impressoras) {
+        $tipo = if ($imp.Type -eq 'Connection') { 'Rede' } else { 'Local' }
+        Write-Host ("   [{0,2}]  {1}" -f $i, $imp.Name) -ForegroundColor White
+        Write-Host ("         Driver : {0}" -f $imp.DriverName) -ForegroundColor Gray
+        Write-Host ("         Porta  : {0}  |  Tipo: {1}" -f $imp.PortName, $tipo) -ForegroundColor Gray
+        Write-Host ''
+        $i++
+    }
+
+    # Selecao da impressora
+    $selecao = $null
+    do {
+        $entrada = Read-Host '   Digite o numero da impressora a remover (0 para cancelar)'
+        if ($entrada -eq '0') {
+            Write-Info 'Operacao cancelada pelo usuario.'
+            return [long]0
+        }
+        if ($entrada -match '^\d+$') {
+            $num = [int]$entrada
+            if ($num -ge 1 -and $num -le $impressoras.Count) {
+                $selecao = $num
+            } else {
+                Write-Aviso "Numero invalido. Digite entre 1 e $($impressoras.Count)."
+            }
+        } else {
+            Write-Aviso 'Digite apenas o numero correspondente.'
+        }
+    } while ($null -eq $selecao)
+
+    $impressoraSel = $impressoras[$selecao - 1]
+    $nomeImpressora = $impressoraSel.Name
+    $nomeDriver     = $impressoraSel.DriverName
+    $nomePorta      = $impressoraSel.PortName
+
+    Write-Host ''
+    Write-Host '   Impressora selecionada:' -ForegroundColor Cyan
+    Write-Host "   Nome   : $nomeImpressora" -ForegroundColor White
+    Write-Host "   Driver : $nomeDriver"     -ForegroundColor White
+    Write-Host "   Porta  : $nomePorta"      -ForegroundColor White
+    Write-Host ''
+
+    $confirma = Read-Host '   Confirma a remocao completa? Esta operacao nao pode ser desfeita. (S/N)'
+    if ($confirma -notmatch '^[Ss]$') {
+        Write-Info 'Operacao cancelada pelo usuario.'
+            return [long]0
+    }
+
+    # Verificar se outras impressoras usam o mesmo driver
+    $outrasComDriver = @(Get-Printer | Where-Object {
+        $_.DriverName -eq $nomeDriver -and $_.Name -ne $nomeImpressora
+    })
+
+    $removerDriver = $true
+    if ($outrasComDriver.Count -gt 0) {
+        Write-Host ''
+        Write-Aviso "O driver '$nomeDriver' esta em uso por outras impressoras:"
+        foreach ($outra in $outrasComDriver) { Write-Info "  - $($outra.Name)" }
+        Write-Aviso 'O driver NAO sera removido para nao afetar as demais impressoras.'
+        $removerDriver = $false
+    }
+
+    # =========================================================================
+    # ETAPA 2 - Coletar informacoes do driver no registro
+    # =========================================================================
+
+    Write-Etapa '2. Coletando informacoes do driver no registro antes da remocao...'
+
+    $arquivosDriver = [System.Collections.Generic.List[string]]::new()
+
+    $regAmbientes = @(
+        "HKLM:\SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-3\$nomeDriver",
+        "HKLM:\SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-4\$nomeDriver",
+        "HKLM:\SYSTEM\CurrentControlSet\Control\Print\Environments\Windows NT x86\Drivers\Version-3\$nomeDriver"
+    )
+
+    foreach ($regPath in $regAmbientes) {
+        if (-not (Test-Path -LiteralPath $regPath -ErrorAction SilentlyContinue)) { continue }
+        $props = Get-ItemProperty -LiteralPath $regPath -ErrorAction SilentlyContinue
+        if (-not $props) { continue }
+        Write-Ok "Driver localizado: $regPath"
+        foreach ($propNome in @('DriverPath', 'DataFile', 'ConfigFile', 'HelpFile')) {
+            $val = $props.$propNome
+            if ($val -and $val.Trim() -ne '') { $arquivosDriver.Add($val.Trim()) }
+        }
+        if ($props.DependentFiles) {
+            foreach ($dep in $props.DependentFiles) {
+                if ($dep -and $dep.Trim() -ne '') { $arquivosDriver.Add($dep.Trim()) }
+            }
+        }
+    }
+
+    if ($arquivosDriver.Count -gt 0) {
+        Write-Info "$($arquivosDriver.Count) arquivo(s) de driver mapeados para limpeza posterior."
+    } else {
+        Write-Aviso 'Nenhum arquivo de driver encontrado no registro (sera feita limpeza generica).'
+    }
+
+    # =========================================================================
+    # ETAPA 3 - Remover a impressora
+    # =========================================================================
+
+    Write-Etapa "3. Removendo a impressora '$nomeImpressora'..."
+
+    $impressoraRemovida = $false
+    try {
+        Remove-Printer -Name $nomeImpressora -ErrorAction Stop
+        Write-Ok "Impressora '$nomeImpressora' removida."
+        $impressoraRemovida = $true
+    } catch {
+        Write-Aviso "Falha pelo cmdlet: $_"
+        Write-Info  'Tentando remocao via WMI...'
+        try {
+            $wmiPrinter = Get-WmiObject -Class Win32_Printer |
+                Where-Object { $_.Name -eq $nomeImpressora }
+            if ($wmiPrinter) {
+                $wmiPrinter.Delete() | Out-Null
+                Write-Ok "Impressora removida via WMI."
+                $impressoraRemovida = $true
+            } else {
+                Write-Falha 'Impressora nao encontrada via WMI.'
+            }
+        } catch {
+            Write-Falha "Erro na remocao via WMI: $_"
+        }
+    }
+
+    # =========================================================================
+    # ETAPA 4 - Remover o driver
+    # =========================================================================
+
+    $driverRemovido = $false
+
+    if ($removerDriver) {
+        Write-Etapa "4. Removendo driver '$nomeDriver' do sistema..."
+
+        # Tentativa 1: cmdlet padrao
+        try {
+            Remove-PrinterDriver -Name $nomeDriver -ErrorAction Stop
+            Write-Ok "Driver removido pelo cmdlet padrao."
+            $driverRemovido = $true
+        } catch {
+            Write-Aviso "Metodo 1 falhou: $_"
+        }
+
+        # Tentativa 2: com RemoveFromDriverStore
+        if (-not $driverRemovido) {
+            try {
+                Remove-PrinterDriver -Name $nomeDriver -RemoveFromDriverStore -ErrorAction Stop
+                Write-Ok "Driver removido com RemoveFromDriverStore."
+                $driverRemovido = $true
+            } catch {
+                Write-Aviso "Metodo 2 falhou: $_"
+            }
+        }
+
+        # Tentativa 3: via WMI
+        if (-not $driverRemovido) {
+            Write-Info 'Tentando remocao via WMI...'
+            try {
+                $wmiDrivers = Get-WmiObject -Class Win32_PrinterDriver |
+                    Where-Object { $_.Name -like "$nomeDriver*" }
+                if ($wmiDrivers) {
+                    $wmiDrivers | ForEach-Object { $_.Delete() | Out-Null }
+                    Write-Ok 'Driver removido via WMI.'
+                    $driverRemovido = $true
+                } else {
+                    Write-Aviso 'Driver nao localizado via WMI.'
+                }
+            } catch {
+                Write-Aviso "Metodo WMI falhou: $_"
+            }
+        }
+
+        if (-not $driverRemovido) {
+            Write-Aviso 'Remocao automatica do driver nao foi possivel.'
+            Write-Info  'A limpeza manual de arquivos e registro sera realizada a seguir.'
+        }
+    } else {
+        Write-Etapa '4. Remocao de driver pulada (em uso por outras impressoras).'
+    }
+
+    # =========================================================================
+    # ETAPA 5 - Parar Spooler e limpar fila de impressao
+    # =========================================================================
+
+    Write-Etapa '5. Parando Spooler e limpando fila de impressao...'
+
+    try {
+        Stop-Service -Name Spooler -Force -ErrorAction Stop
+        Write-Ok 'Servico Spooler parado.'
+    } catch {
+        Write-Falha "Erro ao parar Spooler: $_"
+    }
+
+    $spoolPrinters = "$env:SystemRoot\System32\spool\PRINTERS"
+    if (Test-Path $spoolPrinters) {
+        $filaItens = @(Get-ChildItem -Path $spoolPrinters -ErrorAction SilentlyContinue)
+        if ($filaItens.Count -gt 0) {
+            # A fila e' unica para o Windows todo: isso descarta documentos
+            # pendentes de TODAS as impressoras e de todos os usuarios.
+            Write-Aviso "$($filaItens.Count) documento(s) na fila de impressao (de todas as impressoras)."
+            Write-Info  'Limpar a fila descarta esses documentos - eles teriam que ser reenviados.'
+            $respFila = Read-Host '   Limpar a fila de impressao? (S/N)'
+            if ($respFila -match '^[Ss]') {
+                Remove-Item -Path "$spoolPrinters\*" -Force -ErrorAction SilentlyContinue
+                Write-Ok "Fila de impressao limpa ($($filaItens.Count) arquivo(s) removidos)."
+            } else {
+                Write-Info 'Fila de impressao mantida.'
+            }
+        } else {
+            Write-Info 'Fila de impressao ja estava vazia.'
+        }
+    }
+
+    # =========================================================================
+    # ETAPA 6 - Limpar arquivos residuais do driver em spool\drivers
+    # =========================================================================
+
+    Write-Etapa '6. Limpando arquivos residuais do driver em spool\drivers...'
+
+    $spoolDirs = @(
+        "$env:SystemRoot\System32\spool\drivers\x64\3",
+        "$env:SystemRoot\System32\spool\drivers\x64\4",
+        "$env:SystemRoot\System32\spool\drivers\W32X86\3"
+    )
+
+    $arquivosRemovidos   = 0
+    $arquivosNaoRemovidos = 0
+
+    foreach ($arquivo in $arquivosDriver) {
+        $caminhoFinal = $null
+        if ([System.IO.Path]::IsPathRooted($arquivo)) {
+            $caminhoFinal = $arquivo
+        } else {
+            foreach ($dir in $spoolDirs) {
+                $candidato = Join-Path $dir $arquivo
+                if (Test-Path $candidato) { $caminhoFinal = $candidato; break }
+            }
+        }
+        if (-not $caminhoFinal -or -not (Test-Path $caminhoFinal)) { continue }
+        try {
+            Remove-Item -LiteralPath $caminhoFinal -Force -ErrorAction Stop
+            Write-Ok "Removido: $(Split-Path $caminhoFinal -Leaf)"
+            $arquivosRemovidos++
+        } catch {
+            Write-Aviso "Nao foi possivel remover: $(Split-Path $caminhoFinal -Leaf)"
+            $arquivosNaoRemovidos++
+        }
+    }
+
+    if ($arquivosDriver.Count -eq 0) {
+        Write-Info 'Nenhum arquivo especifico mapeado; arquivos ja foram removidos pelo sistema.'
+    } elseif ($arquivosRemovidos -eq 0 -and $arquivosNaoRemovidos -eq 0) {
+        Write-Info 'Arquivos do driver ja removidos automaticamente na etapa anterior.'
+    } else {
+        Write-Info "Resultado: $arquivosRemovidos removido(s), $arquivosNaoRemovidos nao removido(s)."
+    }
+
+    # =========================================================================
+    # ETAPA 7 - Limpar entradas residuais no registro
+    # =========================================================================
+
+    Write-Etapa '7. Limpando entradas residuais no registro...'
+
+    $regLimpos = 0
+
+    # Entrada da impressora em Print\Printers
+    $regImpressora = "HKLM:\SYSTEM\CurrentControlSet\Control\Print\Printers\$nomeImpressora"
+    if (Test-Path -LiteralPath $regImpressora -ErrorAction SilentlyContinue) {
+        try {
+            Remove-Item -LiteralPath $regImpressora -Recurse -Force -ErrorAction Stop
+            Write-Ok "Registro da impressora removido: Print\Printers\$nomeImpressora"
+            $regLimpos++
+        } catch {
+            Write-Aviso "Nao foi possivel remover registro da impressora: $_"
+        }
+    } else {
+        Write-Info 'Entrada de impressora no registro ja removida.'
+    }
+
+    # Entrada no hive SOFTWARE (presente em algumas versoes)
+    $regSoftware = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Print\Printers\$nomeImpressora"
+    if (Test-Path -LiteralPath $regSoftware -ErrorAction SilentlyContinue) {
+        try {
+            Remove-Item -LiteralPath $regSoftware -Recurse -Force -ErrorAction Stop
+            Write-Ok 'Entrada adicional removida do registro (SOFTWARE hive).'
+            $regLimpos++
+        } catch {
+            Write-Aviso "Nao foi possivel remover entrada SOFTWARE: $_"
+        }
+    }
+
+    # Entradas do driver nos ambientes de impressao
+    if ($removerDriver) {
+        foreach ($regPath in $regAmbientes) {
+            if (-not (Test-Path -LiteralPath $regPath -ErrorAction SilentlyContinue)) { continue }
+            try {
+                Remove-Item -LiteralPath $regPath -Recurse -Force -ErrorAction Stop
+                Write-Ok "Registro do driver removido: ...$(($regPath -split 'Environments')[1])"
+                $regLimpos++
+            } catch {
+                Write-Aviso "Nao foi possivel remover entrada de driver: $regPath"
+            }
+        }
+    }
+
+    if ($regLimpos -eq 0) {
+        Write-Info 'Nenhuma entrada residual encontrada no registro.'
+    }
+
+    # =========================================================================
+    # ETAPA 8 - Reiniciar servico Spooler
+    # =========================================================================
+
+    Write-Etapa '8. Reiniciando servico Spooler...'
+
+    try {
+        Start-Service -Name Spooler -ErrorAction Stop
+        Start-Sleep -Seconds 2
+        $spooler = Get-Service -Name Spooler -ErrorAction SilentlyContinue
+        if ($spooler -and $spooler.Status -eq 'Running') {
+            Write-Ok 'Servico Spooler reiniciado e em execucao.'
+        } else {
+            Write-Aviso "Servico Spooler status: $($spooler.Status). Verifique em services.msc."
+        }
+    } catch {
+        Write-Falha "Erro ao iniciar Spooler: $_"
+        Write-Info  'Inicie manualmente: services.msc > Spooler > Iniciar'
+    }
+
+    # =========================================================================
+    # Relatorio final e orientacoes
+    # =========================================================================
+
+    Write-Host ''
+    Write-Host '   LIMPEZA CONCLUIDA - COMO REINSTALAR          ' -ForegroundColor Green
+    Write-Host ''
+    Write-Host '   Impressora removida  : ' -NoNewline -ForegroundColor White
+    Write-Host $nomeImpressora -ForegroundColor Yellow
+    Write-Host '   Driver               : ' -NoNewline -ForegroundColor White
+    if ($removerDriver -and $driverRemovido) {
+        Write-Host "$nomeDriver  [removido]" -ForegroundColor Green
+    } elseif ($removerDriver -and -not $driverRemovido) {
+        Write-Host "$nomeDriver  [limpeza manual realizada]" -ForegroundColor Yellow
+    } else {
+        Write-Host "$nomeDriver  [mantido - em uso por outras impressoras]" -ForegroundColor DarkGray
+    }
+    Write-Host ''
+    Write-Host '   Para reinstalar a impressora:' -ForegroundColor Cyan
+    Write-Host ''
+    Write-Host '   1. Acesse o site do fabricante e busque o driver usando:' -ForegroundColor White
+    Write-Host "         Nome da impressora : $nomeImpressora" -ForegroundColor Yellow
+    Write-Host "         Nome do driver     : $nomeDriver"     -ForegroundColor Yellow
+    Write-Host ''
+    Write-Host '   2. Baixe o driver para Windows 10/11 64-bit' -ForegroundColor White
+    Write-Host ''
+    Write-Host '   3. Execute o instalador como Administrador' -ForegroundColor White
+    Write-Host ''
+    Write-Host '   4. Ou adicione via Painel de Controle:' -ForegroundColor White
+    Write-Host '      Dispositivos e Impressoras > Adicionar Impressora' -ForegroundColor Gray
+    Write-Host ''
+    Write-Host ''
+    return [long]0
+}
+
+function Repair-Webcam {
+    <#
+      Veio de RepararWebcam.ps1.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Diagnosticaria e repararia a webcam (drivers, servicos, permissoes).'; return [long]0 }
+    # RepararWebcam.ps1
+    # Detecta e resolve automaticamente todos os problemas comuns de webcam
+
+    $resolvidoHW    = $false
+    $etapaResolvida = ''
+    $acoesTomadas   = [System.Collections.Generic.List[string]]::new()
+
+
+
+    function Get-DispositivosCamera {
+        Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object {
+            ($_.Class -in @('Camera', 'Image')) -or
+            ($_.FriendlyName -match '(?i)(webcam|camera|\bcam\b)' -and
+             $_.FriendlyName -notmatch '(?i)(virtual|scanner|fax|projector|imagin)')
+        }
+    }
+
+    function Test-CameraFuncionando {
+        @(Get-DispositivosCamera | Where-Object { $_.Status -eq 'OK' })
+    }
+
+    function Verifica-EResolvido {
+        param([string]$EtapaLabel)
+        if ($script:resolvidoHW) { return $true }
+        $camsOK = Test-CameraFuncionando
+        if ($camsOK.Count -gt 0) {
+            $script:resolvidoHW    = $true
+            $script:etapaResolvida = $EtapaLabel
+            foreach ($c in $camsOK) {
+                Write-Ok "Camera detectada e funcionando: $($c.FriendlyName)"
+            }
+            return $true
+        }
+        return $false
+    }
+
+    function Descricao-ProblemCode {
+        param([int]$Code)
+        switch ($Code) {
+            0   { 'Funcionando normalmente' }
+            1   { 'Nao configurado corretamente' }
+            10  { 'Nao foi possivel iniciar' }
+            22  { 'Desabilitado manualmente' }
+            28  { 'Driver nao instalado' }
+            43  { 'Erro reportado pelo dispositivo (codigo 43)' }
+            45  { 'Nao esta conectado' }
+            52  { 'Windows nao pode verificar assinatura digital do driver' }
+            default { "Erro codigo $Code" }
+        }
+    }
+
+    # =========================================================================
+    # Cabecalho
+    # =========================================================================
+
+    Write-Host ''
+    Write-Host '   Reparo Automatico de Webcam / Camera         ' -ForegroundColor Cyan
+    Write-Host ''
+
+
+    # =========================================================================
+    # ETAPA 1 - Verificar dispositivos de camera (incluindo desabilitados e com erro)
+    # =========================================================================
+
+    Write-Etapa '1/8  Verificando dispositivos de camera no sistema...'
+    Write-Host ''
+
+    $todasCameras = @(Get-DispositivosCamera)
+
+    if ($todasCameras.Count -gt 0) {
+        Write-Info "$($todasCameras.Count) dispositivo(s) de camera encontrado(s):"
+        Write-Host ''
+        foreach ($cam in $todasCameras) {
+            $cor = switch ($cam.Status) {
+                'OK'    { 'Green' }
+                'Error' { 'Yellow' }
+                default { 'Gray' }
+            }
+            $statusDesc = Descricao-ProblemCode -Code ([int]$cam.ProblemCode)
+            Write-Host ("   {0}" -f $cam.FriendlyName) -ForegroundColor $cor
+            Write-Host ("   Status : {0}  |  Classe: {1}" -f $statusDesc, $cam.Class) -ForegroundColor DarkGray
+            Write-Host ("   ID     : {0}" -f $cam.InstanceId) -ForegroundColor DarkGray
+            Write-Host ''
+        }
+    } else {
+        Write-Aviso 'Nenhum dispositivo de camera encontrado no sistema.'
+        Write-Info  'A camera pode estar completamente desconectada ou sem driver algum.'
+        Write-Host ''
+    }
+
+    Verifica-EResolvido -EtapaLabel 'camera ja funcionando antes de qualquer reparo' | Out-Null
+
+    # =========================================================================
+    # ETAPA 2 - Reabilitar cameras desabilitadas
+    # =========================================================================
+
+    if (-not $resolvidoHW) {
+        Write-Etapa '2/8  Reabilitando cameras desabilitadas...'
+
+        $camerasDesab = @($todasCameras | Where-Object { $_.ProblemCode -eq 22 })
+
+        if ($camerasDesab.Count -gt 0) {
+            foreach ($cam in $camerasDesab) {
+                Write-Info "Reabilitando: $($cam.FriendlyName)"
+                try {
+                    Enable-PnpDevice -InstanceId $cam.InstanceId -Confirm:$false -ErrorAction Stop
+                    Write-Ok "Reabilitada: $($cam.FriendlyName)"
+                    $acoesTomadas.Add("Camera reabilitada: $($cam.FriendlyName)")
+                } catch {
+                    Write-Aviso "Falha pelo cmdlet: $_ - tentando via pnputil..."
+                    & pnputil /enable-device $cam.InstanceId 2>&1 | ForEach-Object { Write-Info $_.ToString() }
+                }
+            }
+            Write-Info 'Aguardando sistema reconhecer o dispositivo...'
+            Start-Sleep -Seconds 3
+            $todasCameras = @(Get-DispositivosCamera)
+        } else {
+            Write-Info 'Nenhuma camera desabilitada encontrada.'
+        }
+
+        Verifica-EResolvido -EtapaLabel 'camera reabilitada (estava desabilitada)' | Out-Null
+    }
+
+    # =========================================================================
+    # ETAPA 3 - Reinstalar driver de cameras com erro
+    # =========================================================================
+
+    if (-not $resolvidoHW) {
+        Write-Etapa '3/8  Reinstalando driver de cameras com erro...'
+
+        $camerasErro = @($todasCameras | Where-Object {
+            $_.Status -eq 'Error' -and $_.ProblemCode -notin @(22, 45)
+        })
+
+        if ($camerasErro.Count -gt 0) {
+            foreach ($cam in $camerasErro) {
+                $probDesc = Descricao-ProblemCode -Code ([int]$cam.ProblemCode)
+                Write-Info "Reinstalando driver: $($cam.FriendlyName) - $probDesc"
+                try {
+                    Disable-PnpDevice -InstanceId $cam.InstanceId -Confirm:$false -ErrorAction SilentlyContinue
+                    Start-Sleep -Milliseconds 1000
+                    Enable-PnpDevice -InstanceId $cam.InstanceId -Confirm:$false -ErrorAction Stop
+                    Write-Ok "Driver recarregado: $($cam.FriendlyName)"
+                    $acoesTomadas.Add("Driver reinstalado: $($cam.FriendlyName)")
+                } catch {
+                    Write-Aviso "Falha no ciclo disable/enable: $_"
+                }
+            }
+            Write-Info 'Aguardando recarregamento do driver...'
+            Start-Sleep -Seconds 4
+            Write-Info 'Acionando pnputil para atualizar drivers disponiveis...'
+            & pnputil /scan-devices 2>&1 | Out-Null
+            Start-Sleep -Seconds 3
+            $todasCameras = @(Get-DispositivosCamera)
+        } else {
+            Write-Info 'Nenhuma camera com erro de driver identificada.'
+        }
+
+        Verifica-EResolvido -EtapaLabel 'driver de camera reinstalado' | Out-Null
+    }
+
+    # =========================================================================
+    # ETAPA 4 - Limpar UpperFilters e LowerFilters corrompidos
+    # =========================================================================
+
+    if (-not $resolvidoHW) {
+        Write-Etapa '4/8  Limpando UpperFilters e LowerFilters corrompidos no registro...'
+
+        # Classes de camera: limpeza total (seguro - filtros nao sao necessarios)
+        $classesCamera = [ordered]@{
+            'Camera Windows 10'   = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{ca3e7ab9-b4c3-4ae6-8251-579ef933890f}'
+            'Imaging Devices'     = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{6bdd1fc6-810f-11d0-bec7-08002be2092f}'
+        }
+
+        # Classe USB: limpeza conservadora (remove apenas entradas invalidas/vazias)
+        $classesUSB = [ordered]@{
+            'USB Controllers'     = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{36fc9e60-c465-11cf-8056-444553540000}'
+        }
+
+        foreach ($classe in $classesCamera.GetEnumerator()) {
+            $regPath = $classe.Value
+            if (-not (Test-Path $regPath -ErrorAction SilentlyContinue)) {
+                Write-Info "$($classe.Key): chave de registro nao encontrada (OK)."
+                continue
+            }
+            foreach ($filtro in @('UpperFilters', 'LowerFilters')) {
+                $prop = Get-ItemProperty -Path $regPath -Name $filtro -ErrorAction SilentlyContinue
+                if ($prop -and $null -ne $prop.$filtro) {
+                    $valorAntes = ($prop.$filtro | Where-Object { $_ }) -join ', '
+                    try {
+                        Remove-ItemProperty -Path $regPath -Name $filtro -ErrorAction Stop
+                        Write-Ok "Removido $filtro de $($classe.Key): [$valorAntes]"
+                        $acoesTomadas.Add("Removido $filtro de $($classe.Key)")
+                    } catch {
+                        Write-Aviso "Nao foi possivel remover $filtro de $($classe.Key): $_"
+                    }
+                } else {
+                    Write-Info "$filtro em $($classe.Key): nao configurado (OK)."
+                }
+            }
+        }
+
+        foreach ($classe in $classesUSB.GetEnumerator()) {
+            $regPath = $classe.Value
+            if (-not (Test-Path $regPath -ErrorAction SilentlyContinue)) { continue }
+            foreach ($filtro in @('UpperFilters', 'LowerFilters')) {
+                $prop = Get-ItemProperty -Path $regPath -Name $filtro -ErrorAction SilentlyContinue
+                if (-not $prop -or $null -eq $prop.$filtro) { continue }
+                $valoresAtuais = @($prop.$filtro | Where-Object { $_ -ne $null })
+                $valoresValidos = @($valoresAtuais | Where-Object {
+                    $_.Trim() -ne '' -and
+                    (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\$($_.Trim())" -ErrorAction SilentlyContinue)
+                })
+                if ($valoresValidos.Count -lt $valoresAtuais.Count) {
+                    $entradas = ($valoresAtuais | Where-Object { $valoresValidos -notcontains $_ }) -join ', '
+                    try {
+                        if ($valoresValidos.Count -eq 0) {
+                            Remove-ItemProperty -Path $regPath -Name $filtro -ErrorAction Stop
+                        } else {
+                            Set-ItemProperty -Path $regPath -Name $filtro -Value $valoresValidos -Type MultiString -ErrorAction Stop
+                        }
+                        Write-Ok "Limpado $filtro de $($classe.Key) - entradas invalidas removidas: [$entradas]"
+                        $acoesTomadas.Add("Limpado $filtro em $($classe.Key)")
+                    } catch {
+                        Write-Aviso "Nao foi possivel limpar $filtro de $($classe.Key): $_"
+                    }
+                } else {
+                    Write-Info "$filtro em $($classe.Key): todas as entradas validas (OK)."
+                }
+            }
+        }
+
+        Write-Info 'Aguardando aplicacao das alteracoes no registro...'
+        Start-Sleep -Seconds 2
+        $todasCameras = @(Get-DispositivosCamera)
+
+        Verifica-EResolvido -EtapaLabel 'UpperFilters/LowerFilters corrompidos removidos' | Out-Null
+    }
+
+    # =========================================================================
+    # ETAPA 5 - Verificar e reativar servicos de camera
+    # =========================================================================
+
+    if (-not $resolvidoHW) {
+        Write-Etapa '5/8  Verificando e reativando servicos de camera...'
+
+        $servicosAlvo = @(
+            [PSCustomObject]@{ Nome = 'FrameServer';         Display = 'Windows Camera Frame Server' }
+            [PSCustomObject]@{ Nome = 'WPDBusEnum';          Display = 'Windows Portable Device Enumerator' }
+            [PSCustomObject]@{ Nome = 'DevicesFlowUserSvc';  Display = 'Devices Flow User Service' }
+            [PSCustomObject]@{ Nome = 'VideoCaptureService'; Display = 'Video Capture Service' }
+        )
+
+        foreach ($svcInfo in $servicosAlvo) {
+            # Servicos per-sessao tem sufixo; buscar qualquer instancia
+            $svc = Get-Service -Name $svcInfo.Nome -ErrorAction SilentlyContinue
+            if (-not $svc) {
+                $svc = Get-Service | Where-Object { $_.Name -like "$($svcInfo.Nome)*" } | Select-Object -First 1
+            }
+            if (-not $svc) {
+                Write-Info "$($svcInfo.Display): nao disponivel neste Windows."
+                continue
+            }
+
+            if ($svc.StartType -eq 'Disabled') {
+                try {
+                    Set-Service -Name $svc.Name -StartupType Manual -ErrorAction Stop
+                    Write-Ok "$($svcInfo.Display): tipo de inicializacao alterado de Disabled para Manual."
+                    $acoesTomadas.Add("Servico reabilitado: $($svcInfo.Display)")
+                } catch {
+                    Write-Aviso "Nao foi possivel reabilitar $($svcInfo.Display): $_"
+                }
+            }
+
+            if ($svc.Status -ne 'Running') {
+                try {
+                    Start-Service -Name $svc.Name -ErrorAction Stop
+                    Write-Ok "$($svcInfo.Display): iniciado com sucesso."
+                    $acoesTomadas.Add("Servico iniciado: $($svcInfo.Display)")
+                } catch {
+                    Write-Aviso "Nao foi possivel iniciar $($svcInfo.Display): $_"
+                }
+            } else {
+                Write-Ok "$($svcInfo.Display): ja em execucao."
+            }
+        }
+
+        Start-Sleep -Seconds 2
+        Verifica-EResolvido -EtapaLabel 'servicos de camera reativados' | Out-Null
+    }
+
+    # =========================================================================
+    # ETAPA 6 - Corrigir permissoes HKLM ConsentStore (sempre executa)
+    # =========================================================================
+
+    Write-Etapa '6/8  Corrigindo permissoes de acesso a camera - sistema (HKLM)...'
+
+    $regHKLM = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam'
+
+    try {
+        if (-not (Test-Path $regHKLM)) {
+            New-Item -Path $regHKLM -Force -ErrorAction Stop | Out-Null
+            Write-Info 'Chave de consentimento de camera criada no HKLM.'
+        }
+        $valAtual = (Get-ItemProperty -Path $regHKLM -Name 'Value' -ErrorAction SilentlyContinue).Value
+        if ($valAtual -ne 'Allow') {
+            Set-ItemProperty -Path $regHKLM -Name 'Value' -Value 'Allow' -Type String -ErrorAction Stop
+            Write-Ok "HKLM webcam\Value: '$valAtual' alterado para 'Allow'."
+            $acoesTomadas.Add("Permissao HKLM webcam definida para Allow")
+        } else {
+            Write-Ok "HKLM webcam\Value: ja configurado como 'Allow'."
+        }
+    } catch {
+        Write-Falha "Nao foi possivel configurar permissao HKLM: $_"
+    }
+
+    # =========================================================================
+    # ETAPA 7 - Habilitar acesso para apps do usuario (HKCU) (sempre executa)
+    # =========================================================================
+
+    Write-Etapa '7/8  Habilitando acesso a camera para apps do usuario (HKCU)...'
+
+    $regHKCU = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam'
+
+    try {
+        if (-not (Test-Path $regHKCU)) {
+            New-Item -Path $regHKCU -Force -ErrorAction Stop | Out-Null
+            Write-Info 'Chave de consentimento de camera criada no HKCU.'
+        }
+        $valAtual = (Get-ItemProperty -Path $regHKCU -Name 'Value' -ErrorAction SilentlyContinue).Value
+        if ($valAtual -ne 'Allow') {
+            Set-ItemProperty -Path $regHKCU -Name 'Value' -Value 'Allow' -Type String -ErrorAction Stop
+            Write-Ok "HKCU webcam\Value: '$valAtual' alterado para 'Allow'."
+            $acoesTomadas.Add("Permissao HKCU webcam definida para Allow")
+        } else {
+            Write-Ok "HKCU webcam\Value: ja configurado como 'Allow'."
+        }
+
+        # Apps Win32/desktop (NonPackaged)
+        $regNP = "$regHKCU\NonPackaged"
+        if (Test-Path $regNP) {
+            $npVal = (Get-ItemProperty -Path $regNP -Name 'Value' -ErrorAction SilentlyContinue).Value
+            if ($npVal -eq 'Deny') {
+                Set-ItemProperty -Path $regNP -Name 'Value' -Value 'Allow' -Type String -ErrorAction SilentlyContinue
+                Write-Ok "HKCU webcam\NonPackaged\Value: 'Deny' alterado para 'Allow'."
+                $acoesTomadas.Add("Permissao HKCU webcam NonPackaged definida para Allow")
+            } else {
+                Write-Ok "HKCU webcam\NonPackaged\Value: '$npVal' (OK)."
+            }
+        }
+    } catch {
+        Write-Falha "Nao foi possivel configurar permissao HKCU: $_"
+    }
+
+    # Verificar apos ajuste de permissoes
+    if (-not $resolvidoHW) {
+        Verifica-EResolvido -EtapaLabel 'permissoes de camera corrigidas no registro' | Out-Null
+    }
+
+    # =========================================================================
+    # ETAPA 8 - Forcar rescan de dispositivos USB via pnputil
+    # =========================================================================
+
+    if (-not $resolvidoHW) {
+        Write-Etapa '8/8  Forcando rescan de dispositivos USB via pnputil...'
+
+        Write-Info 'Executando: pnputil /scan-devices'
+        $pnpSaida = & pnputil /scan-devices 2>&1
+        $pnpSaida | ForEach-Object { Write-Info $_.ToString() }
+
+        Write-Info 'Aguardando reenumeracao de dispositivos USB...'
+        Start-Sleep -Seconds 5
+
+        $todasCameras = @(Get-DispositivosCamera)
+        Verifica-EResolvido -EtapaLabel 'rescan USB via pnputil /scan-devices' | Out-Null
+    }
+
+    # =========================================================================
+    # RELATORIO FINAL
+    # =========================================================================
+
+    $corFinal = if ($resolvidoHW) { 'Green' } else { 'Yellow' }
+
+    Write-Host ''
+    Write-Host '   RELATORIO FINAL                              ' -ForegroundColor $corFinal
+    Write-Host ''
+
+    if ($resolvidoHW) {
+        Write-Host '   Status : CAMERA DETECTADA E FUNCIONANDO' -ForegroundColor Green
+        Write-Host ''
+        $camsFinais = Test-CameraFuncionando
+        foreach ($c in $camsFinais) {
+            Write-Host "   Camera : $($c.FriendlyName)" -ForegroundColor Green
+            Write-Host "   Classe : $($c.Class)  |  ID: $($c.InstanceId)" -ForegroundColor DarkGray
+        }
+        if ($etapaResolvida) {
+            Write-Host ''
+            Write-Host "   Resolvido em: $etapaResolvida" -ForegroundColor White
+        }
+    } else {
+        Write-Host '   Status : CAMERA NAO DETECTADA APOS TODAS AS ETAPAS' -ForegroundColor Red
+        Write-Host ''
+        if ($todasCameras.Count -gt 0) {
+            Write-Host '   Dispositivos encontrados mas com problemas:' -ForegroundColor Yellow
+            foreach ($cam in $todasCameras) {
+                $desc = Descricao-ProblemCode -Code ([int]$cam.ProblemCode)
+                Write-Host "   - $($cam.FriendlyName): $desc" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host '   Nenhum dispositivo de camera detectado pelo sistema operacional.' -ForegroundColor Red
+        }
+    }
+
+    if ($acoesTomadas.Count -gt 0) {
+        Write-Host ''
+        Write-Host '   Acoes realizadas nesta execucao:' -ForegroundColor Cyan
+        foreach ($acao in $acoesTomadas) {
+            Write-Host "   + $acao" -ForegroundColor White
+        }
+    }
+
+    if (-not $resolvidoHW) {
+        Write-Host ''
+        Write-Host '   Proximos passos (sem precisar formatar):' -ForegroundColor Yellow
+        Write-Host ''
+        Write-Host '   1. Tecla fisica de camera no notebook' -ForegroundColor White
+        Write-Host '      Verifique combinacao Fn + F6 (ou outra) para ativar/desativar camera.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   2. BIOS/UEFI - camera pode estar desabilitada no firmware' -ForegroundColor White
+        Write-Host '      Reinicie > Del ou F2 > busque "Camera", "Webcam" ou "Integrated Camera".' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   3. Driver manual pelo site do fabricante do notebook' -ForegroundColor White
+        Write-Host '      Dell, HP, Lenovo, ASUS etc. - use o modelo exato para baixar o driver de camera.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   4. Gerenciador de Dispositivos - verificar alteracoes de hardware' -ForegroundColor White
+        Write-Host '      devmgmt.msc > menu Acao > Verificar alteracoes de hardware.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   5. Reinstalar app de Camera da Microsoft Store' -ForegroundColor White
+        Write-Host '      PowerShell (Admin): Get-AppxPackage *camera* | Remove-AppxPackage' -ForegroundColor Gray
+        Write-Host '      Depois reinstale pela Microsoft Store buscando por "Camera".' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   6. Windows Update - drivers de camera podem ser entregues via WU' -ForegroundColor White
+        Write-Host '      Configuracoes > Windows Update > Verificar atualizacoes.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   7. Solucionador de problemas de camera integrado do Windows' -ForegroundColor White
+        Write-Host '      Configuracoes > Sistema > Solucionar Problemas > Outros solucionadores > Camera.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   8. Camera USB externa: teste em porta USB 2.0 direta (sem hub)' -ForegroundColor White
+        Write-Host '      Evite extensores e hubs. Prefira portas traseiras do gabinete.' -ForegroundColor Gray
+    }
+
+    Write-Host ''
+    Write-Host ''
+    return [long]0
+}
+
+function Repair-Audio {
+    <#
+      Veio de RepararAudio.ps1.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Diagnosticaria e repararia audio e microfone (drivers, servicos, permissoes).'; return [long]0 }
+    # RepararAudio.ps1
+    # Detecta e resolve automaticamente problemas de audio e microfone no Windows
+
+    $resolvidoHW    = $false
+    $etapaResolvida = ''
+    $acoesTomadas   = [System.Collections.Generic.List[string]]::new()
+
+
+
+    function Get-DispositivosAudio {
+        Get-PnpDevice -ErrorAction SilentlyContinue |
+            Where-Object { $_.Class -in @('Media', 'AudioEndpoint') }
+    }
+
+    function Test-AudioFuncionando {
+        $svcAudio = Get-Service -Name 'AudioSrv'             -ErrorAction SilentlyContinue
+        $svcEndpt = Get-Service -Name 'AudioEndpointBuilder' -ErrorAction SilentlyContinue
+        $devOK    = @(Get-PnpDevice -ErrorAction SilentlyContinue |
+            Where-Object { $_.Class -eq 'Media' -and $_.Status -eq 'OK' })
+        $servicosOK = ($svcAudio -and $svcAudio.Status -eq 'Running') -and
+                      ($svcEndpt -and $svcEndpt.Status -eq 'Running')
+        return ($servicosOK -and $devOK.Count -gt 0)
+    }
+
+    function Verifica-EResolvido {
+        param([string]$EtapaLabel)
+        if ($script:resolvidoHW) { return $true }
+        if (Test-AudioFuncionando) {
+            $script:resolvidoHW    = $true
+            $script:etapaResolvida = $EtapaLabel
+            Write-Ok 'Audio detectado e funcionando: servicos ativos e dispositivo OK.'
+            return $true
+        }
+        return $false
+    }
+
+    function Descricao-ProblemCode {
+        param([int]$Code)
+        switch ($Code) {
+            0   { 'Funcionando normalmente' }
+            1   { 'Nao configurado corretamente' }
+            10  { 'Nao foi possivel iniciar' }
+            22  { 'Desabilitado manualmente' }
+            28  { 'Driver nao instalado' }
+            43  { 'Erro reportado pelo dispositivo (codigo 43)' }
+            45  { 'Nao esta conectado' }
+            52  { 'Windows nao pode verificar assinatura do driver' }
+            default { "Erro codigo $Code" }
+        }
+    }
+
+    # =========================================================================
+    # Cabecalho
+    # =========================================================================
+
+    Write-Host ''
+    Write-Host '   Reparo Automatico de Audio e Microfone       ' -ForegroundColor Cyan
+    Write-Host ''
+
+
+    # =========================================================================
+    # ETAPA 1 - Verificar dispositivos de audio (incluindo desabilitados e com erro)
+    # =========================================================================
+
+    Write-Etapa '1/8  Verificando dispositivos de audio no sistema...'
+    Write-Host ''
+
+    $todosDispositivos = @(Get-DispositivosAudio)
+    $dispositivosMedia = @($todosDispositivos | Where-Object { $_.Class -eq 'Media' })
+
+    # WMI para nomes amigaveis de placas de som
+    $wmiAudio = @(Get-WmiObject -Class Win32_SoundDevice -ErrorAction SilentlyContinue)
+
+    if ($dispositivosMedia.Count -gt 0) {
+        Write-Info "$($dispositivosMedia.Count) controlador(es) de audio encontrado(s):"
+        Write-Host ''
+        foreach ($dev in $dispositivosMedia) {
+            $cor = switch ($dev.Status) { 'OK' { 'Green' } 'Error' { 'Yellow' } default { 'Gray' } }
+            $statusDesc = Descricao-ProblemCode -Code ([int]$dev.ProblemCode)
+            Write-Host ("   $($dev.FriendlyName)") -ForegroundColor $cor
+            Write-Host ("   Status : $statusDesc  |  Classe: $($dev.Class)") -ForegroundColor DarkGray
+            Write-Host ("   ID     : $($dev.InstanceId)") -ForegroundColor DarkGray
+            Write-Host ''
+        }
+    } else {
+        Write-Aviso 'Nenhum controlador de audio detectado (classe Media).'
+    }
+
+    # Endpoints de audio (saida/entrada)
+    $endpoints = @($todosDispositivos | Where-Object { $_.Class -eq 'AudioEndpoint' })
+    if ($endpoints.Count -gt 0) {
+        $epOK   = @($endpoints | Where-Object { $_.Status -eq 'OK' })
+        $epErro = @($endpoints | Where-Object { $_.Status -ne 'OK' })
+        Write-Info "$($epOK.Count) endpoint(s) de audio ativo(s), $($epErro.Count) com problema."
+        Write-Host ''
+    }
+
+    # Servicos
+    $svcAudio = Get-Service -Name 'AudioSrv'             -ErrorAction SilentlyContinue
+    $svcEndpt = Get-Service -Name 'AudioEndpointBuilder' -ErrorAction SilentlyContinue
+    $corSvcA  = if ($svcAudio -and $svcAudio.Status -eq 'Running') { 'Green' } else { 'Yellow' }
+    $corSvcE  = if ($svcEndpt -and $svcEndpt.Status -eq 'Running') { 'Green' } else { 'Yellow' }
+    Write-Host ("   AudioSrv             : {0}" -f $(if ($svcAudio) { $svcAudio.Status } else { 'nao encontrado' })) -ForegroundColor $corSvcA
+    Write-Host ("   AudioEndpointBuilder : {0}" -f $(if ($svcEndpt) { $svcEndpt.Status } else { 'nao encontrado' })) -ForegroundColor $corSvcE
+    Write-Host ''
+
+    Verifica-EResolvido -EtapaLabel 'audio ja funcionando antes de qualquer reparo' | Out-Null
+
+    # =========================================================================
+    # ETAPA 2 - Reabilitar dispositivos de audio desabilitados
+    # =========================================================================
+
+    if (-not $resolvidoHW) {
+        Write-Etapa '2/8  Reabilitando dispositivos de audio desabilitados...'
+
+        $desabilitados = @($todosDispositivos | Where-Object { $_.ProblemCode -eq 22 })
+
+        if ($desabilitados.Count -gt 0) {
+            foreach ($dev in $desabilitados) {
+                Write-Info "Reabilitando: $($dev.FriendlyName) [$($dev.Class)]"
+                try {
+                    Enable-PnpDevice -InstanceId $dev.InstanceId -Confirm:$false -ErrorAction Stop
+                    Write-Ok "Reabilitado: $($dev.FriendlyName)"
+                    $acoesTomadas.Add("Dispositivo de audio reabilitado: $($dev.FriendlyName)")
+                } catch {
+                    Write-Aviso "Falha pelo cmdlet: $_ - tentando pnputil..."
+                    & pnputil /enable-device $dev.InstanceId 2>&1 | ForEach-Object { Write-Info $_.ToString() }
+                }
+            }
+            Write-Info 'Aguardando reconhecimento do dispositivo...'
+            Start-Sleep -Seconds 3
+            $todosDispositivos = @(Get-DispositivosAudio)
+        } else {
+            Write-Info 'Nenhum dispositivo de audio desabilitado encontrado.'
+        }
+
+        Verifica-EResolvido -EtapaLabel 'dispositivo de audio reabilitado (estava desabilitado)' | Out-Null
+    }
+
+    # =========================================================================
+    # ETAPA 3 - Verificar e reativar servicos de audio
+    # =========================================================================
+
+    if (-not $resolvidoHW) {
+        Write-Etapa '3/8  Verificando e reativando servicos de audio...'
+
+        $servicosAlvo = @(
+            [PSCustomObject]@{ Nome = 'AudioEndpointBuilder'; Display = 'Windows Audio Endpoint Builder'; Tipo = 'Automatic' }
+            [PSCustomObject]@{ Nome = 'AudioSrv';             Display = 'Windows Audio';                  Tipo = 'Automatic' }
+        )
+
+        $precisaReiniciar = $false
+
+        foreach ($svcInfo in $servicosAlvo) {
+            $svc = Get-Service -Name $svcInfo.Nome -ErrorAction SilentlyContinue
+            if (-not $svc) {
+                Write-Aviso "$($svcInfo.Display): servico nao encontrado no sistema."
+                continue
+            }
+            if ($svc.StartType -eq 'Disabled') {
+                try {
+                    Set-Service -Name $svcInfo.Nome -StartupType $svcInfo.Tipo -ErrorAction Stop
+                    Write-Ok "$($svcInfo.Display): tipo alterado de Disabled para $($svcInfo.Tipo)."
+                    $acoesTomadas.Add("Servico reabilitado: $($svcInfo.Display)")
+                } catch {
+                    Write-Aviso "Nao foi possivel reabilitar $($svcInfo.Display): $_"
+                }
+            }
+            if ($svc.Status -ne 'Running') {
+                $precisaReiniciar = $true
+            }
+        }
+
+        # Reiniciar servicos se necessario (ordem: parar AudioSrv, parar Builder, iniciar Builder, iniciar AudioSrv)
+        if ($precisaReiniciar -or -not (Test-AudioFuncionando)) {
+            Write-Info 'Reiniciando servicos de audio (AudioEndpointBuilder -> AudioSrv)...'
+            try {
+                Stop-Service -Name 'AudioSrv'             -Force -ErrorAction SilentlyContinue
+                Stop-Service -Name 'AudioEndpointBuilder' -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+                Start-Service -Name 'AudioEndpointBuilder' -ErrorAction Stop
+                Start-Sleep -Seconds 1
+                Start-Service -Name 'AudioSrv'             -ErrorAction Stop
+                Start-Sleep -Seconds 3
+                Write-Ok 'Servicos de audio reiniciados com sucesso.'
+                $acoesTomadas.Add('Servicos AudioSrv e AudioEndpointBuilder reiniciados')
+            } catch {
+                Write-Falha "Erro ao reiniciar servicos: $_"
+            }
+        } else {
+            Write-Ok 'Servicos de audio ja estao em execucao.'
+        }
+
+        Verifica-EResolvido -EtapaLabel 'servicos de audio reativados' | Out-Null
+    }
+
+    # =========================================================================
+    # ETAPA 4 - Corrigir permissoes de microfone HKLM (sempre executa)
+    # =========================================================================
+
+    Write-Etapa '4/8  Corrigindo permissoes de acesso ao microfone - sistema (HKLM)...'
+
+    $regHKLMMic = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone'
+
+    try {
+        if (-not (Test-Path $regHKLMMic)) {
+            New-Item -Path $regHKLMMic -Force -ErrorAction Stop | Out-Null
+            Write-Info 'Chave de consentimento de microfone criada no HKLM.'
+        }
+        $valAtual = (Get-ItemProperty -Path $regHKLMMic -Name 'Value' -ErrorAction SilentlyContinue).Value
+        if ($valAtual -ne 'Allow') {
+            Set-ItemProperty -Path $regHKLMMic -Name 'Value' -Value 'Allow' -Type String -ErrorAction Stop
+            Write-Ok "HKLM microphone\Value: '$valAtual' alterado para 'Allow'."
+            $acoesTomadas.Add('Permissao HKLM microphone definida para Allow')
+        } else {
+            Write-Ok "HKLM microphone\Value: ja configurado como 'Allow'."
+        }
+    } catch {
+        Write-Falha "Nao foi possivel configurar permissao HKLM: $_"
+    }
+
+    # =========================================================================
+    # ETAPA 5 - Habilitar microfone para apps Win32 e navegadores HKCU (sempre executa)
+    # =========================================================================
+
+    Write-Etapa '5/8  Habilitando acesso ao microfone para apps e navegadores (HKCU)...'
+
+    $regHKCUMic = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone'
+
+    try {
+        if (-not (Test-Path $regHKCUMic)) {
+            New-Item -Path $regHKCUMic -Force -ErrorAction Stop | Out-Null
+            Write-Info 'Chave de consentimento de microfone criada no HKCU.'
+        }
+        $valAtual = (Get-ItemProperty -Path $regHKCUMic -Name 'Value' -ErrorAction SilentlyContinue).Value
+        if ($valAtual -ne 'Allow') {
+            Set-ItemProperty -Path $regHKCUMic -Name 'Value' -Value 'Allow' -Type String -ErrorAction Stop
+            Write-Ok "HKCU microphone\Value: '$valAtual' alterado para 'Allow'."
+            $acoesTomadas.Add('Permissao HKCU microphone definida para Allow')
+        } else {
+            Write-Ok "HKCU microphone\Value: ja configurado como 'Allow'."
+        }
+
+        # NonPackaged: habilitar para apps Win32 / navegadores (Chrome, Edge, Zoom, Teams etc.)
+        $regNP = "$regHKCUMic\NonPackaged"
+        if (-not (Test-Path $regNP)) {
+            New-Item -Path $regNP -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        $npVal = (Get-ItemProperty -Path $regNP -Name 'Value' -ErrorAction SilentlyContinue).Value
+        if ($npVal -ne 'Allow') {
+            Set-ItemProperty -Path $regNP -Name 'Value' -Value 'Allow' -Type String -ErrorAction SilentlyContinue
+            Write-Ok "HKCU microphone\NonPackaged\Value: '$npVal' alterado para 'Allow'."
+            $acoesTomadas.Add('Permissao HKCU microphone NonPackaged (apps Win32) definida para Allow')
+        } else {
+            Write-Ok "HKCU microphone\NonPackaged\Value: ja configurado como 'Allow'."
+        }
+    } catch {
+        Write-Falha "Nao foi possivel configurar permissao HKCU: $_"
+    }
+
+    if (-not $resolvidoHW) {
+        Verifica-EResolvido -EtapaLabel 'permissoes de microfone corrigidas no registro' | Out-Null
+    }
+
+    # =========================================================================
+    # ETAPA 6 - Verificar dispositivos de reproducao e gravacao padrao
+    # =========================================================================
+
+    if (-not $resolvidoHW) {
+        Write-Etapa '6/8  Verificando dispositivos de reproducao e gravacao padrao...'
+
+        $mmDevicesBase = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio'
+        $tipos = @(
+            [PSCustomObject]@{ Chave = 'Render';  Nome = 'Reproducao (saida)'    }
+            [PSCustomObject]@{ Chave = 'Capture'; Nome = 'Gravacao (microfone)'  }
+        )
+
+        foreach ($tipo in $tipos) {
+            $regPath = "$mmDevicesBase\$($tipo.Chave)"
+            if (-not (Test-Path $regPath -ErrorAction SilentlyContinue)) {
+                Write-Aviso "$($tipo.Nome): caminho de registro nao encontrado."
+                continue
+            }
+            $devs        = @(Get-ChildItem -Path $regPath -ErrorAction SilentlyContinue)
+            $ativos      = @($devs | Where-Object {
+                (Get-ItemProperty -Path $_.PSPath -Name 'DeviceState' -ErrorAction SilentlyContinue).DeviceState -eq 1
+            })
+            $desabilitados = @($devs | Where-Object {
+                (Get-ItemProperty -Path $_.PSPath -Name 'DeviceState' -ErrorAction SilentlyContinue).DeviceState -eq 2
+            })
+            $naoPresentes = @($devs | Where-Object {
+                (Get-ItemProperty -Path $_.PSPath -Name 'DeviceState' -ErrorAction SilentlyContinue).DeviceState -in @(4, 8)
+            })
+
+            $cor = if ($ativos.Count -gt 0) { 'Green' } else { 'Yellow' }
+            Write-Host ("   {0,-30}: {1} ativo(s), {2} desabilitado(s), {3} ausente(s)" -f `
+                $tipo.Nome, $ativos.Count, $desabilitados.Count, $naoPresentes.Count) -ForegroundColor $cor
+
+            if ($ativos.Count -eq 0 -and $desabilitados.Count -gt 0) {
+                Write-Aviso "Nenhum dispositivo de $($tipo.Nome) ativo. Tentando reabilitar endpoints..."
+                $epDesab = @(Get-PnpDevice -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Class -eq 'AudioEndpoint' -and $_.ProblemCode -eq 22 })
+                foreach ($ep in $epDesab) {
+                    try {
+                        Enable-PnpDevice -InstanceId $ep.InstanceId -Confirm:$false -ErrorAction Stop
+                        Write-Ok "Endpoint reabilitado: $($ep.FriendlyName)"
+                        $acoesTomadas.Add("Endpoint de audio reabilitado: $($ep.FriendlyName)")
+                    } catch {
+                        Write-Aviso "Nao foi possivel reabilitar endpoint $($ep.FriendlyName): $_"
+                    }
+                }
+            } elseif ($ativos.Count -eq 0) {
+                Write-Aviso "Nenhum dispositivo de $($tipo.Nome) detectado. Verifique conexao fisica."
+            }
+        }
+
+        Start-Sleep -Seconds 2
+        Verifica-EResolvido -EtapaLabel 'dispositivo de audio padrao ativado' | Out-Null
+    }
+
+    # =========================================================================
+    # ETAPA 7 - Limpar UpperFilters e LowerFilters corrompidos (classe de audio)
+    # =========================================================================
+
+    if (-not $resolvidoHW) {
+        Write-Etapa '7/8  Limpando UpperFilters e LowerFilters corrompidos para classe de audio...'
+
+        # Classe principal de audio: Sound, video and game controllers
+        $classesAudio = [ordered]@{
+            'Audio (Sound Controllers)' = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e96c-e325-11ce-bfc1-08002be10318}'
+        }
+
+        # Classe USB (limpeza conservadora - apenas entradas invalidas)
+        $classesUSB = [ordered]@{
+            'USB Controllers' = 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{36fc9e60-c465-11cf-8056-444553540000}'
+        }
+
+        # Classe de audio: remover UpperFilters/LowerFilters corrompidos
+        foreach ($classe in $classesAudio.GetEnumerator()) {
+            $regPath = $classe.Value
+            if (-not (Test-Path $regPath -ErrorAction SilentlyContinue)) {
+                Write-Info "$($classe.Key): chave nao encontrada no registro."
+                continue
+            }
+            foreach ($filtro in @('UpperFilters', 'LowerFilters')) {
+                $prop = Get-ItemProperty -Path $regPath -Name $filtro -ErrorAction SilentlyContinue
+                if ($prop -and $null -ne $prop.$filtro) {
+                    $valorAntes = @($prop.$filtro | Where-Object { $_ }) -join ', '
+                    # Manter apenas entradas com servico existente
+                    $valoresValidos = @($prop.$filtro | Where-Object {
+                        $_.Trim() -ne '' -and
+                        (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\$($_.Trim())" -ErrorAction SilentlyContinue)
+                    })
+                    if ($valoresValidos.Count -lt @($prop.$filtro).Count) {
+                        try {
+                            if ($valoresValidos.Count -eq 0) {
+                                Remove-ItemProperty -Path $regPath -Name $filtro -ErrorAction Stop
+                                Write-Ok "Removido $filtro de $($classe.Key) (entradas invalidas: [$valorAntes])."
+                            } else {
+                                Set-ItemProperty -Path $regPath -Name $filtro -Value $valoresValidos -Type MultiString -ErrorAction Stop
+                                Write-Ok "Limpado $filtro de $($classe.Key) - entradas invalidas removidas."
+                            }
+                            $acoesTomadas.Add("Removido $filtro corrompido de $($classe.Key)")
+                        } catch {
+                            Write-Aviso "Nao foi possivel limpar $filtro de $($classe.Key): $_"
+                        }
+                    } else {
+                        Write-Info "$filtro em $($classe.Key): todas as entradas validas (OK)."
+                    }
+                } else {
+                    Write-Info "$filtro em $($classe.Key): nao configurado (OK)."
+                }
+            }
+        }
+
+        # USB: limpeza conservadora (apenas entradas vazias ou invalidas)
+        foreach ($classe in $classesUSB.GetEnumerator()) {
+            $regPath = $classe.Value
+            if (-not (Test-Path $regPath -ErrorAction SilentlyContinue)) { continue }
+            foreach ($filtro in @('UpperFilters', 'LowerFilters')) {
+                $prop = Get-ItemProperty -Path $regPath -Name $filtro -ErrorAction SilentlyContinue
+                if (-not $prop -or $null -eq $prop.$filtro) { continue }
+                $valoresAtuais = @($prop.$filtro | Where-Object { $_ -ne $null })
+                $valoresValidos = @($valoresAtuais | Where-Object {
+                    $_.Trim() -ne '' -and
+                    (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\$($_.Trim())" -ErrorAction SilentlyContinue)
+                })
+                if ($valoresValidos.Count -lt $valoresAtuais.Count) {
+                    $removidas = ($valoresAtuais | Where-Object { $valoresValidos -notcontains $_ }) -join ', '
+                    try {
+                        if ($valoresValidos.Count -eq 0) {
+                            Remove-ItemProperty -Path $regPath -Name $filtro -ErrorAction Stop
+                        } else {
+                            Set-ItemProperty -Path $regPath -Name $filtro -Value $valoresValidos -Type MultiString -ErrorAction Stop
+                        }
+                        Write-Ok "Limpado $filtro de $($classe.Key): entradas invalidas removidas [$removidas]."
+                        $acoesTomadas.Add("Limpado $filtro em $($classe.Key)")
+                    } catch {
+                        Write-Aviso "Nao foi possivel limpar $filtro de $($classe.Key): $_"
+                    }
+                } else {
+                    Write-Info "$filtro em $($classe.Key): valido (OK)."
+                }
+            }
+        }
+
+        # Reiniciar servicos apos limpeza de filtros
+        Write-Info 'Reiniciando servicos apos limpeza de filtros...'
+        Stop-Service -Name 'AudioSrv'             -Force -ErrorAction SilentlyContinue
+        Stop-Service -Name 'AudioEndpointBuilder' -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        Start-Service -Name 'AudioEndpointBuilder' -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+        Start-Service -Name 'AudioSrv'             -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 3
+
+        Verifica-EResolvido -EtapaLabel 'UpperFilters/LowerFilters de audio removidos e servicos reiniciados' | Out-Null
+    }
+
+    # =========================================================================
+    # ETAPA 8 - Forcar rescan de dispositivos de audio via pnputil
+    # =========================================================================
+
+    if (-not $resolvidoHW) {
+        Write-Etapa '8/8  Forcando rescan de dispositivos de audio via pnputil...'
+
+        Write-Info 'Executando: pnputil /scan-devices'
+        $pnpSaida = & pnputil /scan-devices 2>&1
+        $pnpSaida | ForEach-Object { Write-Info $_.ToString() }
+
+        Write-Info 'Aguardando reenumeracao de dispositivos...'
+        Start-Sleep -Seconds 5
+
+        $todosDispositivos = @(Get-DispositivosAudio)
+        Verifica-EResolvido -EtapaLabel 'rescan de audio via pnputil /scan-devices' | Out-Null
+    }
+
+    # =========================================================================
+    # RELATORIO FINAL
+    # =========================================================================
+
+    $corFinal = if ($resolvidoHW) { 'Green' } else { 'Yellow' }
+
+    Write-Host ''
+    Write-Host '   RELATORIO FINAL                              ' -ForegroundColor $corFinal
+    Write-Host ''
+
+    if ($resolvidoHW) {
+        Write-Host '   Status : AUDIO DETECTADO E FUNCIONANDO' -ForegroundColor Green
+        Write-Host ''
+        $devsFinais = @(Get-PnpDevice -ErrorAction SilentlyContinue |
+            Where-Object { $_.Class -eq 'Media' -and $_.Status -eq 'OK' })
+        foreach ($d in $devsFinais) {
+            Write-Host "   Dispositivo : $($d.FriendlyName)" -ForegroundColor Green
+        }
+        if ($etapaResolvida) {
+            Write-Host ''
+            Write-Host "   Resolvido em: $etapaResolvida" -ForegroundColor White
+        }
+    } else {
+        Write-Host '   Status : AUDIO NAO DETECTADO APOS TODAS AS ETAPAS' -ForegroundColor Red
+        Write-Host ''
+        $dispositivosAtuais = @(Get-DispositivosAudio)
+        if ($dispositivosAtuais.Count -gt 0) {
+            Write-Host '   Dispositivos encontrados mas com problemas:' -ForegroundColor Yellow
+            foreach ($d in ($dispositivosAtuais | Where-Object { $_.Class -eq 'Media' })) {
+                $desc = Descricao-ProblemCode -Code ([int]$d.ProblemCode)
+                Write-Host "   - $($d.FriendlyName): $desc" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host '   Nenhum controlador de audio detectado pelo sistema.' -ForegroundColor Red
+        }
+    }
+
+    # Relatorio de permissoes de microfone
+    Write-Host ''
+    Write-Host '   Permissoes de microfone:' -ForegroundColor Cyan
+    $chkHKLM = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone' -Name 'Value' -ErrorAction SilentlyContinue).Value
+    $chkHKCU = (Get-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone' -Name 'Value' -ErrorAction SilentlyContinue).Value
+    $chkNP   = (Get-ItemProperty -Path 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged' -Name 'Value' -ErrorAction SilentlyContinue).Value
+    $corHKLM = if ($chkHKLM -eq 'Allow') { 'Green' } else { 'Yellow' }
+    $corHKCU = if ($chkHKCU -eq 'Allow') { 'Green' } else { 'Yellow' }
+    $corNP   = if ($chkNP   -eq 'Allow') { 'Green' } else { 'Yellow' }
+    Write-Host "   HKLM sistema    : $chkHKLM" -ForegroundColor $corHKLM
+    Write-Host "   HKCU usuario    : $chkHKCU" -ForegroundColor $corHKCU
+    Write-Host "   HKCU Win32/apps : $chkNP"   -ForegroundColor $corNP
+
+    if ($acoesTomadas.Count -gt 0) {
+        Write-Host ''
+        Write-Host '   Acoes realizadas nesta execucao:' -ForegroundColor Cyan
+        foreach ($acao in $acoesTomadas) {
+            Write-Host "   + $acao" -ForegroundColor White
+        }
+    }
+
+    if (-not $resolvidoHW) {
+        Write-Host ''
+        Write-Host '   Proximos passos (sem precisar formatar):' -ForegroundColor Yellow
+        Write-Host ''
+        Write-Host '   1. Verifique o volume e se o audio nao esta no mudo' -ForegroundColor White
+        Write-Host '      Clique com botao direito no icone de som na barra de tarefas > Sons.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   2. Verifique o mixer de volume por aplicativo' -ForegroundColor White
+        Write-Host '      Botao direito no icone de som > Abrir Mixer de Volume.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   3. Defina o dispositivo de audio padrao manualmente' -ForegroundColor White
+        Write-Host '      Painel de Controle > Som > aba Reproducao > botao direito > Definir como padrao.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   4. Atualize o driver de audio pelo Gerenciador de Dispositivos' -ForegroundColor White
+        Write-Host '      devmgmt.msc > Som, video e game controllers > driver > Atualizar driver.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   5. Baixe driver Realtek ou do fabricante do notebook diretamente do site' -ForegroundColor White
+        Write-Host '      Use o modelo exato do seu computador para encontrar o driver correto.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   6. Execute o Solucionador de Problemas de Audio do Windows' -ForegroundColor White
+        Write-Host '      Configuracoes > Sistema > Solucionar Problemas > Audio.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   7. Verifique se o audio nao esta sendo capturado por outro dispositivo' -ForegroundColor White
+        Write-Host '      Painel de Controle > Som > aba Reproducao: veja se ha dispositivo Bluetooth ativo.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   8. Para microfone bloqueado em app especifico' -ForegroundColor White
+        Write-Host '      Configuracoes > Privacidade > Microfone: verifique permissao por app.' -ForegroundColor Gray
+        Write-Host ''
+        Write-Host '   9. Reinstale o driver de audio via linha de comando (remove e reinstala)' -ForegroundColor White
+        Write-Host '      pnputil /delete-driver oem##.inf /uninstall /force' -ForegroundColor Gray
+        Write-Host '      Depois: pnputil /scan-devices' -ForegroundColor Gray
+    }
+
+    Write-Host ''
+    Write-Host ''
+    return [long]0
+}
+
+function Repair-PermissoesPowerShell {
+    <#
+      Veio de CorrigirPermissoesPowerShell.ps1.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Ajustaria a ExecutionPolicy e desbloquearia .ps1 marcados como da internet.'; return [long]0 }
+    # CorrigirPermissoesPowerShell.ps1
+    # Resolve todos os tipos de bloqueio de execucao do PowerShell no Windows
+    #
+    # COMO EXECUTAR SE AINDA ESTIVER BLOQUEADO:
+    #   powershell.exe -ExecutionPolicy Bypass -File CorrigirPermissoesPowerShell.ps1
+
+
+
+
+    # Relatorio
+
+    $relatorio = [System.Collections.Generic.List[PSObject]]::new()
+
+    function Add-Rel {
+        param([string]$Etapa, [string]$Status, [string]$Msg)
+        $relatorio.Add([PSCustomObject]@{ Etapa = $Etapa; Status = $Status; Msg = $Msg })
+    }
+
+    # =========================================================================
+    # Cabecalho
+    # =========================================================================
+
+    Write-Host ''
+    Write-Host '   Corrigir Permissoes de Execucao do PowerShell      ' -ForegroundColor Cyan
+    Write-Host '   ExecutionPolicy | Registry | Zone.Identifier | GPO ' -ForegroundColor Cyan
+    Write-Host ''
+
+    # =========================================================================
+    # ETAPA 2 - Verificar privilegios de Administrador
+    # =========================================================================
+
+    Write-Etapa '1/10  Verificando privilegios de Administrador...'
+    Write-Host ''
+
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
+    )
+
+    if ($isAdmin) {
+        Write-Ok 'Executando como Administrador. Todas as correcoes serao aplicadas.'
+        Add-Rel '1. Administrador' 'OK' 'Script executando com privilegios de Administrador'
+    } else {
+        Write-Aviso 'NAO esta sendo executado como Administrador.'
+        Write-Info  'Correcoes no HKLM e para todos os usuarios exigem privilegios elevados.'
+        Write-Info  'Execute novamente: clique direito no PowerShell > Executar como Administrador'
+        Add-Rel '1. Administrador' 'AVISO' 'Sem privilegios de Admin. Algumas correcoes podem nao ser aplicadas.'
+    }
+
+    # =========================================================================
+    # ETAPA 1 - Corrigir ExecutionPolicy em todos os escopos
+    # =========================================================================
+
+    Write-Etapa '2/10  Corrigindo ExecutionPolicy em todos os escopos...'
+    Write-Host ''
+
+    # RemoteSigned e nao Unrestricted: libera todo script criado na propria
+    # maquina e continua exigindo assinatura no que vier da internet. Deixar
+    # Unrestricted numa maquina de cliente derruba essa protecao para sempre,
+    # e o toolkit ja roda com -ExecutionPolicy Bypass quando precisa.
+    $politicaAlvo = 'RemoteSigned'
+
+    $politicaAntes = Get-ExecutionPolicy -ErrorAction SilentlyContinue
+    Write-Info "Politica efetiva atual: $politicaAntes"
+    Write-Info "Politica que sera aplicada: $politicaAlvo"
+    Write-Host ''
+
+    $escopos = @(
+        @{ Nome = 'Process';       GPO = $false }
+        @{ Nome = 'CurrentUser';   GPO = $false }
+        @{ Nome = 'LocalMachine';  GPO = $false }
+        @{ Nome = 'UserPolicy';    GPO = $true  }
+        @{ Nome = 'MachinePolicy'; GPO = $true  }
+    )
+
+    $escoposOk    = 0
+    $escoposGPO   = 0
+    $escoposErro  = 0
+
+    foreach ($escopo in $escopos) {
+        try {
+            $politicaAtual = Get-ExecutionPolicy -Scope $escopo.Nome -ErrorAction SilentlyContinue
+            if ($politicaAtual -in @($politicaAlvo, 'Unrestricted', 'Bypass')) {
+                Write-Ok ($escopo.Nome.PadRight(18) + ": ja permite execucao ($politicaAtual).")
+                $escoposOk++
+            } else {
+                if ($escopo.GPO) {
+                    Write-Aviso ($escopo.Nome.PadRight(18) + ': controlado por GPO (valor atual: ' + $politicaAtual + '). Ignorando.')
+                    $escoposGPO++
+                } else {
+                    Set-ExecutionPolicy -ExecutionPolicy $politicaAlvo -Scope $escopo.Nome -Force -ErrorAction Stop
+                    Write-Ok ($escopo.Nome.PadRight(18) + ": corrigido para $politicaAlvo (era: " + $politicaAtual + ').')
+                    $escoposOk++
+                }
+            }
+        } catch {
+            $msg = $_.Exception.Message
+            if ($msg -match 'Group Policy|Politica de Grupo|GPO|cannot be set') {
+                Write-Aviso ($escopo.Nome.PadRight(18) + ': bloqueado por GPO. Necessita administrador do dominio.')
+                $escoposGPO++
+            } else {
+                Write-Falha ($escopo.Nome.PadRight(18) + ': erro - ' + $msg)
+                $escoposErro++
+            }
+        }
+    }
+
+    $politicaDepois = Get-ExecutionPolicy -ErrorAction SilentlyContinue
+    Write-Host ''
+    Write-Info "Politica efetiva apos correcao: $politicaDepois"
+
+    if ($escoposErro -eq 0 -and $escoposGPO -eq 0) {
+        Add-Rel '2. ExecutionPolicy' 'OK' "Todos os escopos definidos como $politicaAlvo"
+    } elseif ($escoposGPO -gt 0 -and $escoposErro -eq 0) {
+        Add-Rel '2. ExecutionPolicy' 'AVISO' "$escoposOk escopo(s) corrigidos | $escoposGPO escopo(s) bloqueados por GPO"
+    } else {
+        Add-Rel '2. ExecutionPolicy' 'AVISO' "$escoposOk OK | $escoposGPO GPO | $escoposErro erro(s)"
+    }
+
+    # =========================================================================
+    # ETAPA 6 - Verificar bloqueio por GPO antes de editar registro
+    # =========================================================================
+
+    Write-Etapa '3/10  Verificando bloqueio por GPO...'
+    Write-Host ''
+
+    $regGPOHKLM = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell'
+    $regGPOHKCU = 'HKCU:\SOFTWARE\Policies\Microsoft\Windows\PowerShell'
+    $gpoAtivo   = $false
+
+    $gpoHKLM = Get-ItemProperty $regGPOHKLM -ErrorAction SilentlyContinue
+    if ($gpoHKLM) {
+        $gpoAtivo = $true
+        $gpoPolicy = $gpoHKLM.EnableScripts
+        $gpoExec   = $gpoHKLM.ExecutionPolicy
+        Write-Aviso 'GPO encontrada em HKLM (politica de maquina):'
+        if ($null -ne $gpoPolicy) { Write-Dest ('   EnableScripts    = ' + $gpoPolicy) }
+        if ($null -ne $gpoExec)   { Write-Dest ('   ExecutionPolicy  = ' + $gpoExec) }
+        Write-Info  'Esta configuracao SO pode ser alterada pelo Administrador do Dominio (GPO).'
+        Write-Info  'Contate o TI para liberar: Computer Config > Admin Templates > Windows Components > PowerShell'
+    }
+
+    $gpoHKCU = Get-ItemProperty $regGPOHKCU -ErrorAction SilentlyContinue
+    if ($gpoHKCU) {
+        $gpoAtivo = $true
+        Write-Aviso 'GPO encontrada em HKCU (politica de usuario):'
+        $gpoExecU = $gpoHKCU.ExecutionPolicy
+        if ($null -ne $gpoExecU) { Write-Dest ('   ExecutionPolicy  = ' + $gpoExecU) }
+    }
+
+    if (-not $gpoAtivo) {
+        Write-Ok 'Nenhum bloqueio por GPO detectado.'
+        Add-Rel '3. GPO' 'OK' 'Nenhuma politica de grupo bloqueando o PowerShell'
+    } else {
+        Add-Rel '3. GPO' 'AVISO' 'GPO ativa detectada. Administrador do dominio deve liberar via GPMC.'
+    }
+
+    # =========================================================================
+    # ETAPA 4 - Corrigir registro HKLM (64 bits)
+    # =========================================================================
+
+    Write-Etapa '4/10  Corrigindo registro HKLM - PowerShell 64 bits...'
+    Write-Host ''
+
+    $regHKLM64 = 'HKLM:\SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell'
+
+    try {
+        if (-not (Test-Path $regHKLM64)) {
+            New-Item $regHKLM64 -Force | Out-Null
+            Write-Info 'Chave HKLM 64 bits criada.'
+        }
+        $valorAtual = (Get-ItemProperty $regHKLM64 -ErrorAction SilentlyContinue).ExecutionPolicy
+        Set-ItemProperty $regHKLM64 -Name 'ExecutionPolicy' -Value $politicaAlvo -Type String -Force
+        Write-Ok "HKLM 64 bits: ExecutionPolicy definida como $politicaAlvo (era: $valorAtual)."
+        Add-Rel '4. HKLM 64 bits' 'OK' ("ExecutionPolicy=$politicaAlvo aplicado")
+    } catch {
+        Write-Falha ('HKLM 64 bits: erro - ' + $_.Exception.Message)
+        Add-Rel '4. HKLM 64 bits' 'ERRO' $_.Exception.Message
+    }
+
+    # =========================================================================
+    # ETAPA 7 - Corrigir registro HKLM (32 bits / WOW6432Node)
+    # =========================================================================
+
+    Write-Etapa '5/10  Corrigindo registro HKLM - PowerShell 32 bits (WOW6432Node)...'
+    Write-Host ''
+
+    $regHKLM32 = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell'
+
+    try {
+        if (-not (Test-Path $regHKLM32)) {
+            New-Item $regHKLM32 -Force | Out-Null
+            Write-Info 'Chave HKLM 32 bits criada.'
+        }
+        $valorAtual32 = (Get-ItemProperty $regHKLM32 -ErrorAction SilentlyContinue).ExecutionPolicy
+        Set-ItemProperty $regHKLM32 -Name 'ExecutionPolicy' -Value $politicaAlvo -Type String -Force
+        Write-Ok "HKLM 32 bits: ExecutionPolicy definida como $politicaAlvo (era: $valorAtual32)."
+        Add-Rel '5. HKLM 32 bits' 'OK' ("ExecutionPolicy=$politicaAlvo aplicado (WOW6432Node)")
+    } catch {
+        Write-Falha ('HKLM 32 bits: erro - ' + $_.Exception.Message)
+        Add-Rel '5. HKLM 32 bits' 'ERRO' $_.Exception.Message
+    }
+
+    # =========================================================================
+    # ETAPA 5 - Corrigir registro HKCU (usuario atual)
+    # =========================================================================
+
+    Write-Etapa '6/10  Corrigindo registro HKCU - usuario atual...'
+    Write-Host ''
+
+    $regHKCU = 'HKCU:\SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell'
+
+    try {
+        if (-not (Test-Path $regHKCU)) {
+            New-Item $regHKCU -Force | Out-Null
+            Write-Info 'Chave HKCU criada.'
+        }
+        $valorAtualHKCU = (Get-ItemProperty $regHKCU -ErrorAction SilentlyContinue).ExecutionPolicy
+        Set-ItemProperty $regHKCU -Name 'ExecutionPolicy' -Value $politicaAlvo -Type String -Force
+        Write-Ok "HKCU: ExecutionPolicy definida como $politicaAlvo (era: $valorAtualHKCU)."
+        Add-Rel '6. HKCU' 'OK' ("ExecutionPolicy=$politicaAlvo aplicado para o usuario atual")
+    } catch {
+        Write-Falha ('HKCU: erro - ' + $_.Exception.Message)
+        Add-Rel '6. HKCU' 'ERRO' $_.Exception.Message
+    }
+
+    # =========================================================================
+    # ETAPA 3 - Desbloquear arquivos .ps1 com Zone.Identifier
+    # =========================================================================
+
+    Write-Etapa '7/10  Desbloqueando arquivos .ps1 com Zone.Identifier (bloqueio de internet)...'
+    Write-Host ''
+
+    $nomesIgnorados  = '^(Public|All Users|Default|Default User|defaultuser0|desktop\.ini)$'
+    $usuarios = @(Get-ChildItem 'C:\Users' -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -notmatch $nomesIgnorados })
+
+    $totalBloqueados  = 0
+    $totalDesbloqueados = 0
+
+    foreach ($usuario in $usuarios) {
+        $pastasUsuario = @(
+            Join-Path $usuario.FullName 'Documents'
+            Join-Path $usuario.FullName 'Downloads'
+            Join-Path $usuario.FullName 'Desktop'
+        )
+
+        $bloqUsuario = 0
+        foreach ($pasta in $pastasUsuario) {
+            if (-not (Test-Path $pasta -ErrorAction SilentlyContinue)) { continue }
+            $arquivosPS1 = @(Get-ChildItem $pasta -Filter '*.ps1' -Recurse -Force -ErrorAction SilentlyContinue)
+            foreach ($arq in $arquivosPS1) {
+                $zone = Get-Item $arq.FullName -Stream 'Zone.Identifier' -ErrorAction SilentlyContinue
+                if ($zone) {
+                    $totalBloqueados++
+                    $bloqUsuario++
+                    Unblock-File $arq.FullName -ErrorAction SilentlyContinue
+                    $zoneDepois = Get-Item $arq.FullName -Stream 'Zone.Identifier' -ErrorAction SilentlyContinue
+                    if (-not $zoneDepois) { $totalDesbloqueados++ }
+                }
+            }
+        }
+
+        if ($bloqUsuario -gt 0) {
+            Write-Ok ("$($usuario.Name): $bloqUsuario arquivo(s) desbloqueado(s).")
+        } else {
+            Write-Info ("$($usuario.Name): nenhum arquivo bloqueado em Documents/Downloads/Desktop.")
+        }
+    }
+
+    # Pasta C:\Suporte (global)
+    if (Test-Path 'C:\Suporte') {
+        $arquivosSuporte = @(Get-ChildItem 'C:\Suporte' -Filter '*.ps1' -Recurse -Force -ErrorAction SilentlyContinue)
+        $bloqSuporte = 0
+        foreach ($arq in $arquivosSuporte) {
+            $zone = Get-Item $arq.FullName -Stream 'Zone.Identifier' -ErrorAction SilentlyContinue
+            if ($zone) {
+                $totalBloqueados++
+                $bloqSuporte++
+                Unblock-File $arq.FullName -ErrorAction SilentlyContinue
+                $zoneDepois = Get-Item $arq.FullName -Stream 'Zone.Identifier' -ErrorAction SilentlyContinue
+                if (-not $zoneDepois) { $totalDesbloqueados++ }
+            }
+        }
+        if ($bloqSuporte -gt 0) {
+            Write-Ok "C:\Suporte: $bloqSuporte arquivo(s) desbloqueado(s)."
+        } else {
+            Write-Info 'C:\Suporte: nenhum arquivo bloqueado.'
+        }
+    } else {
+        Write-Info 'C:\Suporte nao existe neste computador.'
+    }
+
+    Write-Host ''
+    if ($totalBloqueados -eq 0) {
+        Write-Ok 'Nenhum arquivo .ps1 bloqueado por Zone.Identifier encontrado.'
+        Add-Rel '7. Zone.Identifier' 'OK' 'Nenhum arquivo bloqueado encontrado'
+    } elseif ($totalDesbloqueados -eq $totalBloqueados) {
+        Write-Ok "Zone.Identifier: $totalDesbloqueados de $totalBloqueados arquivo(s) desbloqueado(s) com sucesso."
+        Add-Rel '7. Zone.Identifier' 'OK' "$totalDesbloqueados arquivo(s) desbloqueados de $totalBloqueados encontrados"
+    } else {
+        $falhas = $totalBloqueados - $totalDesbloqueados
+        Write-Aviso "$totalDesbloqueados desbloqueados, $falhas ainda bloqueados (possivelmente em uso)."
+        Add-Rel '7. Zone.Identifier' 'AVISO' "$falhas arquivo(s) nao puderam ser desbloqueados"
+    }
+
+    # =========================================================================
+    # ETAPA 8 - Limpar cache do PowerShell (PSReadline e analise de modulos)
+    # =========================================================================
+
+    Write-Etapa '8/10  Limpando cache do PowerShell...'
+    Write-Host ''
+
+    $totalCacheLimpo = 0
+
+    foreach ($usuario in $usuarios) {
+        # PSReadline NAO entra aqui: essa pasta guarda o HISTORICO de comandos do
+        # usuario (ConsoleHost_history.txt), nao cache. Apagar nao ajuda em nada
+        # a destravar a execucao de scripts e o usuario perde o historico dele.
+        $cachePaths = @(
+            Join-Path $usuario.FullName 'AppData\Local\Microsoft\Windows\PowerShell\CommandAnalysis'
+            Join-Path $usuario.FullName 'AppData\Local\Microsoft\Windows\PowerShell\ModuleAnalysisCache'
+        )
+
+        $limpouAlgo = $false
+        foreach ($cachePath in $cachePaths) {
+            if (Test-Path $cachePath -ErrorAction SilentlyContinue) {
+                $nomeCache = Split-Path $cachePath -Leaf
+                $itens = @(Get-ChildItem $cachePath -Force -ErrorAction SilentlyContinue)
+                Remove-Item $cachePath -Recurse -Force -ErrorAction SilentlyContinue
+                if (-not (Test-Path $cachePath)) {
+                    Write-Ok ("$($usuario.Name) [$nomeCache]: $($itens.Count) item(ns) removido(s).")
+                    $totalCacheLimpo++
+                    $limpouAlgo = $true
+                }
+            }
+        }
+
+        if (-not $limpouAlgo) {
+            Write-Info ("$($usuario.Name): caches ja estavam limpos ou inacessiveis.")
+        }
+    }
+
+    # Cache global do PowerShell em ProgramData
+    $cacheGlobal = 'C:\ProgramData\Microsoft\Windows\PowerShell'
+    if (Test-Path $cacheGlobal) {
+        $arquivosCache = @(Get-ChildItem $cacheGlobal -Filter '*.cache' -Recurse -ErrorAction SilentlyContinue)
+        if ($arquivosCache.Count -gt 0) {
+            $arquivosCache | Remove-Item -Force -ErrorAction SilentlyContinue
+            Write-Ok "Cache global: $($arquivosCache.Count) arquivo(s) .cache removido(s) em ProgramData."
+            $totalCacheLimpo++
+        }
+    }
+
+    if ($totalCacheLimpo -gt 0) {
+        Add-Rel '8. Cache PS' 'OK' "Cache limpo em $totalCacheLimpo localizacao(oes)"
+    } else {
+        Add-Rel '8. Cache PS' 'OK' 'Caches ja estavam limpos'
+    }
+
+    # =========================================================================
+    # ETAPA 9 - Testar execucao de script ps1
+    # =========================================================================
+
+    Write-Etapa '9/10  Testando execucao de script .ps1...'
+    Write-Host ''
+
+    $testeOk     = $false
+    $testeDetalhe = ''
+    $tempFile    = [System.IO.Path]::GetTempPath() + 'ps_exec_test_' + [System.Guid]::NewGuid().ToString('N') + '.ps1'
+
+    try {
+        Set-Content $tempFile 'Write-Output "EXECUCAO_OK_PJE"' -Encoding UTF8
+
+        # Desbloquear o proprio arquivo de teste (pode ser marcado como zona internet)
+        Unblock-File $tempFile -ErrorAction SilentlyContinue
+
+        $resultado = & $tempFile 2>&1
+        if ($resultado -match 'EXECUCAO_OK_PJE') {
+            $testeOk      = $true
+            $testeDetalhe = 'Script .ps1 executado com sucesso na sessao atual.'
+            Write-Ok $testeDetalhe
+        } else {
+            $testeDetalhe = 'Script executou mas retornou resultado inesperado: ' + $resultado
+            Write-Aviso $testeDetalhe
+        }
+    } catch {
+        $testeDetalhe = 'Falha na execucao: ' + $_.Exception.Message
+        Write-Falha $testeDetalhe
+        Write-Info  'Se o erro for de politica, reinicie o PowerShell e tente novamente.'
+        Write-Info  'Ou execute: powershell.exe -ExecutionPolicy Bypass -File seuScript.ps1'
+    } finally {
+        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+    }
+
+    # Testar tambem com nova sessao powershell.exe para confirmar politica persistida
+    Write-Host ''
+    Write-Acao 'Testando execucao em nova sessao do PowerShell...'
+    $tempFile2 = [System.IO.Path]::GetTempPath() + 'ps_exec_test2_' + [System.Guid]::NewGuid().ToString('N') + '.ps1'
+    try {
+        Set-Content $tempFile2 'Write-Output "SESSAO_NOVA_OK"' -Encoding UTF8
+        Unblock-File $tempFile2 -ErrorAction SilentlyContinue
+        $resultadoNovaSessao = powershell.exe -NoProfile -NonInteractive -File $tempFile2 2>&1
+        if ($resultadoNovaSessao -match 'SESSAO_NOVA_OK') {
+            Write-Ok 'Nova sessao PowerShell: execucao funcionando corretamente.'
+            $testeNovaOk = $true
+        } else {
+            Write-Aviso ('Nova sessao retornou: ' + ($resultadoNovaSessao -join ' '))
+            $testeNovaOk = $false
+        }
+    } catch {
+        Write-Aviso ('Erro na nova sessao: ' + $_.Exception.Message)
+        $testeNovaOk = $false
+    } finally {
+        Remove-Item $tempFile2 -Force -ErrorAction SilentlyContinue
+    }
+
+    if ($testeOk -and $testeNovaOk) {
+        Add-Rel '9. Teste execucao' 'OK' 'Sessao atual e nova sessao executando scripts sem restricao'
+    } elseif ($testeOk) {
+        Add-Rel '9. Teste execucao' 'AVISO' 'Sessao atual OK, nova sessao com restricao. Reinicie o PowerShell.'
+    } else {
+        Add-Rel '9. Teste execucao' 'ERRO' $testeDetalhe
+    }
+
+    # =========================================================================
+    # ETAPA 10 - Relatorio final colorido
+    # =========================================================================
+
+    Write-Etapa '10/10  Relatorio final...'
+    Write-Host ''
+
+    Write-Host '   RELATORIO - PERMISSOES DE EXECUCAO DO POWERSHELL   ' -ForegroundColor Cyan
+    Write-Host ''
+
+    foreach ($item in $relatorio) {
+        $cor     = if ($item.Status -eq 'OK') { 'Green' } elseif ($item.Status -eq 'AVISO') { 'Yellow' } else { 'Red' }
+        $prefixo = if ($item.Status -eq 'OK') { '[OK]   ' } elseif ($item.Status -eq 'AVISO') { '[!]    ' } else { '[ERRO] ' }
+        Write-Host ('   ' + $prefixo) -ForegroundColor $cor -NoNewline
+        Write-Host ($item.Etapa.PadRight(24) + '  ') -ForegroundColor White -NoNewline
+        Write-Host $item.Msg -ForegroundColor $cor
+    }
+
+    $erros  = @($relatorio | Where-Object { $_.Status -eq 'ERRO' })
+    $avisos = @($relatorio | Where-Object { $_.Status -eq 'AVISO' })
+    $oks    = @($relatorio | Where-Object { $_.Status -eq 'OK' })
+
+    Write-Host ''
+    $corRes = if ($erros.Count -gt 0) { 'Red' } elseif ($avisos.Count -gt 0) { 'Yellow' } else { 'Green' }
+    Write-Host ('   Resumo: ' + $oks.Count + ' OK  |  ' + $avisos.Count + ' Aviso(s)  |  ' + $erros.Count + ' Erro(s)') -ForegroundColor $corRes
+
+    Write-Host ''
+    Write-Host '   Estado final da ExecutionPolicy:' -ForegroundColor White
+    $politicaFinal = Get-ExecutionPolicy -List -ErrorAction SilentlyContinue
+    foreach ($p in $politicaFinal) {
+        $corPol = if ($p.ExecutionPolicy -in @('RemoteSigned','Unrestricted','Bypass')) { 'Green' } elseif ($p.ExecutionPolicy -eq 'Undefined') { 'Gray' } else { 'Yellow' }
+        Write-Host ('     ' + $p.Scope.ToString().PadRight(18) + ': ') -ForegroundColor DarkGray -NoNewline
+        Write-Host $p.ExecutionPolicy -ForegroundColor $corPol
+    }
+
+    Write-Host ''
+    if ($gpoAtivo) {
+        Write-Host '   ATENCAO GPO:' -ForegroundColor Yellow
+        Write-Host '   Uma politica de grupo (GPO) esta restringindo o PowerShell.' -ForegroundColor Yellow
+        Write-Host '   Para liberar permanentemente, o Administrador do Dominio deve:' -ForegroundColor Yellow
+        Write-Host '   GPMC > Configuracoes do Computador > Modelos Administrativos' -ForegroundColor Gray
+        Write-Host '         > Componentes do Windows > Windows PowerShell' -ForegroundColor Gray
+        Write-Host '         > "Ativar a Execucao de Scripts" > Permitir todos os scripts' -ForegroundColor Gray
+        Write-Host ''
+    }
+
+    Write-Host '   Dica: Se ainda houver bloqueio, execute o script assim:' -ForegroundColor DarkGray
+    Write-Host '   powershell.exe -ExecutionPolicy Bypass -File seuScript.ps1' -ForegroundColor DarkCyan
+    Write-Host ''
+    Write-Host ''
+    return [long]0
+}
+
+function Set-AmbientePJe {
+    <#
+      Veio de ConfigurarPJe.ps1.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Configuraria o ambiente PJe (Java, exception.sites, Shodo/Shomei) para todos os usuarios.'; return [long]0 }
+    # ConfigurarPJe.ps1
+    # Configura completamente o ambiente PJe em uma maquina Windows
+    # Java security, exception.sites, cache, servicos Shodo/Shomei, conectividade
+
+
+
+
+    # Funcoes de manipulacao de arquivos Java (sem BOM)
+
+    $encodingUTF8SemBOM = New-Object System.Text.UTF8Encoding $false
+
+    function Ler-Linhas {
+        param([string]$Caminho)
+        if (Test-Path $Caminho) {
+            return [System.IO.File]::ReadAllLines($Caminho)
+        }
+        return @()
+    }
+
+    function Escrever-Linhas {
+        param([string]$Caminho, [string[]]$Linhas)
+        [System.IO.File]::WriteAllLines($Caminho, $Linhas, $encodingUTF8SemBOM)
+    }
+
+    function Atualizar-Properties {
+        param(
+            [string]$Caminho,
+            [hashtable]$Propriedades,
+            [string[]]$Remover = @()
+        )
+        $linhasExistentes = Ler-Linhas $Caminho
+        $linhasFinais = [System.Collections.Generic.List[string]]::new()
+
+        foreach ($linha in $linhasExistentes) {
+            $incluir = $true
+            foreach ($chave in $Propriedades.Keys) {
+                if ($linha -match ('^\s*' + [regex]::Escape($chave) + '\s*=')) {
+                    $incluir = $false
+                    break
+                }
+            }
+            # Chaves a remover: a linha some do arquivo e NAO e' regravada.
+            # Gravar 'deployment.security.level.locked=' vazio NAO desbloqueia:
+            # a simples presenca da chave e' o que trava o painel Java.
+            if ($incluir) {
+                foreach ($chave in $Remover) {
+                    if ($linha -match ('^\s*' + [regex]::Escape($chave) + '\s*=')) {
+                        $incluir = $false
+                        break
+                    }
+                }
+            }
+            if ($incluir) { $linhasFinais.Add($linha) }
+        }
+
+        foreach ($chave in $Propriedades.Keys) {
+            $linhasFinais.Add($chave + '=' + $Propriedades[$chave])
+        }
+
+        Escrever-Linhas $Caminho $linhasFinais.ToArray()
+    }
+
+    function Atualizar-ExceptionSites {
+        param([string]$Caminho, [string[]]$UrlsNecessarias)
+        $urlsExistentes = [System.Collections.Generic.HashSet[string]]::new(
+            [System.StringComparer]::OrdinalIgnoreCase
+        )
+        foreach ($linha in (Ler-Linhas $Caminho)) {
+            $l = $linha.Trim()
+            if ($l -ne '') { $urlsExistentes.Add($l) | Out-Null }
+        }
+        $adicionadas = 0
+        foreach ($url in $UrlsNecessarias) {
+            if ($urlsExistentes.Add($url)) { $adicionadas++ }
+        }
+        Escrever-Linhas $Caminho ([string[]]$urlsExistentes)
+        return $adicionadas
+    }
+
+    # Relatorio de etapas
+
+    $relatorio = [System.Collections.Generic.List[PSObject]]::new()
+
+    function Add-Rel {
+        param([string]$Etapa, [string]$Status, [string]$Msg)
+        $relatorio.Add([PSCustomObject]@{ Etapa = $Etapa; Status = $Status; Msg = $Msg })
+    }
+
+    # =========================================================================
+    # URLs de excecao obrigatorias para o PJe
+    # =========================================================================
+
+    $urlsExcecao = @(
+        'https://127.0.0.1:9000'            # Shodo
+        'https://127.0.0.1:9003'            # Shomei
+        'http://127.0.0.1'                  # PJe local
+        'https://pje.jus.br'
+        # PJe - instancias especificas
+        'https://pje1g.tjba.jus.br'
+        'https://pje2g.tjba.jus.br'
+        'https://pje.trt5.jus.br'
+        'https://pje.trf1.jus.br'
+        'https://pje.trf2.jus.br'
+        'https://pje.trf3.jus.br'
+        'https://pje.trf4.jus.br'
+        'https://pje.trf5.jus.br'
+        'https://pje.tst.jus.br'
+        'https://pje.csjt.jus.br'
+        # PROJUDI - formato real: projudi.tj<uf>.jus.br (sem prefixo de estado)
+        'https://projudi.tjac.jus.br'
+        'https://projudi.tjal.jus.br'
+        'https://projudi.tjam.jus.br'
+        'https://projudi.tjap.jus.br'
+        'https://projudi.tjba.jus.br'
+        'https://projudi.tjce.jus.br'
+        'https://projudi.tjdft.jus.br'
+        'https://projudi.tjes.jus.br'
+        'https://projudi.tjgo.jus.br'
+        'https://projudi.tjma.jus.br'
+        'https://projudi.tjmg.jus.br'
+        'https://projudi.tjms.jus.br'
+        'https://projudi.tjmt.jus.br'
+        'https://projudi.tjpa.jus.br'
+        'https://projudi.tjpb.jus.br'
+        'https://projudi.tjpe.jus.br'
+        'https://projudi.tjpi.jus.br'
+        'https://projudi.tjpr.jus.br'
+        'https://projudi.tjrj.jus.br'
+        'https://projudi.tjrn.jus.br'
+        'https://projudi.tjro.jus.br'
+        'https://projudi.tjrr.jus.br'
+        'https://projudi.tjrs.jus.br'
+        'https://projudi.tjsc.jus.br'
+        'https://projudi.tjse.jus.br'
+        'https://projudi.tjsp.jus.br'
+        'https://projudi.tjto.jus.br'
+    )
+
+    # =========================================================================
+    # Cabecalho
+    # =========================================================================
+
+    Write-Host ''
+    Write-Host '   Configuracao do Ambiente PJe                       ' -ForegroundColor Cyan
+    Write-Host '   Java  |  exception.sites  |  Shodo  |  Shomei     ' -ForegroundColor Cyan
+    Write-Host ''
+
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
+    )
+    if ($isAdmin) {
+        Write-Ok 'Executando como Administrador (acesso a todos os perfis).'
+    } else {
+        Write-Aviso 'Sem privilegios de Administrador. Apenas o usuario atual sera configurado.'
+        Write-Info  'Execute como Administrador para configurar todos os usuarios.'
+    }
+
+    # =========================================================================
+    # ETAPA 1 - Verificar Java 8
+    # =========================================================================
+
+    Write-Etapa '1/9  Verificando instalacao do Java 8...'
+    Write-Host ''
+
+    $java8Encontrado = $false
+    $java8Versao     = ''
+    $java8Path       = ''
+
+    $regCaminhos = @(
+        'HKLM:\SOFTWARE\JavaSoft\Java Runtime Environment',
+        'HKLM:\SOFTWARE\WOW6432Node\JavaSoft\Java Runtime Environment'
+    )
+
+    foreach ($regBase in $regCaminhos) {
+        $jreKey = Get-ItemProperty "$regBase\1.8" -ErrorAction SilentlyContinue
+        if ($jreKey) {
+            $javaHome = $jreKey.JavaHome
+            $javaExe  = Join-Path $javaHome 'bin\java.exe'
+            if (Test-Path $javaExe) {
+                $java8Encontrado = $true
+                $java8Path       = $javaExe
+                $java8Versao     = if ($jreKey.FullVersion) { $jreKey.FullVersion } else { '1.8.x' }
+                break
+            }
+        }
+    }
+
+    if (-not $java8Encontrado) {
+        $buscaFS = @('C:\Program Files\Java', 'C:\Program Files (x86)\Java')
+        foreach ($dir in $buscaFS) {
+            if (Test-Path $dir) {
+                $jre8 = Get-ChildItem $dir -Directory -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -match '^jre1\.8' } |
+                    Sort-Object Name -Descending | Select-Object -First 1
+                if ($jre8) {
+                    $javaExe = Join-Path $jre8.FullName 'bin\java.exe'
+                    if (Test-Path $javaExe) {
+                        $java8Encontrado = $true
+                        $java8Path       = $javaExe
+                        $java8Versao     = $jre8.Name
+                        break
+                    }
+                }
+            }
+        }
+    }
+
+    if ($java8Encontrado) {
+        Write-Ok "Java 8 encontrado: $java8Versao"
+        Write-Info "Caminho: $java8Path"
+        Add-Rel '1. Java 8' 'OK' "Versao $java8Versao encontrada em $java8Path"
+    } else {
+        Write-Falha 'Java 8 NAO encontrado neste computador.'
+        Write-Info  'O PJe requer Java 8 (JRE 1.8). Instale e execute este script novamente.'
+        Write-Info  'Download: https://www.java.com/pt-BR/download/'
+        Add-Rel '1. Java 8' 'ERRO' 'Java 8 nao encontrado. Instale e execute novamente.'
+        Write-Host ''
+        Write-Host '   Configuracao encerrada: Java 8 e obrigatorio para o PJe.' -ForegroundColor Red
+        Write-Host ''
+            return [long]0
+    }
+
+    # =========================================================================
+    # ETAPA 2-5 - Configurar Java para cada usuario do sistema
+    # =========================================================================
+
+    $nomesIgnorados  = '^(Public|All Users|Default|Default User|defaultuser0|desktop\.ini)$'
+    $usuarios        = @(Get-ChildItem 'C:\Users' -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -notmatch $nomesIgnorados })
+
+    $usuariosConfig  = 0
+    $usuariosSemDir  = 0
+    $totalBackups    = 0
+    $totalCacheLimpo = 0
+
+    Write-Etapa '2-5/9  Configurando Java para todos os usuarios do sistema...'
+    Write-Host ''
+    Write-Info ("$($usuarios.Count) perfil(is) de usuario encontrado(s) em C:\Users.")
+    Write-Host ''
+
+    foreach ($usuario in $usuarios) {
+        $deployDir   = Join-Path $usuario.FullName 'AppData\LocalLow\Sun\Java\Deployment'
+        $deployProps = Join-Path $deployDir 'deployment.properties'
+        $excepSites  = Join-Path $deployDir 'exception.sites'
+        $cacheDir    = Join-Path $deployDir 'cache'
+
+        Write-Dest ("   --- Usuario: $($usuario.Name) ---")
+
+        # Garantir que a pasta Deployment existe
+        if (-not (Test-Path $deployDir)) {
+            try {
+                New-Item -Path $deployDir -ItemType Directory -Force | Out-Null
+                Write-Info 'Pasta Deployment criada.'
+            } catch {
+                Write-Aviso ("Sem acesso a pasta do usuario $($usuario.Name). Ignorando.")
+                $usuariosSemDir++
+                Write-Host ''
+                continue
+            }
+        }
+
+        # ETAPA 2 - Backup do deployment.properties
+        if (Test-Path $deployProps) {
+            $ts     = Get-Date -Format 'yyyyMMdd_HHmmss'
+            $backup = $deployProps + '.bak_' + $ts
+            try {
+                Copy-Item $deployProps $backup -Force
+                Write-Ok "Backup criado: deployment.properties.bak_$ts"
+                $totalBackups++
+            } catch {
+                Write-Aviso 'Nao foi possivel criar backup do deployment.properties.'
+            }
+        } else {
+            Write-Info 'deployment.properties nao existia. Sera criado.'
+        }
+
+        # ETAPA 3 - Configurar nivel de seguranca e apontar exception.sites
+        $excepSitesPath = $usuario.FullName.Replace('\', '/') + '/AppData/LocalLow/Sun/Java/Deployment/exception.sites'
+
+        # MEDIUM foi removido do Java a partir do 8u20: os niveis validos sao
+        # HIGH e VERY_HIGH. Gravar MEDIUM faz o Java ignorar e voltar para HIGH.
+        # O que realmente libera os sistemas juridicos e' o exception.sites.
+        $props = @{
+            'deployment.security.level'                = 'HIGH'
+            'deployment.user.security.exception.sites' = $excepSitesPath
+            'deployment.expiration.check.enabled'      = 'false'
+            'deployment.webjava.enabled'               = 'true'
+        }
+        # Chaves .locked travam o painel do Java: precisam SUMIR do arquivo.
+        $remover = @(
+            'deployment.security.level.locked'
+            'deployment.user.security.exception.sites.locked'
+            'deployment.expiration.check.enabled.locked'
+            'deployment.webjava.enabled.locked'
+        )
+
+        try {
+            Atualizar-Properties $deployProps $props -Remover $remover
+            Write-Ok 'deployment.properties: security.level=HIGH + exception.sites configurado.'
+        } catch {
+            Write-Aviso ('Erro ao atualizar deployment.properties: ' + $_.Exception.Message)
+        }
+
+        # ETAPA 4 - Adicionar excecoes de sites no exception.sites
+        try {
+            $adicionadas = Atualizar-ExceptionSites $excepSites $urlsExcecao
+            if ($adicionadas -gt 0) {
+                Write-Ok "exception.sites: $adicionadas URL(s) nova(s) adicionada(s) ($($urlsExcecao.Count) total configuradas)."
+            } else {
+                Write-Ok "exception.sites: todas as $($urlsExcecao.Count) URLs ja estavam presentes."
+            }
+        } catch {
+            Write-Aviso ('Erro ao atualizar exception.sites: ' + $_.Exception.Message)
+        }
+
+        # ETAPA 5 - Limpar cache do Java
+        if (Test-Path $cacheDir) {
+            try {
+                $itensCache = @(Get-ChildItem $cacheDir -Recurse -Force -ErrorAction SilentlyContinue)
+                Remove-Item $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
+                Write-Ok ("Cache do Java removido ($($itensCache.Count) item(ns) eliminados).")
+                $totalCacheLimpo++
+            } catch {
+                Write-Aviso ('Erro ao limpar cache Java: ' + $_.Exception.Message)
+            }
+        } else {
+            Write-Info 'Cache do Java ja estava vazio.'
+        }
+
+        $usuariosConfig++
+        Write-Host ''
+    }
+
+    Add-Rel '2. Backup props' 'OK' "$totalBackups backup(s) criado(s) com timestamp"
+    Add-Rel '3. Security HIGH' 'OK' "deployment.properties atualizado em $usuariosConfig usuario(s) (locks removidos)"
+    Add-Rel '4. exception.sites' 'OK' "$($urlsExcecao.Count) URLs configuradas em $usuariosConfig usuario(s)"
+    Add-Rel '5. Cache Java' 'OK' "Cache limpo em $totalCacheLimpo usuario(s)"
+
+    if ($usuariosSemDir -gt 0) {
+        Write-Aviso "$usuariosSemDir usuario(s) ignorado(s) por falta de permissao de acesso."
+    }
+
+    # =========================================================================
+    # ETAPA 6 - Verificar servico Shodo
+    # =========================================================================
+
+    Write-Etapa '6/9  Verificando servico Shodo...'
+    Write-Host ''
+
+    $servicoShodo = Get-Service -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match 'shodo' -or $_.DisplayName -match 'shodo' } |
+        Select-Object -First 1
+
+    if ($servicoShodo) {
+        Write-Info ("Servico encontrado: '$($servicoShodo.Name)' - Status: $($servicoShodo.Status)")
+        if ($servicoShodo.Status -eq 'Running') {
+            Write-Ok 'Shodo esta em execucao.'
+            Add-Rel '6. Shodo' 'OK' "Servico '$($servicoShodo.Name)' em execucao"
+        } else {
+            Write-Aviso "Shodo esta parado. Tentando iniciar..."
+            try {
+                Start-Service -Name $servicoShodo.Name -ErrorAction Stop
+                Start-Sleep -Milliseconds 1500
+                $novoStatus = (Get-Service -Name $servicoShodo.Name).Status
+                if ($novoStatus -eq 'Running') {
+                    Write-Ok 'Shodo iniciado com sucesso.'
+                    Add-Rel '6. Shodo' 'OK' "Servico iniciado (estava parado)"
+                } else {
+                    Write-Aviso "Shodo nao iniciou (status: $novoStatus)."
+                    Add-Rel '6. Shodo' 'AVISO' "Nao foi possivel iniciar o servico (status: $novoStatus)"
+                }
+            } catch {
+                Write-Falha ('Erro ao iniciar Shodo: ' + $_.Exception.Message)
+                Add-Rel '6. Shodo' 'ERRO' ('Falha ao iniciar: ' + $_.Exception.Message)
+            }
+        }
+    } else {
+        Write-Aviso 'Servico Shodo NAO encontrado neste computador.'
+        Write-Info  'O Shodo e necessario para assinatura digital no PJe.'
+        Write-Info  'Instale o Shodo e execute este script novamente para verificar.'
+        Add-Rel '6. Shodo' 'AVISO' 'Servico nao instalado. Instale o Shodo para assinatura digital.'
+    }
+
+    # =========================================================================
+    # ETAPA 7 - Verificar servico Shomei
+    # =========================================================================
+
+    Write-Etapa '7/9  Verificando servico Shomei...'
+    Write-Host ''
+
+    $servicoShomei = Get-Service -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match 'shomei' -or $_.DisplayName -match 'shomei' } |
+        Select-Object -First 1
+
+    if ($servicoShomei) {
+        Write-Info ("Servico encontrado: '$($servicoShomei.Name)' - Status: $($servicoShomei.Status)")
+        if ($servicoShomei.Status -eq 'Running') {
+            Write-Ok 'Shomei esta em execucao.'
+            Add-Rel '7. Shomei' 'OK' "Servico '$($servicoShomei.Name)' em execucao"
+        } else {
+            Write-Aviso 'Shomei esta parado. Tentando iniciar...'
+            try {
+                Start-Service -Name $servicoShomei.Name -ErrorAction Stop
+                Start-Sleep -Milliseconds 1500
+                $novoStatus = (Get-Service -Name $servicoShomei.Name).Status
+                if ($novoStatus -eq 'Running') {
+                    Write-Ok 'Shomei iniciado com sucesso.'
+                    Add-Rel '7. Shomei' 'OK' "Servico iniciado (estava parado)"
+                } else {
+                    Write-Aviso "Shomei nao iniciou (status: $novoStatus)."
+                    Add-Rel '7. Shomei' 'AVISO' "Nao foi possivel iniciar o servico (status: $novoStatus)"
+                }
+            } catch {
+                Write-Falha ('Erro ao iniciar Shomei: ' + $_.Exception.Message)
+                Add-Rel '7. Shomei' 'ERRO' ('Falha ao iniciar: ' + $_.Exception.Message)
+            }
+        }
+    } else {
+        Write-Aviso 'Servico Shomei NAO encontrado neste computador.'
+        Write-Info  'O Shomei e necessario para assinatura digital no PJe.'
+        Write-Info  'Instale o Shomei e execute este script novamente para verificar.'
+        Add-Rel '7. Shomei' 'AVISO' 'Servico nao instalado. Instale o Shomei para assinatura digital.'
+    }
+
+    # =========================================================================
+    # ETAPA 8 - Testar conectividade com o PJe
+    # =========================================================================
+
+    Write-Etapa '8/9  Testando conectividade com pje.jus.br...'
+    Write-Host ''
+
+    [Net.ServicePointManager]::SecurityProtocol = (
+        [Net.SecurityProtocolType]::Tls12 -bor
+        [Net.SecurityProtocolType]::Tls11 -bor
+        [Net.SecurityProtocolType]::Tls
+    )
+
+    $urlTeste   = 'https://pje.jus.br'
+    $conectOk   = $false
+    $conectDetalhe = ''
+
+    try {
+        $req = [System.Net.HttpWebRequest]::Create($urlTeste)
+        $req.Timeout          = 12000
+        $req.AllowAutoRedirect = $true
+        $req.UserAgent        = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        $resp = $req.GetResponse()
+        $httpCode = [int]$resp.StatusCode
+        $resp.Close()
+        $conectOk     = $true
+        $conectDetalhe = "HTTP $httpCode"
+    } catch [System.Net.WebException] {
+        $webEx = $_.Exception
+        if ($webEx.Response) {
+            $httpCode = [int]$webEx.Response.StatusCode
+            if ($httpCode -ge 200) {
+                $conectOk     = $true
+                $conectDetalhe = "HTTP $httpCode (site acessivel)"
+            } else {
+                $conectDetalhe = "HTTP $httpCode"
+            }
+        } elseif ($webEx.Message -match 'SSL|certificate|TLS') {
+            $conectDetalhe = 'Erro de certificado SSL. Verifique certificados raiz do Windows.'
+        } elseif ($webEx.Message -match 'proxy|407') {
+            $conectDetalhe = 'Bloqueado por proxy.'
+        } elseif ($webEx.Message -match 'timed out|timeout') {
+            $conectDetalhe = 'Timeout (servidor nao respondeu em 12s).'
+        } else {
+            $conectDetalhe = $webEx.Message
+            if ($conectDetalhe.Length -gt 80) { $conectDetalhe = $conectDetalhe.Substring(0, 77) + '...' }
+        }
+    } catch {
+        $conectDetalhe = $_.Exception.Message
+        if ($conectDetalhe.Length -gt 80) { $conectDetalhe = $conectDetalhe.Substring(0, 77) + '...' }
+    }
+
+    if ($conectOk) {
+        Write-Ok "pje.jus.br acessivel. $conectDetalhe"
+        Add-Rel '8. Conectividade' 'OK' "pje.jus.br acessivel ($conectDetalhe)"
+    } else {
+        Write-Aviso "pje.jus.br com problema: $conectDetalhe"
+        Write-Info  'Verifique conexao com a internet, proxy ou VPN.'
+        Add-Rel '8. Conectividade' 'AVISO' "pje.jus.br inacessivel: $conectDetalhe"
+    }
+
+    # =========================================================================
+    # ETAPA 9 - Relatorio final colorido
+    # =========================================================================
+
+    Write-Etapa '9/9  Relatorio final...'
+    Write-Host ''
+
+    Write-Host '   RELATORIO DE CONFIGURACAO DO AMBIENTE PJe          ' -ForegroundColor Cyan
+    Write-Host ''
+
+    $erros  = @($relatorio | Where-Object { $_.Status -eq 'ERRO' })
+    $avisos = @($relatorio | Where-Object { $_.Status -eq 'AVISO' })
+    $oks    = @($relatorio | Where-Object { $_.Status -eq 'OK' })
+
+    foreach ($item in $relatorio) {
+        $cor    = if ($item.Status -eq 'OK') { 'Green' } elseif ($item.Status -eq 'AVISO') { 'Yellow' } else { 'Red' }
+        $prefixo = if ($item.Status -eq 'OK') { '[OK]   ' } elseif ($item.Status -eq 'AVISO') { '[!]    ' } else { '[ERRO] ' }
+        Write-Host ('   ' + $prefixo + $item.Etapa.PadRight(22) + '  ') -ForegroundColor $cor -NoNewline
+        Write-Host $item.Msg
+    }
+
+    Write-Host ''
+    $corRel = if ($erros.Count -gt 0) { 'Red' } elseif ($avisos.Count -gt 0) { 'Yellow' } else { 'Green' }
+    Write-Host ('   Resumo: ' + $oks.Count + ' OK  |  ' + $avisos.Count + ' Aviso(s)  |  ' + $erros.Count + ' Erro(s)') -ForegroundColor $corRel
+    Write-Host ''
+
+    if ($oks.Count -eq $relatorio.Count) {
+        Write-Host '   Ambiente PJe configurado com sucesso!' -ForegroundColor Green
+    }
+    if ($avisos.Count -gt 0 -or $erros.Count -gt 0) {
+        Write-Host '   Verifique os itens acima com [!] ou [ERRO] e resolva antes de usar o PJe.' -ForegroundColor Yellow
+    }
+
+    Write-Host ''
+    Write-Dest '   Configuracoes aplicadas para todos os usuarios:'
+    Write-Info ("   Usuarios processados : $usuariosConfig")
+    Write-Info ("   Backups criados      : $totalBackups")
+    Write-Info ("   URLs no exception.sites : $($urlsExcecao.Count)  (Shodo, Shomei, PJe, PROJUDI - 27 estados)")
+    Write-Info ("   Cache Java limpo em  : $totalCacheLimpo usuario(s)")
+
+    Write-Host ''
+    Write-Host ''
+    return [long]0
+}
+
+function Clear-CertificadosVencidos {
+    <#
+      Veio de LimparCertificadosVencidos.ps1.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Listaria os certificados da loja Pessoal e o que poderia ser removido.'; return [long]0 }
+    # LimparCertificadosVencidos.ps1
+    # Limpa certificados indesejados da loja Pessoal (CurrentUser\My) do Windows
+    # Mantem ICP-Brasil e ICP-Portugal validos, remove residuos, pergunta sobre vencidos
+
+
+
+
+    # Funcoes de classificacao de certificados
+
+    function Test-ICPBrasil {
+        param([string]$Subject, [string]$Issuer)
+        $texto = $Subject + ' ' + $Issuer
+        if ($texto -match 'ICP-Brasil') { return $true }
+        # Cartao de Cidadao: aceita tanto com acentos (Cart[a~]o) quanto sem (Cartao)
+        if ($texto -match 'Cart.o de Cidad.o') { return $true }
+        $marcadores = @(
+            # ICP-Brasil
+            'AC OAB', 'OAB ',
+            'SyngularID', 'SYNGULARID',
+            'Certisign', 'CERTISIGN',
+            'Serpro', 'SERPRO',
+            'Serasa', 'SERASA',
+            'SafeID', 'SAFEID',
+            'VALID ', 'Valid ', 'VALID,', 'Valid,', 'Valid S',
+            'AC Raiz', 'Autoridade Certificadora Raiz',
+            'Autoridade Certificadora',
+            'Soluti', 'SOLUTI',
+            'Safeweb', 'SAFEWEB',
+            'AC CAIXA', 'Caixa Economica',
+            'FENACOR', 'Casa da Moeda',
+            'e-CPF', 'e-CNPJ',
+            'RFB e-CPF', 'RFB e-CNPJ',
+            'Receita Federal', 'RECEITA FEDERAL',
+            'ITI ', 'Imprensa Oficial',
+            'DocuSign Brazil',
+            # ICP-Portugal
+            'CC Portuguese', 'Portuguese Citizen Card',
+            'Portuguese Authentication Authority',
+            'SCEE',
+            'Multicert', 'MULTICERT',
+            'DigitalSign', 'DIGITALSIGN',
+            'DSTgroup', 'DST group', 'DST Group',
+            'ECEE',
+            'Camerfirma Portugal', 'CAMERFIRMA',
+            'EC de Autenticacao do Cidadao',
+            'Entidade de Certificacao Electronica do Estado',
+            'AMA - Agencia para a Modernizacao Administrativa'
+        )
+        foreach ($m in $marcadores) {
+            if ($texto -match [regex]::Escape($m)) { return $true }
+        }
+        return $false
+    }
+
+    function Get-NomeCert {
+        param([string]$Subject)
+        if ($Subject -match 'CN=([^,]+)') {
+            $cn = $Matches[1].Trim()
+            $cn = $cn -replace ':\d{11,14}.*$', ''    # Remove :CPF ou :CNPJ
+            $cn = $cn -replace '\s*\(.*?\)\s*$', ''   # Remove (e-CPF A1) etc.
+            return $cn.Trim()
+        }
+        return $Subject
+    }
+
+    function Get-IdentificadorCert {
+        param([string]$Subject)
+        if ($Subject -match ':(\d{14})\b') {
+            $n = $Matches[1]
+            return 'CNPJ ' + $n.Substring(0,2) + '.' + $n.Substring(2,3) + '.' + $n.Substring(5,3) + '/' + $n.Substring(8,4) + '-' + $n.Substring(12,2)
+        }
+        if ($Subject -match ':(\d{11})\b') {
+            $n = $Matches[1]
+            return 'CPF ' + $n.Substring(0,3) + '.' + $n.Substring(3,3) + '.' + $n.Substring(6,3) + '-' + $n.Substring(9,2)
+        }
+        if ($Subject -match '(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2})') { return 'CNPJ ' + $Matches[1] }
+        if ($Subject -match '(\d{3}\.\d{3}\.\d{3}-\d{2})')       { return 'CPF '  + $Matches[1] }
+        return ''
+    }
+
+    function Get-TipoICPBrasil {
+        param([string]$Subject, [string]$Issuer, [string]$Identificador)
+        $texto = $Subject + ' ' + $Issuer
+        if ($texto -match 'OAB') { return 'OAB' }
+        # Tipos ICP-Portugal
+        if ($texto -match 'Cart.o de Cidad.o|Portuguese Citizen Card|CC Portuguese') { return 'Cidadao PT' }
+        if ($texto -match 'SCEE|Multicert|DigitalSign|DSTgroup|ECEE|Camerfirma Portugal|Portuguese Auth') { return 'ICP-PT' }
+        # Tipos ICP-Brasil
+        if ($Identificador -match '^CNPJ') { return 'eCNPJ' }
+        if ($Identificador -match '^CPF')  { return 'eCPF'  }
+        return 'ICP-Brasil'
+    }
+
+    function Get-EmissorResumido {
+        param([string]$Issuer)
+        if ($Issuer -match 'CN=([^,]+)') { return $Matches[1].Trim() }
+        return $Issuer
+    }
+
+    # =========================================================================
+    # Cabecalho
+    # =========================================================================
+
+    Write-Host ''
+    Write-Host '   Limpeza de Certificados - Loja Pessoal (My)        ' -ForegroundColor Cyan
+    Write-Host '   Mantem ICP-Brasil e ICP-Portugal validos           ' -ForegroundColor Cyan
+    Write-Host ''
+
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
+    )
+    if ($isAdmin) {
+        Write-Ok 'Executando como Administrador.'
+    } else {
+        Write-Ok 'Executando como usuario padrao (suficiente para a loja Pessoal).'
+    }
+
+    # =========================================================================
+    # ETAPA 1 - Ler a loja CurrentUser\My
+    # =========================================================================
+
+    Write-Etapa '1/7  Lendo loja CurrentUser\My (aba Pessoal do certmgr)...'
+    Write-Host ''
+
+    $StoreName     = [System.Security.Cryptography.X509Certificates.StoreName]::My
+    $StoreLocation = [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
+    $OpenFlags     = [System.Security.Cryptography.X509Certificates.OpenFlags]
+
+    $loja = [System.Security.Cryptography.X509Certificates.X509Store]::new($StoreName, $StoreLocation)
+
+    try {
+        $loja.Open($OpenFlags::ReadOnly)
+    } catch {
+        Write-Falha ('Nao foi possivel abrir a loja CurrentUser\My: ' + $_.Exception.Message)
+            return [long]0
+    }
+
+    $certsBrutos = @($loja.Certificates)
+    $loja.Close()
+
+    if ($certsBrutos.Count -eq 0) {
+        Write-Ok 'A loja Pessoal esta vazia. Nenhuma acao necessaria.'
+            return [long]0
+    }
+
+    Write-Ok ("$($certsBrutos.Count) certificado(s) encontrado(s) na loja Pessoal.")
+
+    $hoje = Get-Date
+
+    # =========================================================================
+    # ETAPA 2 - Classificar cada certificado nas tres categorias
+    # =========================================================================
+
+    Write-Etapa '2/7  Classificando certificados...'
+    Write-Host ''
+
+    # Categoria A: ICP-Brasil/Portugal validos  -> MANTER (nunca removidos)
+    # Categoria B: ICP-Brasil/Portugal vencidos -> PERGUNTAR
+    # Categoria C: Desconhecidos                -> PERGUNTAR (nunca automatico)
+    #
+    # IMPORTANTE: certificado com chave privada (A1) removido da loja e' PERDIDO
+    # se o cliente nao tiver o arquivo .pfx guardado. Por isso nada e' removido
+    # sem confirmacao e a chave privada e' sempre sinalizada na tela.
+
+    $icpValidos   = [System.Collections.Generic.List[PSObject]]::new()
+    $icpVencidos  = [System.Collections.Generic.List[PSObject]]::new()
+    $desconhecidos = [System.Collections.Generic.List[PSObject]]::new()
+
+    foreach ($cert in $certsBrutos) {
+        $subject      = $cert.Subject
+        $issuer       = $cert.Issuer
+        $nome         = Get-NomeCert $subject
+        $identificador = Get-IdentificadorCert $subject
+        $emissor      = Get-EmissorResumido $issuer
+        $vencimento   = $cert.NotAfter
+        $vencido      = $vencimento -lt $hoje
+        $diasRestantes = [math]::Round(($vencimento - $hoje).TotalDays, 0)
+        $isICP        = Test-ICPBrasil $subject $issuer
+        $tipo         = if ($isICP) { Get-TipoICPBrasil $subject $issuer $identificador } else { 'Desconhecido' }
+        $temChave     = $false
+        try { $temChave = $cert.HasPrivateKey } catch {}
+
+        $obj = [PSCustomObject]@{
+            Thumbprint    = $cert.Thumbprint
+            NumeroSerie   = $cert.SerialNumber
+            Nome          = $nome
+            Identificador = $identificador
+            Tipo          = $tipo
+            Emissor       = $emissor
+            Vencimento    = $vencimento
+            Vencido       = $vencido
+            DiasRestantes = $diasRestantes
+            ICPBrasil     = $isICP
+            ChavePrivada  = $temChave
+            Certificado   = $cert
+        }
+
+        if ($isICP -and -not $vencido)  { $icpValidos.Add($obj)    }
+        elseif ($isICP -and $vencido)   { $icpVencidos.Add($obj)   }
+        else                            { $desconhecidos.Add($obj)  }
+    }
+
+    $comChave = @($desconhecidos | Where-Object { $_.ChavePrivada })
+
+    Write-Ok ("ICP-Brasil/Portugal validos (MANTER)     : " + $icpValidos.Count)
+    Write-Ok ("ICP-Brasil/Portugal vencidos (PERGUNTAR) : " + $icpVencidos.Count)
+    Write-Aviso ("Desconhecidos/residuos (PERGUNTAR)    : " + $desconhecidos.Count)
+    if ($comChave.Count -gt 0) {
+        Write-Aviso ("   destes, COM CHAVE PRIVADA (A1)     : " + $comChave.Count + '  <-- atencao')
+    }
+
+    # =========================================================================
+    # ETAPA 3/5 - Exibir as tres categorias separadas
+    # =========================================================================
+
+    Write-Etapa '3/7  Lista completa por categoria...'
+
+    # --- Categoria A: ICP-Brasil validos ---
+    Write-Host ''
+    Write-Host '   ============================================================' -ForegroundColor Green
+    Write-Host '   CATEGORIA A  >>  Cert. ICP-Brasil / ICP-Portugal VALIDOS    ' -ForegroundColor Green
+    Write-Host '   ============================================================' -ForegroundColor Green
+    Write-Host ''
+
+    if ($icpValidos.Count -eq 0) {
+        Write-Info 'Nenhum certificado ICP-Brasil ou ICP-Portugal valido encontrado.'
+    } else {
+        foreach ($c in ($icpValidos | Sort-Object Vencimento)) {
+            $diasInfo = if ($c.DiasRestantes -le 30) {
+                '  [expira em ' + $c.DiasRestantes + ' dias]'
+            } else {
+                ''
+            }
+            $corNome = if ($c.DiasRestantes -le 30) { 'Yellow' } else { 'Green' }
+            Write-Host ('   [' + $c.Tipo.PadRight(9) + '] ') -ForegroundColor Green -NoNewline
+            Write-Host ($c.Nome + $diasInfo) -ForegroundColor $corNome
+            if ($c.Identificador) {
+                Write-Host ('   ' + ''.PadRight(12) + ' Ident.: ' + $c.Identificador) -ForegroundColor Gray
+            }
+            Write-Host ('   ' + ''.PadRight(12) + ' Emiss.: ' + $c.Emissor) -ForegroundColor Gray
+            Write-Host ('   ' + ''.PadRight(12) + ' Valido: ' + $c.Vencimento.ToString('dd/MM/yyyy')) -ForegroundColor Gray
+            Write-Host ('   ' + ''.PadRight(12) + ' Thumb : ' + $c.Thumbprint) -ForegroundColor DarkCyan
+            Write-Host ''
+        }
+    }
+
+    # --- Categoria B: ICP-Brasil vencidos ---
+    Write-Host '   ============================================================' -ForegroundColor Yellow
+    Write-Host '   CATEGORIA B  >>  Cert. ICP-Brasil / ICP-Portugal VENCIDOS   ' -ForegroundColor Yellow
+    Write-Host '   ============================================================' -ForegroundColor Yellow
+    Write-Host ''
+
+    if ($icpVencidos.Count -eq 0) {
+        Write-Info 'Nenhum certificado ICP-Brasil ou ICP-Portugal vencido encontrado.'
+    } else {
+        foreach ($c in ($icpVencidos | Sort-Object Vencimento -Descending)) {
+            $diasAtras = [math]::Abs($c.DiasRestantes)
+            Write-Host ('   [' + $c.Tipo.PadRight(9) + '] ') -ForegroundColor Yellow -NoNewline
+            Write-Host $c.Nome -ForegroundColor White
+            if ($c.Identificador) {
+                Write-Host ('   ' + ''.PadRight(12) + ' Ident.: ' + $c.Identificador) -ForegroundColor Gray
+            }
+            Write-Host ('   ' + ''.PadRight(12) + ' Emiss.: ' + $c.Emissor) -ForegroundColor Gray
+            Write-Host ('   ' + ''.PadRight(12) + ' Venceu: ' + $c.Vencimento.ToString('dd/MM/yyyy') + '  (ha ' + $diasAtras + ' dias)') -ForegroundColor Red
+            Write-Host ('   ' + ''.PadRight(12) + ' Thumb : ' + $c.Thumbprint) -ForegroundColor DarkCyan
+            Write-Host ''
+        }
+    }
+
+    # --- Categoria C: Desconhecidos ---
+    Write-Host '   ============================================================' -ForegroundColor Red
+    Write-Host '   CATEGORIA C  >>  Certificados DESCONHECIDOS (sob consulta)  ' -ForegroundColor Red
+    Write-Host '   ============================================================' -ForegroundColor Red
+    Write-Host ''
+
+    if ($desconhecidos.Count -eq 0) {
+        Write-Info 'Nenhum certificado desconhecido encontrado.'
+    } else {
+        Write-Info 'Desconhecido = nao bateu com a lista de emissores ICP conhecidos.'
+        Write-Info 'Pode ser residuo de software, mas tambem certificado corporativo,'
+        Write-Info 'de VPN, de e-mail (S/MIME) ou de AC estrangeira. Confira antes.'
+        Write-Host ''
+        foreach ($c in ($desconhecidos | Sort-Object Nome)) {
+            $statusVenc = if ($c.Vencido) { '  [VENCIDO]' } else { '' }
+            Write-Host ('   [Residuo  ] ') -ForegroundColor Red -NoNewline
+            Write-Host ($c.Nome + $statusVenc) -ForegroundColor White
+            Write-Host ('   ' + ''.PadRight(12) + ' Emiss.: ' + $c.Emissor) -ForegroundColor Gray
+            Write-Host ('   ' + ''.PadRight(12) + ' Validade: ' + $c.Vencimento.ToString('dd/MM/yyyy')) -ForegroundColor Gray
+            Write-Host ('   ' + ''.PadRight(12) + ' Thumb : ' + $c.Thumbprint) -ForegroundColor DarkCyan
+            if ($c.ChavePrivada) {
+                Write-Host ('   ' + ''.PadRight(12) + ' CHAVE PRIVADA presente (A1) - remover e PERMANENTE') -ForegroundColor Red
+            }
+            Write-Host ''
+        }
+    }
+
+    # =========================================================================
+    # ETAPA 4 - Verificar se ha algo a fazer
+    # =========================================================================
+
+    $temAcao = ($desconhecidos.Count -gt 0) -or ($icpVencidos.Count -gt 0)
+
+    if (-not $temAcao) {
+        Write-Host ''
+        Write-Ok 'Nenhum certificado para remover. Loja ja esta limpa.'
+        Write-Host ''
+            return [long]0
+    }
+
+    # =========================================================================
+    # ETAPA 5/6 - Backup CSV antes de qualquer remocao
+    # =========================================================================
+
+    Write-Etapa '4/7  Exportando backup para a Area de Trabalho...'
+    Write-Host ''
+
+    $desktop    = [Environment]::GetFolderPath('Desktop')
+    $backupDir  = Join-Path $desktop ('CertificadosBackup_' + (Get-Date -Format 'yyyyMMdd_HHmmss'))
+    $csvPath    = Join-Path $backupDir 'certificados.csv'
+    $backupOk   = $false
+
+    if (-not (Test-Path $backupDir)) {
+        New-Item -ItemType Directory -Path $backupDir -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+
+    $linhasCSV = [System.Collections.Generic.List[PSObject]]::new()
+    foreach ($c in $certsBrutos) {
+        $s = $c.Subject
+        $i = $c.Issuer
+        $linhasCSV.Add([PSCustomObject]@{
+            Categoria     = if (Test-ICPBrasil $s $i) { if ($c.NotAfter -lt $hoje) { 'ICP Vencido' } else { 'ICP Valido' } } else { 'Desconhecido' }
+            Nome          = Get-NomeCert $s
+            Identificador = Get-IdentificadorCert $s
+            Tipo          = if (Test-ICPBrasil $s $i) { Get-TipoICPBrasil $s $i (Get-IdentificadorCert $s) } else { 'Desconhecido' }
+            Emissor       = Get-EmissorResumido $i
+            Vencimento    = $c.NotAfter.ToString('dd/MM/yyyy HH:mm:ss')
+            Vencido       = if ($c.NotAfter -lt $hoje) { 'Sim' } else { 'Nao' }
+            Thumbprint    = $c.Thumbprint
+            NumeroSerie   = $c.SerialNumber
+            Loja          = 'CurrentUser\My'
+        })
+    }
+
+    try {
+        $linhasCSV | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8 -Force
+        $backupOk = $true
+        Write-Ok "Lista salva: $csvPath"
+        Write-Info ("$($linhasCSV.Count) certificado(s) registrado(s) no arquivo CSV.")
+    } catch {
+        Write-Aviso 'Nao foi possivel salvar o CSV.'
+        Write-Info  ('Erro: ' + $_.Exception.Message)
+        Write-Host ''
+        $respBackup = Read-Host '   Deseja continuar sem o backup? (S/N)'
+        if ($respBackup -notmatch '^[Ss]') {
+            Write-Info 'Operacao cancelada pelo usuario. Nenhum certificado foi removido.'
+            return [long]0
+        }
+    }
+
+    # Exportar o certificado em si (.cer) - permite reimportar a parte publica
+    $cerExportados = 0
+    foreach ($c in $certsBrutos) {
+        try {
+            $nomeArq = ($c.Thumbprint + '.cer')
+            $bytes   = $c.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+            [System.IO.File]::WriteAllBytes((Join-Path $backupDir $nomeArq), $bytes)
+            $cerExportados++
+        } catch {}
+    }
+    if ($cerExportados -gt 0) {
+        Write-Ok "$cerExportados arquivo(s) .cer exportado(s) em: $backupDir"
+    }
+
+    Write-Host ''
+    Write-Aviso 'LIMITE DO BACKUP: o .cer guarda apenas a parte PUBLICA do certificado.'
+    Write-Info  'A CHAVE PRIVADA (certificado A1) NAO e exportada por este backup e NAO'
+    Write-Info  'pode ser recuperada depois da remocao. So remova certificado com chave'
+    Write-Info  'privada se o cliente tiver o arquivo .pfx original guardado.'
+
+    # =========================================================================
+    # ETAPA 5 - Decisao sobre ICP-Brasil vencidos (pergunta)
+    # =========================================================================
+
+    # Selecao interativa reaproveitada pelas duas categorias removiveis.
+    # Nada e' removido sem passar por aqui.
+    function Select-CertsParaRemover {
+        param(
+            [PSObject[]]$Certificados,
+            [string]$Titulo
+        )
+        $escolhidos = [System.Collections.Generic.List[PSObject]]::new()
+        if (-not $Certificados -or $Certificados.Count -eq 0) { return $escolhidos }
+
+        Write-Host ''
+        Write-Host ('   [1] Remover TODOS (' + $Certificados.Count + ') - ' + $Titulo) -ForegroundColor White
+        Write-Host  '   [2] Escolher um por um' -ForegroundColor White
+        Write-Host  '   [3] Nao remover nenhum (manter por precaucao)' -ForegroundColor White
+        Write-Host ''
+        $opcao = Read-Host '   Opcao'
+
+        if ($opcao -eq '1') {
+            # Mesmo no "todos", chave privada exige um S/N adicional
+            foreach ($c in $Certificados) {
+                if ($c.ChavePrivada) {
+                    Write-Host ''
+                    Write-Aviso ('CHAVE PRIVADA (A1): ' + $c.Nome)
+                    Write-Info  'Sem o .pfx original este certificado nao volta.'
+                    $r = Read-Host '   Remover mesmo assim? (S/N)'
+                    if ($r -match '^[Ss]') { $escolhidos.Add($c) } else { Write-Info ('Mantido: ' + $c.Nome) }
+                } else {
+                    $escolhidos.Add($c)
+                }
+            }
+            Write-Info ("$($escolhidos.Count) certificado(s) marcado(s) para remocao.")
+        } elseif ($opcao -eq '2') {
+            $modoTodos = $false
+            $modoPular = $false
+            foreach ($c in ($Certificados | Sort-Object Vencimento -Descending)) {
+                if ($modoPular) { break }
+                if ($modoTodos -and -not $c.ChavePrivada) {
+                    $escolhidos.Add($c)
+                    Write-Info ('Marcado: ' + $c.Nome)
+                    continue
+                }
+                Write-Host ''
+                Write-Host ('   ' + $c.Tipo.PadRight(12) + '  ' + $c.Nome) -ForegroundColor White
+                if ($c.Identificador) { Write-Host ('   Ident. : ' + $c.Identificador) -ForegroundColor Gray }
+                Write-Host ('   Validade: ' + $c.Vencimento.ToString('dd/MM/yyyy') + '  |  Emissor: ' + $c.Emissor) -ForegroundColor Gray
+                Write-Host ('   Thumb  : ' + $c.Thumbprint) -ForegroundColor DarkCyan
+                if ($c.ChavePrivada) {
+                    Write-Host '   CHAVE PRIVADA presente (A1) - remocao PERMANENTE sem o .pfx' -ForegroundColor Red
+                }
+                Write-Host '   [S] Remover  [N] Manter  [T] Remover todos restantes  [P] Manter todos restantes' -ForegroundColor Gray
+                $resp = Read-Host '   Opcao'
+
+                if     ($resp -match '^[Tt]') { $modoTodos = $true;  $escolhidos.Add($c) }
+                elseif ($resp -match '^[Pp]') { $modoPular = $true }
+                elseif ($resp -match '^[Ss]') { $escolhidos.Add($c) }
+                else { Write-Info ('Mantido: ' + $c.Nome) }
+            }
+        } else {
+            Write-Info 'Nenhum certificado desta categoria sera removido.'
+        }
+        return $escolhidos
+    }
+
+    # --- Categoria C: desconhecidos (NUNCA automatico) ---
+    $desconhecidosParaRemover = [System.Collections.Generic.List[PSObject]]::new()
+
+    if ($desconhecidos.Count -gt 0) {
+        Write-Etapa ('5/7  Certificados desconhecidos (' + $desconhecidos.Count + ')  - aguardando confirmacao...')
+        Write-Host ''
+        Write-Host '   Estes NAO foram reconhecidos como ICP-Brasil ou ICP-Portugal.' -ForegroundColor Yellow
+        Write-Host '   Na maioria dos casos sao residuos de software, mas a lista acima' -ForegroundColor Yellow
+        Write-Host '   pode conter certificado corporativo, de VPN, de e-mail ou de AC' -ForegroundColor Yellow
+        Write-Host '   estrangeira. Confira a lista antes de confirmar.' -ForegroundColor Yellow
+        if ($comChave.Count -gt 0) {
+            Write-Host ''
+            Write-Host ('   ' + $comChave.Count + ' deste(s) tem CHAVE PRIVADA: remover e permanente.') -ForegroundColor Red
+        }
+        $desconhecidosParaRemover = Select-CertsParaRemover -Certificados $desconhecidos.ToArray() -Titulo 'desconhecidos/residuos'
+    }
+
+    # --- Categoria B: ICP vencidos ---
+    $icpVencidosParaRemover = [System.Collections.Generic.List[PSObject]]::new()
+
+    if ($icpVencidos.Count -gt 0) {
+        Write-Etapa ('6/7  Certificados ICP vencidos (' + $icpVencidos.Count + ')  - aguardando confirmacao...')
+        Write-Host ''
+        Write-Host '   Estes certificados sao ICP-Brasil (eCPF/eCNPJ/OAB) ou ICP-Portugal (Cartao de Cidadao) porem estao vencidos.' -ForegroundColor Yellow
+        Write-Host '   Certificados vencidos nao funcionam para assinar documentos.' -ForegroundColor Yellow
+        Write-Host '   Se ja renovou o certificado, os vencidos podem ser removidos com seguranca.' -ForegroundColor Yellow
+        $icpVencidosParaRemover = Select-CertsParaRemover -Certificados $icpVencidos.ToArray() -Titulo 'ICP vencidos (Brasil e Portugal)'
+    }
+
+    # =========================================================================
+    # ETAPA 7 - Executar remocoes e relatorio
+    # =========================================================================
+
+    Write-Etapa '7/7  Removendo certificados e gerando relatorio...'
+    Write-Host ''
+
+    $removidosOK    = [System.Collections.Generic.List[PSObject]]::new()
+    $removidosErro  = [System.Collections.Generic.List[PSObject]]::new()
+
+    function Remove-CertDaLoja {
+        param([PSObject]$CertObj, [string]$Motivo)
+        try {
+            $lojaRW = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+                [System.Security.Cryptography.X509Certificates.StoreName]::My,
+                [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
+            )
+            $lojaRW.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+            $lojaRW.Remove($CertObj.Certificado)
+            $lojaRW.Close()
+            $removidosOK.Add([PSCustomObject]@{ Nome = $CertObj.Nome; Tipo = $CertObj.Tipo; Motivo = $Motivo; Thumb = $CertObj.Thumbprint })
+            Write-Ok ('Removido [' + $Motivo + ']: ' + $CertObj.Nome)
+        } catch {
+            $removidosErro.Add([PSCustomObject]@{ Nome = $CertObj.Nome; Erro = $_.Exception.Message })
+            Write-Falha ('Erro ao remover: ' + $CertObj.Nome + ' - ' + $_.Exception.Message)
+        }
+    }
+
+    # Remover desconhecidos que o usuario confirmou
+    if ($desconhecidosParaRemover.Count -gt 0) {
+        Write-Dest '   --- Removendo residuos/desconhecidos (confirmado) ---'
+        Write-Host ''
+        foreach ($c in $desconhecidosParaRemover) {
+            Remove-CertDaLoja $c 'Residuo'
+        }
+    }
+
+    # Remover ICP-Brasil vencidos se o usuario confirmou
+    if ($icpVencidosParaRemover.Count -gt 0) {
+        Write-Host ''
+        Write-Dest '   --- Removendo certificados ICP vencidos (confirmado) ---'
+        Write-Host ''
+        foreach ($c in $icpVencidosParaRemover) {
+            Remove-CertDaLoja $c 'ICP vencido'
+        }
+    }
+
+    # =========================================================================
+    # Relatorio final
+    # =========================================================================
+
+    $totalRemovidos = $removidosOK.Count
+    $totalErros     = $removidosErro.Count
+    $corRel = if ($totalRemovidos -gt 0 -and $totalErros -eq 0) { 'Green' } elseif ($totalErros -gt 0) { 'Yellow' } else { 'Cyan' }
+
+    Write-Host ''
+    Write-Host '   RELATORIO FINAL                                     ' -ForegroundColor $corRel
+    Write-Host ''
+
+    Write-Dest '   Resultado da analise:'
+    Write-Host ('   ICP-Brasil/Portugal validos   : ' + $icpValidos.Count) -ForegroundColor Green
+    Write-Host ('   ICP-Brasil/Portugal vencidos  : ' + $icpVencidos.Count) -ForegroundColor $(if ($icpVencidos.Count -gt 0) { 'Yellow' } else { 'Gray' })
+    Write-Host ('   Residuos/desconhecidos encon. : ' + $desconhecidos.Count) -ForegroundColor $(if ($desconhecidos.Count -gt 0) { 'Yellow' } else { 'Gray' })
+
+    Write-Host ''
+    Write-Dest '   Resultado das remocoes:'
+    Write-Host ('   Removidos com sucesso         : ' + $totalRemovidos) -ForegroundColor $(if ($totalRemovidos -gt 0) { 'Green' } else { 'Gray' })
+    Write-Host ('   Erros ao remover              : ' + $totalErros) -ForegroundColor $(if ($totalErros -gt 0) { 'Red' } else { 'Gray' })
+
+    if ($removidosOK.Count -gt 0) {
+        Write-Host ''
+        Write-Dest '   Certificados removidos:'
+        foreach ($r in $removidosOK) {
+            Write-Host ('   [' + $r.Motivo.PadRight(12) + '] ' + $r.Nome) -ForegroundColor Green
+            Write-Host ('   ' + ''.PadRight(16) + ' Thumb: ' + $r.Thumb) -ForegroundColor DarkCyan
+        }
+    }
+
+    if ($removidosErro.Count -gt 0) {
+        Write-Host ''
+        Write-Dest '   Erros (certificados que nao puderam ser removidos):'
+        foreach ($e in $removidosErro) {
+            Write-Host ('   ' + $e.Nome + ' : ' + $e.Erro) -ForegroundColor Red
+        }
+        Write-Info '   Certificados em uso por outros programas podem nao ser removiveis.'
+        Write-Info '   Feche os programas e execute o script novamente se necessario.'
+    }
+
+    Write-Host ''
+    if ($backupOk) {
+        Write-Host ('   Backup : ' + $backupDir) -ForegroundColor DarkCyan
+        Write-Host '   (lista em CSV + .cer da parte publica; chave privada NAO incluida)' -ForegroundColor DarkGray
+    }
+
+    if ($totalRemovidos -eq 0 -and $totalErros -eq 0) {
+        Write-Host '   Nenhuma remocao realizada nesta execucao.' -ForegroundColor Gray
+    }
+
+    Write-Host ''
+    Write-Host '   Para verificar manualmente: Win+R  >  certmgr.msc  >  Pessoal' -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host ''
+    return [long]0
+}
+
+function Repair-ProxyECertificados {
+    <#
+      Veio de CorrigirProxy.ps1.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Verificaria proxy, TLS e certificados raiz, e testaria os sistemas juridicos.'; return [long]0 }
+    # CorrigirProxy.ps1
+    # Detecta e corrige problemas de proxy e certificados de rede
+
+
+
+
+    function Garantir-Chave {
+        param([string]$Caminho)
+        if (-not (Test-Path $Caminho)) {
+            New-Item -Path $Caminho -Force | Out-Null
+        }
+    }
+
+    function Definir-DWORD {
+        param([string]$Caminho, [string]$Nome, [int]$Valor)
+        Garantir-Chave $Caminho
+        Set-ItemProperty -Path $Caminho -Name $Nome -Value $Valor -Type DWord -Force
+    }
+
+    # =========================================================================
+    # Cabecalho
+    # =========================================================================
+
+    Write-Host ''
+    Write-Host '   Corrigir Proxy e Certificados de Rede              ' -ForegroundColor Cyan
+    Write-Host ''
+
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
+    )
+    if (-not $isAdmin) {
+        Write-Falha 'Este script requer privilegios de Administrador.'
+        Write-Info  'Execute o PowerShell como Administrador e tente novamente.'
+            return [long]0
+    }
+    Write-Ok 'Executando como Administrador.'
+
+    # Rastrear acoes realizadas para o relatorio final
+    $acoesRealizadas  = [System.Collections.Generic.List[string]]::new()
+    $problemaEncontrado = $false
+
+    # =========================================================================
+    # ETAPA 1 - Verificar configuracoes de proxy atuais
+    # =========================================================================
+
+    Write-Etapa '1/9  Verificando configuracoes de proxy atuais...'
+    Write-Host ''
+
+    $regProxy = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+
+    $proxyAtivo      = (Get-ItemProperty -Path $regProxy -Name 'ProxyEnable'    -ErrorAction SilentlyContinue).ProxyEnable
+    $proxyServidor   = (Get-ItemProperty -Path $regProxy -Name 'ProxyServer'    -ErrorAction SilentlyContinue).ProxyServer
+    $proxyExcecoes   = (Get-ItemProperty -Path $regProxy -Name 'ProxyOverride'  -ErrorAction SilentlyContinue).ProxyOverride
+    $proxyAutoConfig = (Get-ItemProperty -Path $regProxy -Name 'AutoConfigURL'  -ErrorAction SilentlyContinue).AutoConfigURL
+
+    $proxyHKLM       = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings'
+    $proxyAtivoSist  = (Get-ItemProperty -Path $proxyHKLM -Name 'ProxyEnable'   -ErrorAction SilentlyContinue).ProxyEnable
+    $proxyServSist   = (Get-ItemProperty -Path $proxyHKLM -Name 'ProxyServer'   -ErrorAction SilentlyContinue).ProxyServer
+
+    Write-Dest '   --- Proxy do usuario (HKCU) ---'
+    if ($proxyAtivo -eq 1) {
+        Write-Aviso 'Proxy do usuario: ATIVO'
+        $problemaEncontrado = $true
+        if ($proxyServidor) { Write-Dest ("   Servidor    : " + $proxyServidor) }
+        if ($proxyExcecoes) { Write-Dest ("   Excecoes    : " + $proxyExcecoes) }
+    } else {
+        Write-Ok 'Proxy do usuario: inativo.'
+    }
+    if ($proxyAutoConfig) {
+        Write-Aviso ('Auto-config (PAC) configurado: ' + $proxyAutoConfig)
+        $problemaEncontrado = $true
+    }
+
+    Write-Host ''
+    Write-Dest '   --- Proxy do sistema (HKLM) ---'
+    if ($proxyAtivoSist -eq 1) {
+        Write-Aviso 'Proxy do sistema: ATIVO'
+        $problemaEncontrado = $true
+        if ($proxyServSist) { Write-Dest ("   Servidor    : " + $proxyServSist) }
+    } else {
+        Write-Ok 'Proxy do sistema: inativo.'
+    }
+
+    # Proxy WinHTTP
+    Write-Host ''
+    Write-Dest '   --- Proxy WinHTTP (netsh) ---'
+    $winHttpProxy = netsh winhttp show proxy 2>$null
+    if ($winHttpProxy) {
+        $linhaProxy = $winHttpProxy | Where-Object { $_ -match 'Servidor Proxy|Proxy Server|Direct Access' }
+        foreach ($linha in $linhaProxy) {
+            $textoLinha = $linha.Trim()
+            if ($textoLinha -match 'Direct Access|Acesso direto') {
+                Write-Ok "WinHTTP: $textoLinha"
+            } else {
+                Write-Aviso "WinHTTP: $textoLinha"
+                $problemaEncontrado = $true
+            }
+        }
+        if (-not $linhaProxy) {
+            $winHttpProxy | Where-Object { $_.Trim() } | ForEach-Object { Write-Info $_.Trim() }
+        }
+    }
+
+    # =========================================================================
+    # ETAPA 2 - Perguntar se deseja limpar configuracoes de proxy
+    # =========================================================================
+
+    Write-Etapa '2/9  Limpeza das configuracoes de proxy...'
+    Write-Host ''
+
+    $limparProxy = $false
+    if ($proxyAtivo -eq 1 -or $proxyAutoConfig -or $proxyAtivoSist -eq 1) {
+        Write-Aviso 'Proxy ativo detectado. Recomenda-se limpar para restaurar acesso direto.'
+        Write-Host ''
+        $resp = Read-Host '   Deseja limpar as configuracoes de proxy? (S/N)'
+        if ($resp -match '^[Ss]') {
+            $limparProxy = $true
+        } else {
+            Write-Info 'Limpeza de proxy ignorada pelo usuario.'
+        }
+    } else {
+        Write-Ok 'Nenhum proxy ativo. Etapa ignorada.'
+        $resp2 = Read-Host '   Deseja limpar/resetar o proxy mesmo assim (preventivo)? (S/N)'
+        if ($resp2 -match '^[Ss]') { $limparProxy = $true }
+    }
+
+    if ($limparProxy) {
+        Write-Host ''
+        Write-Acao 'Limpando ProxyEnable no registro do usuario (HKCU)...'
+        Set-ItemProperty -Path $regProxy -Name 'ProxyEnable' -Value 0 -Type DWord -Force
+        Remove-ItemProperty -Path $regProxy -Name 'ProxyServer'    -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path $regProxy -Name 'ProxyOverride'  -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path $regProxy -Name 'AutoConfigURL'  -ErrorAction SilentlyContinue
+        Write-Ok 'Proxy do usuario (HKCU) limpo.'
+        $acoesRealizadas.Add('Proxy do usuario (HKCU) desativado e limpo')
+
+        Write-Acao 'Limpando proxy no registro do sistema (HKLM)...'
+        Set-ItemProperty -Path $proxyHKLM -Name 'ProxyEnable' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path $proxyHKLM -Name 'ProxyServer'   -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path $proxyHKLM -Name 'AutoConfigURL' -ErrorAction SilentlyContinue
+        Write-Ok 'Proxy do sistema (HKLM) limpo.'
+        $acoesRealizadas.Add('Proxy do sistema (HKLM) desativado e limpo')
+
+        Write-Acao 'Resetando proxy WinHTTP para acesso direto...'
+        netsh winhttp reset proxy | Out-Null
+        Write-Ok 'WinHTTP resetado para acesso direto.'
+        $acoesRealizadas.Add('Proxy WinHTTP resetado para acesso direto (netsh)')
+
+        # Notificar o sistema sobre mudanca de proxy (equivalente a clicar OK nas configuracoes de IE)
+        try {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public class WinInet {
+    [DllImport("wininet.dll", SetLastError = true)]
+    public static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int lpdwBufferLength);
+    public const int INTERNET_OPTION_SETTINGS_CHANGED   = 39;
+    public const int INTERNET_OPTION_REFRESH            = 37;
+}
+'@ -ErrorAction SilentlyContinue
+            [WinInet]::InternetSetOption([IntPtr]::Zero, [WinInet]::INTERNET_OPTION_SETTINGS_CHANGED, [IntPtr]::Zero, 0) | Out-Null
+            [WinInet]::InternetSetOption([IntPtr]::Zero, [WinInet]::INTERNET_OPTION_REFRESH, [IntPtr]::Zero, 0) | Out-Null
+            Write-Ok 'Notificacao de alteracao de proxy enviada ao sistema.'
+        } catch {}
+    }
+
+    # =========================================================================
+    # ETAPA 3 - Habilitar TLS 1.0, TLS 1.1, TLS 1.2 e TLS 1.3
+    # =========================================================================
+
+    Write-Etapa '3/9  Verificando e habilitando protocolos TLS...'
+    Write-Host ''
+
+    $baseSchannel = 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols'
+
+    $buildNum = $null
+    try {
+        $buildNum = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction SilentlyContinue).CurrentBuildNumber
+    } catch {}
+
+    # TLS 1.0 e 1.1 sao protocolos obsoletos. Sao habilitados apenas no lado
+    # CLIENTE, que e o que a maquina usa para acessar sistemas judiciais antigos.
+    # Habilitar no lado SERVIDOR nao ajuda em nada nessas maquinas e so deixaria
+    # a maquina aceitando conexoes por protocolo fraco.
+    $protocolos = @(
+        @{ Nome = 'TLS 1.0'; Chave = 'TLS 1.0';  Habilitar = $true;  Servidor = $false }
+        @{ Nome = 'TLS 1.1'; Chave = 'TLS 1.1';  Habilitar = $true;  Servidor = $false }
+        @{ Nome = 'TLS 1.2'; Chave = 'TLS 1.2';  Habilitar = $true;  Servidor = $true  }
+        @{ Nome = 'TLS 1.3'; Chave = 'TLS 1.3';  Habilitar = ($buildNum -ge 18362); Servidor = $true }
+    )
+
+    foreach ($proto in $protocolos) {
+        $caminho    = $baseSchannel + '\' + $proto.Chave
+        $caminhoCliente  = $caminho + '\Client'
+        $caminhoServidor = $caminho + '\Server'
+
+        if (-not $proto.Habilitar) {
+            Write-Info "$($proto.Nome): nao aplicavel nesta versao do Windows (build $buildNum). Ignorado."
+            continue
+        }
+
+        $clienteEnabled  = (Get-ItemProperty -Path $caminhoCliente  -Name 'Enabled'          -ErrorAction SilentlyContinue).Enabled
+        $clienteDisabled = (Get-ItemProperty -Path $caminhoCliente  -Name 'DisabledByDefault' -ErrorAction SilentlyContinue).DisabledByDefault
+        $servidorEnabled = (Get-ItemProperty -Path $caminhoServidor -Name 'Enabled'          -ErrorAction SilentlyContinue).Enabled
+
+        $clienteOk  = ($clienteEnabled -eq 1 -and $clienteDisabled -eq 0)
+        $servidorOk = (-not $proto.Servidor) -or ($servidorEnabled -eq 1)
+
+        if ($clienteOk -and $servidorOk) {
+            Write-Ok "$($proto.Nome): ja habilitado."
+        } else {
+            $lado = if ($proto.Servidor) { 'cliente e servidor' } else { 'somente cliente' }
+            Write-Acao "Habilitando $($proto.Nome) ($lado)..."
+            Definir-DWORD -Caminho $caminhoCliente  -Nome 'Enabled'          -Valor 1
+            Definir-DWORD -Caminho $caminhoCliente  -Nome 'DisabledByDefault' -Valor 0
+            if ($proto.Servidor) {
+                Definir-DWORD -Caminho $caminhoServidor -Nome 'Enabled'          -Valor 1
+                Definir-DWORD -Caminho $caminhoServidor -Nome 'DisabledByDefault' -Valor 0
+            }
+            Write-Ok "$($proto.Nome): habilitado com sucesso ($lado)."
+            $acoesRealizadas.Add("$($proto.Nome) habilitado no SCHANNEL ($lado)")
+        }
+    }
+
+    # .NET Framework - habilitar TLS forte para aplicacoes Java/juridicas
+    Write-Host ''
+    Write-Dest '   --- .NET Framework (SchUseStrongCrypto) ---'
+    $dotNetCaminhos = @(
+        'HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319'
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319'
+        'HKLM:\SOFTWARE\Microsoft\.NETFramework\v2.0.50727'
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0.50727'
+    )
+    foreach ($dotNetCaminho in $dotNetCaminhos) {
+        $valor = (Get-ItemProperty -Path $dotNetCaminho -Name 'SchUseStrongCrypto' -ErrorAction SilentlyContinue).SchUseStrongCrypto
+        $versao = Split-Path $dotNetCaminho -Leaf
+        if ($valor -eq 1) {
+            Write-Ok "SchUseStrongCrypto OK: $versao"
+        } else {
+            Definir-DWORD -Caminho $dotNetCaminho -Nome 'SchUseStrongCrypto' -Valor 1
+            Write-Ok "SchUseStrongCrypto habilitado: $versao"
+            $acoesRealizadas.Add("SchUseStrongCrypto habilitado para .NET $versao")
+        }
+    }
+
+    # =========================================================================
+    # ETAPA 4 - Atualizar certificados raiz via Windows Update
+    # =========================================================================
+
+    Write-Etapa '4/9  Atualizando certificados raiz do Windows...'
+    Write-Host ''
+
+    $sstTemp = "$env:TEMP\roots_wu.sst"
+    if (Test-Path $sstTemp) { Remove-Item $sstTemp -Force -ErrorAction SilentlyContinue }
+
+    Write-Acao 'Baixando certificados raiz do Windows Update (certutil -generateSSTFromWU)...'
+    Write-Info 'Isso pode levar alguns segundos. Requer acesso a internet.'
+
+    $saida = certutil -generateSSTFromWU $sstTemp 2>&1
+    $sucesso = Test-Path $sstTemp
+
+    if ($sucesso) {
+        Write-Ok 'Arquivo SST baixado com sucesso.'
+        Write-Acao 'Importando certificados raiz para a loja do sistema...'
+        $saidaImport = certutil -addstore -f root $sstTemp 2>&1
+        $errosImport = $saidaImport | Where-Object { $_ -match 'Erro|Error|FAILED' }
+        if ($errosImport) {
+            Write-Aviso 'Alguns certificados nao puderam ser importados (normal para certificados ja existentes).'
+        } else {
+            Write-Ok 'Certificados raiz importados com sucesso.'
+            $acoesRealizadas.Add('Certificados raiz atualizados via Windows Update (certutil)')
+        }
+        Remove-Item $sstTemp -Force -ErrorAction SilentlyContinue
+    } else {
+        Write-Aviso 'Nao foi possivel baixar certificados do Windows Update.'
+        Write-Info  'Verifique a conexao com a internet e tente novamente manualmente:'
+        Write-Info  '  certutil -generateSSTFromWU %TEMP%\roots.sst'
+        Write-Info  '  certutil -addstore -f root %TEMP%\roots.sst'
+    }
+
+    # Sincronizar via mecanismo automatico do Windows (authroot.stl)
+    Write-Acao 'Sinalizando o sistema para resincronizar a lista de certificados confiados...'
+    try {
+        certutil -setreg chain\ChainCacheResyncFiletime '@now' 2>&1 | Out-Null
+        Write-Ok 'Cache de cadeia de certificados sinalizado para resincronizacao.'
+        $acoesRealizadas.Add('Cache de cadeia de certificados marcado para resincronizacao (certutil)')
+    } catch {
+        Write-Info 'Resincronizacao de cache nao disponivel (opcional).'
+    }
+
+    # =========================================================================
+    # ETAPA 5 - Limpar cache SSL do Windows
+    # =========================================================================
+
+    Write-Etapa '5/9  Limpando cache SSL do Windows...'
+    Write-Host ''
+
+    # Limpar cache de URL do certutil (OCSP, CRL, AIA)
+    Write-Acao 'Limpando cache de URL do certutil (OCSP/CRL)...'
+    certutil -urlcache * delete 2>&1 | Out-Null
+    Write-Ok 'Cache de URL do certutil limpo.'
+    $acoesRealizadas.Add('Cache de URL do certutil (OCSP/CRL) limpo')
+
+    # Limpar o CryptnetUrlCache - e' AQUI que ficam CRL/OCSP/AIA em cache.
+    # (Fica em LocalLow, nao no INetCache do navegador.)
+    $cryptCache = Join-Path $env:USERPROFILE 'AppData\LocalLow\Microsoft\CryptnetUrlCache'
+    if (Test-Path -LiteralPath $cryptCache) {
+        $arquivosCrypt = @(Get-ChildItem -LiteralPath $cryptCache -Recurse -File -ErrorAction SilentlyContinue)
+        if ($arquivosCrypt.Count -gt 0) {
+            Write-Acao "Limpando $($arquivosCrypt.Count) arquivo(s) do CryptnetUrlCache..."
+            Remove-Item -Path (Join-Path $cryptCache '*') -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Ok 'CryptnetUrlCache limpo.'
+            $acoesRealizadas.Add("CryptnetUrlCache limpo ($($arquivosCrypt.Count) arquivos removidos)")
+        } else {
+            Write-Ok 'CryptnetUrlCache ja estava vazio.'
+        }
+    } else {
+        Write-Info 'CryptnetUrlCache nao encontrado neste perfil.'
+    }
+
+    # O estado SSL do Windows fica no cache de cadeia, ja tratado pelo certutil
+    # acima. Nao usamos ClearMyTracksByProcess aqui: os flags dele apagam
+    # historico/cookies do IE-Edge e nao tem relacao com estado SSL.
+
+    # =========================================================================
+    # ETAPA 6 - Verificar certificados expirados ou invalidos
+    # =========================================================================
+
+    Write-Etapa '6/9  Verificando certificados na loja do usuario...'
+    Write-Host ''
+
+    $StoreName     = [System.Security.Cryptography.X509Certificates.StoreName]
+    $StoreLocation = [System.Security.Cryptography.X509Certificates.StoreLocation]
+    $OpenFlags     = [System.Security.Cryptography.X509Certificates.OpenFlags]
+
+    $hoje             = Get-Date
+    $certExpirados    = [System.Collections.Generic.List[PSObject]]::new()
+    $certQuaseExpir   = [System.Collections.Generic.List[PSObject]]::new()
+
+    $lojas = @(
+        @{ Nome = 'Pessoal (My)';       Loja = $StoreName::My;       Local = $StoreLocation::CurrentUser  }
+        @{ Nome = 'Raiz confiavel';     Loja = $StoreName::Root;     Local = $StoreLocation::CurrentUser  }
+        @{ Nome = 'Autoridades interm.'; Loja = $StoreName::CertificationAuthority; Local = $StoreLocation::CurrentUser }
+        @{ Nome = 'Raiz (sistema)';     Loja = $StoreName::Root;     Local = $StoreLocation::LocalMachine }
+    )
+
+    foreach ($entrada in $lojas) {
+        $loja = [System.Security.Cryptography.X509Certificates.X509Store]::new($entrada.Loja, $entrada.Local)
+        try {
+            $loja.Open($OpenFlags::ReadOnly)
+            $certs = $loja.Certificates
+
+            $expiradosLoja  = @($certs | Where-Object { $_.NotAfter -lt $hoje })
+            $quaseExpLoja   = @($certs | Where-Object { $_.NotAfter -ge $hoje -and $_.NotAfter -lt $hoje.AddDays(30) })
+
+            if ($expiradosLoja.Count -gt 0 -or $quaseExpLoja.Count -gt 0) {
+                Write-Aviso ("Loja '$($entrada.Nome)': $($expiradosLoja.Count) expirado(s), $($quaseExpLoja.Count) a expirar em 30 dias.")
+                foreach ($c in $expiradosLoja) { $certExpirados.Add([PSCustomObject]@{ Loja = $entrada.Nome; Assunto = $c.Subject; Expirou = $c.NotAfter }) }
+                foreach ($c in $quaseExpLoja)  { $certQuaseExpir.Add([PSCustomObject]@{ Loja = $entrada.Nome; Assunto = $c.Subject; Expira  = $c.NotAfter }) }
+            } else {
+                Write-Ok ("Loja '$($entrada.Nome)': $($certs.Count) certificado(s), nenhum expirado.")
+            }
+            $loja.Close()
+        } catch {
+            Write-Info ("Nao foi possivel abrir loja '$($entrada.Nome)': " + $_.Exception.Message)
+        }
+    }
+
+    if ($certExpirados.Count -gt 0) {
+        Write-Host ''
+        Write-Aviso "Certificados EXPIRADOS encontrados ($($certExpirados.Count)):"
+        foreach ($c in ($certExpirados | Select-Object -First 10)) {
+            $assuntoResumido = if ($c.Assunto.Length -gt 70) { $c.Assunto.Substring(0, 67) + '...' } else { $c.Assunto }
+            Write-Dest ("   [" + $c.Expirou.ToString('dd/MM/yyyy') + "]  " + $assuntoResumido)
+        }
+        Write-Info  'Certificados pessoais expirados podem ser removidos via: certmgr.msc'
+        $problemaEncontrado = $true
+    }
+
+    if ($certQuaseExpir.Count -gt 0) {
+        Write-Host ''
+        Write-Info "Certificados proximos do vencimento ($($certQuaseExpir.Count)):"
+        foreach ($c in $certQuaseExpir) {
+            Write-Dest ("   [expira " + $c.Expira.ToString('dd/MM/yyyy') + "]  " + ($c.Assunto -replace 'CN=',''))
+        }
+    }
+
+    # =========================================================================
+    # ETAPA 7 - Resetar configuracoes de proxy do IE/Edge no registro
+    # =========================================================================
+
+    Write-Etapa '7/9  Resetando configuracoes de proxy do IE/Edge (registro e WinHTTP)...'
+    Write-Host ''
+
+    # Limpar ConnectionSettings binario do IE (proxy por conexao)
+    $regConexoes = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Connections'
+    $defaultConn = (Get-ItemProperty -Path $regConexoes -Name 'DefaultConnectionSettings' -ErrorAction SilentlyContinue).DefaultConnectionSettings
+
+    if ($defaultConn) {
+        # Byte 8 (indice 8) contem flags de proxy: bit 2 = proxy ativo (valor 2 ou 3 = proxy ativo, 1 = direto)
+        # Forcar para acesso direto definindo o byte de flags como 1
+        $bytesConn = [byte[]]$defaultConn
+        if ($bytesConn.Count -ge 9) {
+            $flagAtual = $bytesConn[8]
+            if (($flagAtual -band 2) -ne 0) {
+                Write-Acao 'Limpando configuracao de proxy por conexao (DefaultConnectionSettings)...'
+                $bytesConn[8] = ($flagAtual -band 0xFD) -bor 1  # Desativa bit de proxy, ativa bit direto
+                Set-ItemProperty -Path $regConexoes -Name 'DefaultConnectionSettings' -Value $bytesConn -Force
+                Write-Ok 'DefaultConnectionSettings atualizado para acesso direto.'
+                $acoesRealizadas.Add('DefaultConnectionSettings do IE/Edge resetado para acesso direto')
+            } else {
+                Write-Ok 'DefaultConnectionSettings ja configurado sem proxy ativo.'
+            }
+        }
+    }
+
+    # Garantir que WinHTTP esta sincronizado com as configuracoes do IE
+    Write-Acao 'Verificando sincronizacao WinHTTP com configuracoes do IE/Edge...'
+    $winHttpAtual = netsh winhttp show proxy 2>$null
+    $temProxyWinHttp = $winHttpAtual | Where-Object { $_ -match ':\d+' }
+
+    if ($temProxyWinHttp) {
+        Write-Acao 'Importando configuracoes de proxy do IE para WinHTTP...'
+        netsh winhttp import proxy source=ie 2>&1 | Out-Null
+        Write-Ok 'WinHTTP sincronizado com as configuracoes do IE.'
+        $acoesRealizadas.Add('WinHTTP sincronizado com configuracoes do IE/Edge')
+    } else {
+        Write-Ok 'WinHTTP ja esta com acesso direto. Nenhuma acao necessaria.'
+    }
+
+    # Certificar que o servico WinHTTP Web Proxy Auto-Discovery esta funcionando
+    $wpadService = Get-Service -Name 'WinHttpAutoProxySvc' -ErrorAction SilentlyContinue
+    if ($wpadService) {
+        if ($wpadService.Status -ne 'Running') {
+            Write-Acao 'Iniciando servico WinHTTP Web Proxy Auto-Discovery...'
+            try {
+                Set-Service -Name 'WinHttpAutoProxySvc' -StartupType Manual -ErrorAction SilentlyContinue
+                Start-Service -Name 'WinHttpAutoProxySvc' -ErrorAction SilentlyContinue
+                Write-Ok 'Servico WinHTTP Auto-Discovery iniciado.'
+                $acoesRealizadas.Add('Servico WinHTTP Web Proxy Auto-Discovery iniciado')
+            } catch {
+                Write-Info 'Servico WinHTTP Auto-Discovery nao pode ser iniciado (normal se proxy nao for usado).'
+            }
+        } else {
+            Write-Ok 'Servico WinHTTP Auto-Discovery: em execucao.'
+        }
+    }
+
+    # =========================================================================
+    # ETAPA 8 - Testar conectividade com sites juridicos
+    # =========================================================================
+
+    Write-Etapa '8/9  Testando conectividade com sistemas juridicos...'
+    Write-Host ''
+
+    $sitesJuridicos = @(
+        @{ URL = 'https://pje.jus.br';                Nome = 'PJe Nacional'    }
+        @{ URL = 'https://projudi.tjgo.jus.br';        Nome = 'PROJUDI TJGO'   }
+        @{ URL = 'https://eproc.jfrs.jus.br';          Nome = 'eProc JFRS'     }
+    )
+
+    $resultadosConect = [System.Collections.Generic.List[PSObject]]::new()
+
+    # Garantir que o processo atual usa TLS 1.2
+    [Net.ServicePointManager]::SecurityProtocol = (
+        [Net.SecurityProtocolType]::Tls12 -bor
+        [Net.SecurityProtocolType]::Tls11 -bor
+        [Net.SecurityProtocolType]::Tls
+    )
+
+    foreach ($site in $sitesJuridicos) {
+        $url  = $site.URL
+        $nome = $site.Nome
+        Write-Info "Testando $nome ($url)..."
+
+        $status   = 'FALHA'
+        $detalhe  = ''
+        $corItem  = 'Red'
+        $httpCode = $null
+
+        try {
+            $req = [System.Net.HttpWebRequest]::Create($url)
+            $req.Timeout          = 12000
+            $req.AllowAutoRedirect = $true
+            $req.UserAgent        = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120'
+            $resp = $req.GetResponse()
+            $httpCode = [int]$resp.StatusCode
+            $resp.Close()
+            $status  = 'OK'
+            $detalhe = "HTTP $httpCode"
+            $corItem = 'Green'
+        } catch [System.Net.WebException] {
+            $webEx = $_.Exception
+            if ($webEx.Response) {
+                $httpCode = [int]$webEx.Response.StatusCode
+                # Resposta HTTP recebida = servidor acessivel, mesmo com erro de autenticacao
+                if ($httpCode -ge 200) {
+                    $status  = 'OK'
+                    $detalhe = "HTTP $httpCode (site acessivel)"
+                    $corItem = 'Green'
+                } else {
+                    $status  = 'AVISO'
+                    $detalhe = "HTTP $httpCode"
+                    $corItem = 'Yellow'
+                }
+            } elseif ($webEx.Message -match 'SSL|certificate|certificado|TLS') {
+                $status  = 'ERRO SSL'
+                $detalhe = 'Erro de certificado/TLS - verifique certificados raiz'
+                $corItem = 'Red'
+            } elseif ($webEx.Message -match 'proxy|407') {
+                $status  = 'ERRO PROXY'
+                $detalhe = 'Bloqueado por proxy - verifique as configuracoes'
+                $corItem = 'Red'
+            } elseif ($webEx.Message -match 'timed out|tempo|timeout') {
+                $status  = 'TIMEOUT'
+                $detalhe = 'Servidor nao respondeu em 12 segundos'
+                $corItem = 'Yellow'
+            } else {
+                $detalhe = $webEx.Message -replace '.*---> ', '' | Select-Object -First 1
+                if ($detalhe.Length -gt 80) { $detalhe = $detalhe.Substring(0, 77) + '...' }
+                $corItem = 'Yellow'
+                $status  = 'AVISO'
+            }
+        } catch {
+            $detalhe = $_.Exception.Message
+            if ($detalhe.Length -gt 80) { $detalhe = $detalhe.Substring(0, 77) + '...' }
+        }
+
+        $resultadosConect.Add([PSCustomObject]@{
+            Nome    = $nome
+            URL     = $url
+            Status  = $status
+            Detalhe = $detalhe
+            Cor     = $corItem
+        })
+
+        $prefixo = if ($status -eq 'OK') { '   [OK] ' } elseif ($status -match 'AVISO|TIMEOUT') { '   [!]  ' } else { '   [X]  ' }
+        $corPref = if ($status -eq 'OK') { 'Green' } elseif ($status -match 'AVISO|TIMEOUT') { 'Yellow' } else { 'Red' }
+        Write-Host $prefixo -ForegroundColor $corPref -NoNewline
+        Write-Host ($nome.PadRight(20) + "  " + $status.PadRight(12) + "  " + $detalhe)
+    }
+
+    # =========================================================================
+    # ETAPA 9 - Relatorio final
+    # =========================================================================
+
+    Write-Etapa '9/9  Relatorio final...'
+    Write-Host ''
+
+    $corRelatorio = if ($acoesRealizadas.Count -eq 0 -and -not $problemaEncontrado) { 'Green' } else { 'Yellow' }
+
+    Write-Host '   RELATORIO DE CORRECOES DE PROXY E CERTIFICADOS     ' -ForegroundColor $corRelatorio
+    Write-Host ''
+
+    if ($acoesRealizadas.Count -gt 0) {
+        Write-Host '   Acoes realizadas nesta execucao:' -ForegroundColor White
+        $num = 1
+        foreach ($acao in $acoesRealizadas) {
+            Write-Host ('   ' + $num + '. ' + $acao) -ForegroundColor Green
+            $num++
+        }
+    } else {
+        Write-Host '   Nenhuma alteracao necessaria. Sistema ja estava configurado corretamente.' -ForegroundColor Green
+    }
+
+    Write-Host ''
+    Write-Host '   Resultado dos testes de conectividade:' -ForegroundColor White
+    foreach ($r in $resultadosConect) {
+        Write-Host ('   ' + $r.Status.PadRight(12) + '  ' + $r.Nome.PadRight(20) + '  ' + $r.Detalhe) -ForegroundColor $r.Cor
+    }
+
+    if ($certExpirados.Count -gt 0) {
+        Write-Host ''
+        Write-Host ('   Atencao: ' + $certExpirados.Count + ' certificado(s) expirado(s) encontrado(s). Use certmgr.msc para gerenciar.') -ForegroundColor Yellow
+    }
+
+    $requerReinicio = $acoesRealizadas | Where-Object { $_ -match 'TLS|SCHANNEL|SchUseStrongCrypto' }
+    if ($requerReinicio) {
+        Write-Host ''
+        Write-Host '   IMPORTANTE: As alteracoes de TLS entram em vigor apos reiniciar o computador.' -ForegroundColor Yellow
+        Write-Host '   Reinicie o sistema para garantir que todos os programas usem os novos protocolos.' -ForegroundColor Yellow
+    }
+
+    Write-Host ''
+    Write-Host ''
+    return [long]0
+}
+
+function Show-AnaliseBSOD {
+    <#
+      Analisa telas azuis dos ultimos 30 dias (veio de AnalisarBSOD.ps1).
+      Somente leitura. O relatorio e publicado pelo motor em TXT temporario.
+    #>
+    # AnalisarBSOD.ps1
+    # Analisa e identifica causas de Tela Azul (BSOD) no Windows
+    # Somente leitura: nao altera nada na maquina.
+
+    $dataLimite = (Get-Date).AddDays(-30)
+
+
+
+    function Format-CodBSOD {
+        param([string]$Raw)
+        $Raw = $Raw.Trim()
+        if ($Raw -match '^0x[0-9a-fA-F]+$') {
+            $val = [Convert]::ToUInt64($Raw, 16)
+        } elseif ($Raw -match '^\d+$') {
+            $val = [uint64]$Raw
+        } else {
+            return $Raw.ToUpper()
+        }
+        return '0x' + $val.ToString('X8')
+    }
+
+    function Get-NomeBSOD {
+        param([string]$Codigo)
+        $c = $bsodCodigos[$Codigo]
+        if ($c) { return $c.Nome } else { return 'Codigo nao catalogado' }
+    }
+
+    # =========================================================================
+    # Dicionario de codigos BSOD (explicacoes em portugues)
+    # =========================================================================
+
+    $bsodCodigos = @{
+        '0x0000000A' = @{
+            Nome    = 'IRQL_NOT_LESS_OR_EQUAL'
+            Causa   = 'Driver ou componente acessou memoria em nivel de interrupcao (IRQL) invalido.'
+            Origem  = 'Driver defeituoso ou RAM com falha'
+            Solucoes = @(
+                'Atualize drivers de chipset, rede e USB'
+                'Teste a RAM com Windows Memory Diagnostic ou memtest86'
+                'Execute: verifier /standard /all para identificar driver causador'
+            )
+        }
+        '0x00000019' = @{
+            Nome    = 'BAD_POOL_HEADER'
+            Causa   = 'Cabecalho do pool de memoria do kernel foi corrompido por driver com bug.'
+            Origem  = 'Driver com vazamento ou corrupcao de memoria'
+            Solucoes = @(
+                'Desinstale programas/drivers recentemente instalados'
+                'Execute: verifier /standard /all'
+                'Teste RAM com memtest86'
+            )
+        }
+        '0x0000001A' = @{
+            Nome    = 'MEMORY_MANAGEMENT'
+            Causa   = 'Falha grave no gerenciamento de memoria do kernel do Windows.'
+            Origem  = 'RAM com defeito; SSD/HDD com erros; driver corrompido'
+            Solucoes = @(
+                'Teste RAM com memtest86 (pelo menos 2 passagens completas)'
+                'Execute chkdsk /f /r no disco do sistema'
+                'Verifique saude do SSD/HDD com ferramentas SMART'
+            )
+        }
+        '0x0000001E' = @{
+            Nome    = 'KMODE_EXCEPTION_NOT_HANDLED'
+            Causa   = 'Driver ou aplicativo em modo kernel gerou excecao nao tratada pelo sistema.'
+            Origem  = 'Driver incompativel ou com bug'
+            Solucoes = @(
+                'Verifique os 4 parametros do erro para identificar o modulo causador'
+                'Desative ou remova drivers recentemente instalados'
+                'Execute verifier.exe para rastrear o driver problematico'
+            )
+        }
+        '0x00000024' = @{
+            Nome    = 'NTFS_FILE_SYSTEM'
+            Causa   = 'Erro critico no driver do sistema de arquivos NTFS.'
+            Origem  = 'Corrupcao no disco; setores defeituosos no HDD/SSD'
+            Solucoes = @(
+                'Execute: chkdsk /f /r /x C: como Administrador'
+                'Verifique saude do disco pelo SMART'
+                'Se erros persistirem, considere backup e formatacao'
+            )
+        }
+        '0x0000003B' = @{
+            Nome    = 'SYSTEM_SERVICE_EXCEPTION'
+            Causa   = 'Excecao nao tratada durante execucao de rotina de servico do sistema.'
+            Origem  = 'Driver com bug; arquivo do sistema corrompido'
+            Solucoes = @(
+                'Execute: sfc /scannow como Administrador'
+                'Identifique o modulo causador pelo segundo parametro do erro'
+                'Atualize Windows e drivers de sistema'
+            )
+        }
+        '0x00000050' = @{
+            Nome    = 'PAGE_FAULT_IN_NONPAGED_AREA'
+            Causa   = 'Acesso a pagina de memoria invalida ou inexistente em area nao paginavel.'
+            Origem  = 'RAM com defeito; driver defeituoso; arquivo de sistema corrompido'
+            Solucoes = @(
+                'Teste RAM com memtest86'
+                'Execute: sfc /scannow'
+                'Verifique antivirus e drivers de filtro do sistema'
+            )
+        }
+        '0x00000074' = @{
+            Nome    = 'BAD_SYSTEM_CONFIG_INFO'
+            Causa   = 'Informacoes de configuracao do sistema (BCD ou registro) estao corrompidas.'
+            Origem  = 'Corrupcao no registro; falha de energia durante boot; disco com erros'
+            Solucoes = @(
+                'Execute Reparacao de Inicializacao pelo Windows PE/USB'
+                'Use: bootrec /fixmbr && bootrec /fixboot && bootrec /rebuildbcd'
+                'Execute sfc /scannow no ambiente de recuperacao'
+            )
+        }
+        '0x0000007A' = @{
+            Nome    = 'KERNEL_DATA_INPAGE_ERROR'
+            Causa   = 'Falha ao ler dados do arquivo de paginacao (pagefile) a partir do disco.'
+            Origem  = 'Setores defeituosos; RAM com falha; cabo SATA/NVMe danificado'
+            Solucoes = @(
+                'Execute: chkdsk /f /r'
+                'Verifique saude do disco via SMART'
+                'Teste RAM com memtest86'
+                'Verifique e substitua cabo SATA se necessario'
+            )
+        }
+        '0x0000007B' = @{
+            Nome    = 'INACCESSIBLE_BOOT_DEVICE'
+            Causa   = 'Windows nao conseguiu acessar o dispositivo de boot na inicializacao.'
+            Origem  = 'Mudanca de modo SATA no BIOS (IDE/AHCI/RAID); driver de controlador'
+            Solucoes = @(
+                'Verifique modo SATA no BIOS/UEFI (use AHCI)'
+                'Execute Reparacao de Inicializacao pelo DVD/USB do Windows'
+                'Verifique conexoes fisicas do disco'
+            )
+        }
+        '0x0000007E' = @{
+            Nome    = 'SYSTEM_THREAD_EXCEPTION_NOT_HANDLED'
+            Causa   = 'Thread do sistema gerou excecao que nao foi tratada pelo sistema operacional.'
+            Origem  = 'Driver incompativel; hardware defeituoso'
+            Solucoes = @(
+                'Identifique o modulo causador pelo segundo parametro do erro'
+                'Atualize ou reinstale o driver identificado'
+                'Execute verifier.exe'
+            )
+        }
+        '0x0000007F' = @{
+            Nome    = 'UNEXPECTED_KERNEL_MODE_TRAP'
+            Causa   = 'Interrupcao de hardware inesperada na CPU em modo kernel.'
+            Origem  = 'Hardware defeituoso (CPU/RAM/placa-mae); overclocking instavel'
+            Solucoes = @(
+                'Desative qualquer overclocking e redefina BIOS para padrao'
+                'Teste RAM com memtest86'
+                'Verifique temperatura da CPU'
+            )
+        }
+        '0x00000096' = @{
+            Nome    = 'INVALID_WORK_QUEUE_ITEM'
+            Causa   = 'Item de fila de trabalho invalido encontrado pelo kernel.'
+            Origem  = 'Driver com bug'
+            Solucoes = @('Atualize todos os drivers do sistema', 'Execute verifier.exe')
+        }
+        '0x0000009F' = @{
+            Nome    = 'DRIVER_POWER_STATE_FAILURE'
+            Causa   = 'Driver em estado de energia inconsistente durante transicao de energia (sleep/hibernate).'
+            Origem  = 'Driver de USB, rede ou chipset incompativel com gerenciamento de energia'
+            Solucoes = @(
+                'Atualize drivers de rede, USB e chipset'
+                'Desative hibernacao: powercfg /h off'
+                'Desconecte dispositivos USB durante testes de sleep'
+            )
+        }
+        '0x000000D1' = @{
+            Nome    = 'DRIVER_IRQL_NOT_LESS_OR_EQUAL'
+            Causa   = 'Driver tentou acessar pagina de memoria com nivel de interrupcao (IRQL) elevado demais.'
+            Origem  = 'Driver de rede, USB ou antivirus com bug'
+            Solucoes = @(
+                'Verifique o nome do driver no segundo parametro do erro'
+                'Atualize ou desinstale o driver identificado'
+                'Verifique especialmente drivers de antivirus e VPN'
+            )
+        }
+        '0x000000EF' = @{
+            Nome    = 'CRITICAL_PROCESS_DIED'
+            Causa   = 'Processo critico do Windows encerrou de forma inesperada.'
+            Origem  = 'Arquivo do sistema corrompido; driver com bug; malware'
+            Solucoes = @(
+                'Execute: sfc /scannow'
+                'Execute: DISM /Online /Cleanup-Image /RestoreHealth'
+                'Verifique malware com Windows Defender offline'
+            )
+        }
+        '0x00000101' = @{
+            Nome    = 'CLOCK_WATCHDOG_TIMEOUT'
+            Causa   = 'O processador nao recebeu interrupcao de relogio esperada no tempo limite.'
+            Origem  = 'Overclocking instavel; defeito em CPU ou placa-mae; driver de chipset'
+            Solucoes = @(
+                'Desative overclocking e redefina BIOS para valores padrao'
+                'Atualize driver de chipset'
+                'Verifique temperatura da CPU (deve ficar abaixo de 85C sob carga)'
+            )
+        }
+        '0x00000116' = @{
+            Nome    = 'VIDEO_TDR_FAILURE'
+            Causa   = 'Driver de video (GPU) nao respondeu ao sistema e nao conseguiu se recuperar.'
+            Origem  = 'Driver de GPU desatualizado; GPU superaquecendo; GPU com defeito'
+            Solucoes = @(
+                'Use DDU (Display Driver Uninstaller) em modo seguro e reinstale o driver da GPU'
+                'Verifique temperatura da GPU (deve ficar abaixo de 90C)'
+                'Teste a GPU com FurMark para identificar instabilidade termica'
+            )
+        }
+        '0x00000124' = @{
+            Nome    = 'WHEA_UNCORRECTABLE_ERROR'
+            Causa   = 'Erro de hardware nao corrigivel detectado pela arquitetura WHEA.'
+            Origem  = 'CPU defeituosa; RAM com falha; placa-mae; superaquecimento; overclocking'
+            Solucoes = @(
+                'Desative qualquer overclocking imediatamente'
+                'Verifique temperaturas de CPU e chipset'
+                'Teste RAM com memtest86'
+                'Pode indicar hardware fisicamente defeituoso - consulte assistencia tecnica'
+            )
+        }
+        '0x00000133' = @{
+            Nome    = 'DPC_WATCHDOG_VIOLATION'
+            Causa   = 'O DPC Watchdog detectou que uma rotina DPC ou ISR excedeu o tempo limite.'
+            Origem  = 'Driver de SSD/NVMe; driver de rede; firmware desatualizado'
+            Solucoes = @(
+                'Atualize firmware do SSD/NVMe pelo site do fabricante'
+                'Atualize driver do controlador de armazenamento'
+                'Atualize driver de rede e chipset'
+            )
+        }
+        '0x00000154' = @{
+            Nome    = 'UNEXPECTED_STORE_EXCEPTION'
+            Causa   = 'O componente de armazenamento (geralmente SSD/NVMe) gerou excecao inesperada.'
+            Origem  = 'SSD/NVMe com defeito ou firmware desatualizado'
+            Solucoes = @(
+                'Atualize firmware do SSD/NVMe'
+                'Verifique saude do disco via SMART'
+                'Considere substituicao do SSD se erros persistirem'
+            )
+        }
+        '0x0000013A' = @{
+            Nome    = 'KERNEL_MODE_HEAP_CORRUPTION'
+            Causa   = 'Corrupcao no heap de memoria do modo kernel detectada.'
+            Origem  = 'Driver com bug de corrupcao de memoria'
+            Solucoes = @(
+                'Execute verifier.exe com todas as verificacoes'
+                'Atualize todos os drivers do sistema'
+                'Analise o dump com WinDbg para identificar o driver causador'
+            )
+        }
+    }
+
+    # =========================================================================
+    # Cabecalho
+    # =========================================================================
+
+    Write-Host ''
+    Write-Host '   Analisador de BSOD - Tela Azul do Windows   ' -ForegroundColor Cyan
+    Write-Host ("   Periodo     : ultimos 30 dias") -ForegroundColor DarkGray
+    Write-Host ''
+
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator
+    )
+    if (-not $isAdmin) {
+        Write-Falha 'Este script requer privilegios de Administrador.'
+        Write-Info  'Execute o PowerShell como Administrador e tente novamente.'
+            return [long]0
+    }
+    Write-Ok 'Executando como Administrador.'
+
+    # =========================================================================
+    # ETAPA 1 - Verificar arquivos de dump de memoria
+    # =========================================================================
+
+    Write-Etapa '1/9  Verificando arquivos de dump de memoria...'
+    Write-Host ''
+
+    $dumpsMini   = @()
+    $dumpMemoria = $null
+    $totalDumps  = 0
+
+    $miniDumpDir = 'C:\Windows\Minidump'
+    if (Test-Path $miniDumpDir) {
+        $dumpsMini = @(Get-ChildItem -Path $miniDumpDir -Filter '*.dmp' -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending)
+        if ($dumpsMini.Count -gt 0) {
+            Write-Ok "$($dumpsMini.Count) arquivo(s) de minidump encontrado(s) em $miniDumpDir"
+            $totalDumps += $dumpsMini.Count
+            $dumpsMini | Select-Object -First 10 | ForEach-Object {
+                $tamanho = [math]::Round($_.Length / 1KB, 0).ToString('N0') + ' KB'
+                Write-Dest ("   " + $_.LastWriteTime.ToString('dd/MM/yyyy HH:mm') + "  " + $tamanho.PadLeft(8) + "  " + $_.Name)
+            }
+            if ($dumpsMini.Count -gt 10) {
+                Write-Info "   ... e mais $($dumpsMini.Count - 10) arquivo(s) mais antigos."
+            }
+        } else {
+            Write-Info 'Nenhum minidump encontrado em C:\Windows\Minidump.'
+        }
+    } else {
+        Write-Info 'Pasta Minidump nao existe (configuracao de dump pode nao gerar minidumps).'
+    }
+
+    $memDmpPath = 'C:\Windows\MEMORY.DMP'
+    if (Test-Path $memDmpPath) {
+        $memDmpInfo = Get-Item $memDmpPath
+        $tamanhoGB  = [math]::Round($memDmpInfo.Length / 1GB, 2).ToString('N2') + ' GB'
+        Write-Ok "Dump completo encontrado: MEMORY.DMP  ($tamanhoGB)  -  $($memDmpInfo.LastWriteTime.ToString('dd/MM/yyyy HH:mm'))"
+        $dumpMemoria = $memDmpInfo
+        $totalDumps++
+    } else {
+        Write-Info 'Arquivo MEMORY.DMP nao encontrado.'
+    }
+
+    if ($totalDumps -eq 0) {
+        Write-Aviso 'Nenhum arquivo de dump encontrado. BSODs podem nao estar configurados para gerar dumps.'
+        Write-Info  'Para habilitar: Painel de Controle > Sistema > Configuracoes Avancadas > Inicializacao e Recuperacao'
+        Write-Info  'Selecione: Despejo de memoria pequeno (256 KB) ou Despejo de memoria do kernel'
+    }
+
+    # =========================================================================
+    # ETAPA 2 - Ler log de eventos (BugCheck, Kernel-Power ID 41, EventLog ID 6008)
+    # =========================================================================
+
+    Write-Etapa '2/9  Lendo log de eventos do sistema (ultimos 30 dias)...'
+    Write-Host ''
+
+    $eventosBSOD     = [System.Collections.Generic.List[PSObject]]::new()
+    $eventosKernel41 = [System.Collections.Generic.List[PSObject]]::new()
+    $eventosShutdown = [System.Collections.Generic.List[PSObject]]::new()
+
+    # BugCheck events (ID 1001 / provider BugCheck) - contem o stop code
+    try {
+        $bugcheckEventos = Get-WinEvent -FilterHashtable @{
+            LogName      = 'System'
+            ProviderName = 'BugCheck'
+            StartTime    = $dataLimite
+        } -ErrorAction SilentlyContinue
+        if ($bugcheckEventos) {
+            foreach ($ev in $bugcheckEventos) { $eventosBSOD.Add($ev) }
+        }
+    } catch {}
+
+    # Tambem capturar pelo ID 1001 no System log caso o provider varie
+    try {
+        $ev1001 = Get-WinEvent -FilterHashtable @{
+            LogName   = 'System'
+            Id        = 1001
+            StartTime = $dataLimite
+        } -ErrorAction SilentlyContinue |
+            Where-Object { $_.ProviderName -match 'BugCheck|WindowsErrorReporting|WER' }
+        if ($ev1001) {
+            foreach ($ev in $ev1001) {
+                if (-not ($eventosBSOD | Where-Object { $_.RecordId -eq $ev.RecordId })) {
+                    $eventosBSOD.Add($ev)
+                }
+            }
+        }
+    } catch {}
+
+    # Kernel-Power ID 41 - desligamento inesperado (acompanha BSODs)
+    try {
+        $kp41 = Get-WinEvent -FilterHashtable @{
+            LogName      = 'System'
+            ProviderName = 'Microsoft-Windows-Kernel-Power'
+            Id           = 41
+            StartTime    = $dataLimite
+        } -ErrorAction SilentlyContinue
+        if ($kp41) { foreach ($ev in $kp41) { $eventosKernel41.Add($ev) } }
+    } catch {}
+
+    # EventLog ID 6008 - desligamento inesperado anterior
+    try {
+        $ev6008 = Get-WinEvent -FilterHashtable @{
+            LogName   = 'System'
+            Id        = 6008
+            StartTime = $dataLimite
+        } -ErrorAction SilentlyContinue
+        if ($ev6008) { foreach ($ev in $ev6008) { $eventosShutdown.Add($ev) } }
+    } catch {}
+
+    Write-Info "Eventos BugCheck encontrados : $($eventosBSOD.Count)"
+    Write-Info "Eventos Kernel-Power (ID 41) : $($eventosKernel41.Count)"
+    Write-Info "Eventos shutdown inesperado  : $($eventosShutdown.Count)"
+
+    # =========================================================================
+    # ETAPA 3 - Identificar codigos de erro BSOD mais recentes e frequentes
+    # =========================================================================
+
+    Write-Etapa '3/9  Identificando codigos de erro BSOD...'
+    Write-Host ''
+
+    $codigosEncontrados = [System.Collections.Generic.List[PSObject]]::new()
+
+    foreach ($ev in $eventosBSOD) {
+        $codBruto = $null
+        $param1   = $null
+
+        # Tentativa 1: parsear XML estruturado
+        try {
+            $xml  = [xml]$ev.ToXml()
+            $dados = $xml.Event.EventData.Data
+            foreach ($d in $dados) {
+                $attrName = if ($d.Name) { $d.Name } else { '' }
+                if ($attrName -eq 'BugcheckCode') {
+                    $codBruto = $d.'#text'
+                }
+                if ($attrName -eq 'BugcheckParameter1') {
+                    $param1 = $d.'#text'
+                }
+            }
+        } catch {}
+
+        # Tentativa 2: regex na mensagem de texto
+        if (-not $codBruto -or $codBruto -eq '0') {
+            $matchHex = [regex]::Match($ev.Message, '0x[0-9a-fA-F]{8}')
+            if ($matchHex.Success) {
+                $codBruto = $matchHex.Value
+            }
+        }
+
+        if ($codBruto) {
+            $codFormatado = Format-CodBSOD -Raw $codBruto
+            $codigosEncontrados.Add([PSCustomObject]@{
+                Codigo    = $codFormatado
+                Nome      = Get-NomeBSOD -Codigo $codFormatado
+                Data      = $ev.TimeCreated
+                Param1    = if ($param1) { Format-CodBSOD -Raw $param1 } else { '-' }
+                EventoID  = $ev.Id
+                RecordId  = $ev.RecordId
+            })
+        } else {
+            # Registrar sem codigo conhecido
+            $codigosEncontrados.Add([PSCustomObject]@{
+                Codigo   = 'DESCONHECIDO'
+                Nome     = 'Codigo nao extraido do evento'
+                Data     = $ev.TimeCreated
+                Param1   = '-'
+                EventoID = $ev.Id
+                RecordId = $ev.RecordId
+            })
+        }
+    }
+
+    # Tambem capturar codigos dos eventos Kernel-Power 41 se tiverem BugcheckCode
+    foreach ($ev in $eventosKernel41) {
+        try {
+            $xml  = [xml]$ev.ToXml()
+            $dados = $xml.Event.EventData.Data
+            $bugCode = $null
+            foreach ($d in $dados) {
+                if ($d.Name -eq 'BugcheckCode') { $bugCode = $d.'#text' }
+            }
+            if ($bugCode -and $bugCode -ne '0') {
+                $codF = Format-CodBSOD -Raw $bugCode
+                $jaExiste = $codigosEncontrados | Where-Object {
+                    [Math]::Abs(($_.Data - $ev.TimeCreated).TotalMinutes) -lt 5
+                }
+                if (-not $jaExiste) {
+                    $codigosEncontrados.Add([PSCustomObject]@{
+                        Codigo   = $codF
+                        Nome     = Get-NomeBSOD -Codigo $codF
+                        Data     = $ev.TimeCreated
+                        Param1   = '-'
+                        EventoID = $ev.Id
+                        RecordId = $ev.RecordId
+                    })
+                }
+            }
+        } catch {}
+    }
+
+    $codigosOrdenados = $codigosEncontrados | Sort-Object Data -Descending
+
+    if ($codigosOrdenados.Count -eq 0) {
+        Write-Ok 'Nenhum BSOD encontrado nos ultimos 30 dias. Sistema aparentemente estavel.'
+    } else {
+        Write-Aviso "$($codigosOrdenados.Count) ocorrencia(s) de BSOD encontrada(s) nos ultimos 30 dias."
+        Write-Host ''
+
+        # Frequencia por codigo
+        $frequencia = $codigosEncontrados | Group-Object Codigo |
+            Sort-Object Count -Descending
+
+        Write-Dest '   Codigos mais frequentes:'
+        foreach ($g in $frequencia) {
+            $nomeCode = Get-NomeBSOD -Codigo $g.Name
+            $ultimaVez = ($g.Group | Sort-Object Data -Descending | Select-Object -First 1).Data
+            $cor = if ($g.Count -ge 3) { 'Red' } elseif ($g.Count -ge 2) { 'Yellow' } else { 'White' }
+            Write-Host ("   " + $g.Name + "  x" + ([string]$g.Count).PadRight(3) + "  " + $nomeCode + "  ultima: " + $ultimaVez.ToString('dd/MM/yyyy HH:mm')) -ForegroundColor $cor
+        }
+    }
+
+    # =========================================================================
+    # ETAPA 4 - Explicar cada codigo de erro encontrado
+    # =========================================================================
+
+    $codigosUnicos = @($codigosEncontrados | Select-Object -ExpandProperty Codigo -Unique |
+        Where-Object { $_ -ne 'DESCONHECIDO' })
+
+    if ($codigosUnicos.Count -gt 0) {
+        Write-Etapa '4/9  Explicacao dos codigos de erro encontrados...'
+        Write-Host ''
+
+        foreach ($cod in $codigosUnicos) {
+            $info = $bsodCodigos[$cod]
+            $corCod = 'Red'
+            Write-Host ("   CODIGO: $cod") -ForegroundColor $corCod
+            if ($info) {
+                Write-Host ("   Nome   : $($info.Nome)") -ForegroundColor Yellow
+                Write-Host ("   Causa  : $($info.Causa)") -ForegroundColor White
+                Write-Host ("   Origem : $($info.Origem)") -ForegroundColor Gray
+            } else {
+                Write-Host "   Nome   : Codigo nao catalogado neste script." -ForegroundColor Gray
+                Write-Host "   Causa  : Consulte https://learn.microsoft.com/windows-hardware/drivers/debugger/bug-check-code-reference2" -ForegroundColor Gray
+            }
+            Write-Host ''
+        }
+    } else {
+        Write-Etapa '4/9  Explicacao de codigos - nenhum codigo para analisar.'
+    }
+
+    # =========================================================================
+    # ETAPA 5 - Verificar drivers suspeitos cruzados com data dos BSODs
+    # =========================================================================
+
+    Write-Etapa '5/9  Verificando drivers suspeitos recentemente instalados ou atualizados...'
+    Write-Host ''
+
+    $datasBSOD = @($codigosEncontrados | Select-Object -ExpandProperty Data)
+
+    $driversRecentes = Get-WmiObject Win32_PnPSignedDriver -ErrorAction SilentlyContinue |
+        Where-Object { $_.DriverDate -and $_.DriverDate -ne '' -and $_.DeviceName } |
+        ForEach-Object {
+            try {
+                $dataDrv = [Management.ManagementDateTimeConverter]::ToDateTime($_.DriverDate)
+                [PSCustomObject]@{
+                    Dispositivo = $_.DeviceName
+                    Fabricante  = if ($_.DriverProviderName) { $_.DriverProviderName } else { 'Desconhecido' }
+                    Versao      = $_.DriverVersion
+                    DataDriver  = $dataDrv
+                    InfFile     = $_.InfName
+                }
+            } catch { $null }
+        } | Where-Object { $_ -and $_.DataDriver -gt (Get-Date).AddDays(-60) } |
+        Sort-Object DataDriver -Descending
+
+    $driversSuspeitos = [System.Collections.Generic.List[PSObject]]::new()
+
+    foreach ($drv in $driversRecentes) {
+        foreach ($dataCrash in $datasBSOD) {
+            $diff = ($dataCrash - $drv.DataDriver).TotalDays
+            if ($diff -ge 0 -and $diff -le 14) {
+                if (-not ($driversSuspeitos | Where-Object { $_.Dispositivo -eq $drv.Dispositivo })) {
+                    $drv | Add-Member -NotePropertyName 'DiasAntesBSOD' -NotePropertyValue ([math]::Round($diff, 1)) -Force
+                    $driversSuspeitos.Add($drv)
+                }
+            }
+        }
+    }
+
+    if ($driversSuspeitos.Count -gt 0) {
+        Write-Aviso "$($driversSuspeitos.Count) driver(s) instalado(s)/atualizado(s) nos 14 dias anteriores a um BSOD:"
+        Write-Host ''
+        foreach ($drv in ($driversSuspeitos | Sort-Object DiasAntesBSOD)) {
+            Write-Host ("   [SUSPEITO] $($drv.Dispositivo)") -ForegroundColor Yellow
+            Write-Host ("   Fabricante : $($drv.Fabricante)") -ForegroundColor Gray
+            Write-Host ("   Versao     : $($drv.Versao)") -ForegroundColor Gray
+            Write-Host ("   Instalado  : $($drv.DataDriver.ToString('dd/MM/yyyy'))  ($($drv.DiasAntesBSOD) dia(s) antes do BSOD)") -ForegroundColor Gray
+            Write-Host ''
+        }
+    } else {
+        if ($driversRecentes.Count -gt 0) {
+            Write-Ok 'Nenhum driver instalado nos 14 dias anteriores aos BSODs encontrados.'
+            Write-Host ''
+            Write-Info 'Drivers mais recentes instalados (60 dias):'
+            $driversRecentes | Select-Object -First 8 | ForEach-Object {
+                Write-Dest ("   " + $_.DataDriver.ToString('dd/MM/yyyy') + "  " + $_.Dispositivo)
+            }
+        } else {
+            Write-Info 'Nenhum dado de driver recente disponivel via WMI.'
+        }
+    }
+
+    # =========================================================================
+    # ETAPA 6 - Verificar temperatura e saude do disco via SMART
+    # =========================================================================
+
+    Write-Etapa '6/9  Verificando saude dos discos via SMART...'
+    Write-Host ''
+
+    $discos = Get-WmiObject -Class Win32_DiskDrive -ErrorAction SilentlyContinue
+
+    foreach ($disco in $discos) {
+        $tamanhoGB = if ($disco.Size) { [math]::Round($disco.Size / 1GB, 0).ToString('N0') + ' GB' } else { 'desconhecido' }
+        $cor = if ($disco.Status -eq 'OK') { 'Green' } else { 'Yellow' }
+        Write-Host ("   $($disco.Model)  [$tamanhoGB]  Status: $($disco.Status)") -ForegroundColor $cor
+        if ($disco.Partitions) { Write-Info "   Particoes : $($disco.Partitions)  |  Interface: $($disco.InterfaceType)" }
+    }
+
+    # SMART - predicao de falha
+    Write-Host ''
+    $smartStatus = Get-WmiObject -Namespace root\wmi -Class MSStorageDriver_FailurePredictStatus -ErrorAction SilentlyContinue
+
+    if ($smartStatus) {
+        foreach ($s in $smartStatus) {
+            $nomeInst = $s.InstanceName -replace '.*\\', '' -replace '_\d+$', ''
+            if ($s.PredictFailure) {
+                Write-Falha "SMART ALERTA DE FALHA: $nomeInst"
+                Write-Info  'Este disco pode falhar em breve. Faca backup imediatamente!'
+            } else {
+                Write-Ok "SMART OK: $nomeInst - sem predicao de falha iminente."
+            }
+        }
+    } else {
+        Write-Aviso 'SMART nao disponivel via WMI neste sistema (normal em alguns NVMe ou RAID).'
+    }
+
+    # SMART - temperatura (atributo 0xC2 = 194 e 0xBE = 190)
+    $smartDados = Get-WmiObject -Namespace root\wmi -Class MSStorageDriver_ATAPISmartData -ErrorAction SilentlyContinue
+
+    if ($smartDados) {
+        Write-Host ''
+        foreach ($s in $smartDados) {
+            $vs  = $s.VendorSpecific
+            $temp = $null
+            # Percorrer atributos SMART: inicio em offset 2, 12 bytes cada
+            for ($i = 2; $i -lt 362 -and $i -lt $vs.Count; $i += 12) {
+                $id = $vs[$i]
+                if ($id -eq 194 -or $id -eq 190) {
+                    $temp = $vs[$i + 5]  # Primeiro byte do valor raw = temperatura em Celsius
+                    break
+                }
+            }
+            if ($null -ne $temp) {
+                $nomeInst = $s.InstanceName -replace '.*\\', '' -replace '_\d+$', ''
+                $corTemp  = if ($temp -gt 55) { 'Red' } elseif ($temp -gt 45) { 'Yellow' } else { 'Green' }
+                Write-Host ("   Temperatura SMART: $nomeInst = ${temp}C") -ForegroundColor $corTemp
+                if ($temp -gt 55) { Write-Aviso 'Temperatura critica! Verifique ventilacao do gabinete.' }
+            }
+        }
+    }
+
+    # =========================================================================
+    # ETAPA 7 - Verificar se RAM passou por teste recente
+    # =========================================================================
+
+    Write-Etapa '7/9  Verificando historico de teste de memoria RAM...'
+    Write-Host ''
+
+    $testeMemoria = $null
+    $testeEncontrado = $false
+
+    # Verificar resultados do Windows Memory Diagnostic no log de eventos
+    try {
+        $memDiagEvents = Get-WinEvent -FilterHashtable @{
+            LogName      = 'System'
+            ProviderName = 'Microsoft-Windows-MemoryDiagnostics-Results'
+        } -MaxEvents 5 -ErrorAction SilentlyContinue
+        if ($memDiagEvents) {
+            $testeEncontrado = $true
+            $ultimo = $memDiagEvents | Sort-Object TimeCreated -Descending | Select-Object -First 1
+            $diasAtras = [math]::Round(((Get-Date) - $ultimo.TimeCreated).TotalDays, 0)
+            if ($ultimo.Message -match 'no errors' -or $ultimo.Message -match 'sem erros' -or $ultimo.Id -eq 1201) {
+                Write-Ok "Ultimo teste de memoria: $($ultimo.TimeCreated.ToString('dd/MM/yyyy'))  ($diasAtras dia(s) atras) - SEM ERROS detectados."
+            } else {
+                Write-Aviso "Ultimo teste de memoria: $($ultimo.TimeCreated.ToString('dd/MM/yyyy'))  ($diasAtras dia(s) atras)"
+                Write-Dest "   Resultado: $($ultimo.Message -replace '\s+', ' ')"
+            }
+            $testeMemoria = $ultimo
+        }
+    } catch {}
+
+    # Tentar pelo log Application com ID 1101
+    if (-not $testeEncontrado) {
+        try {
+            $memDiagApp = Get-WinEvent -FilterHashtable @{
+                LogName = 'Application'
+                Id      = @(1101, 1102, 1103)
+            } -MaxEvents 5 -ErrorAction SilentlyContinue
+            if ($memDiagApp) {
+                $testeEncontrado = $true
+                $ultimo = $memDiagApp | Sort-Object TimeCreated -Descending | Select-Object -First 1
+                $diasAtras = [math]::Round(((Get-Date) - $ultimo.TimeCreated).TotalDays, 0)
+                Write-Ok "Teste de memoria encontrado: $($ultimo.TimeCreated.ToString('dd/MM/yyyy'))  ($diasAtras dia(s) atras)"
+            }
+        } catch {}
+    }
+
+    if (-not $testeEncontrado) {
+        Write-Aviso 'Nenhum teste de memoria recente encontrado no log de eventos.'
+        Write-Info  'Para executar: Iniciar > "Diagnostico de Memoria do Windows" > Reiniciar agora e verificar problemas'
+        Write-Info  'Alternativa: Baixe memtest86 (gratuito) em memtest86.com para teste mais completo'
+    }
+
+    # Verificar quantidade e velocidade de RAM
+    $ramInfo = Get-WmiObject Win32_PhysicalMemory -ErrorAction SilentlyContinue
+    if ($ramInfo) {
+        $totalRAM = ($ramInfo | Measure-Object -Property Capacity -Sum).Sum / 1GB
+        Write-Host ''
+        Write-Info "RAM instalada: $totalRAM GB  |  Modulos: $($ramInfo.Count)"
+        foreach ($m in $ramInfo) {
+            $capGB   = [math]::Round($m.Capacity / 1GB, 0)
+            $veloc   = if ($m.Speed) { "$($m.Speed) MHz" } else { 'velocidade desconhecida' }
+            $slot    = if ($m.DeviceLocator) { $m.DeviceLocator } else { 'slot desconhecido' }
+            $fabric  = if ($m.Manufacturer) { $m.Manufacturer } else { '' }
+            Write-Dest ("   " + $slot.PadRight(10) + "  " + ([string]$capGB).PadLeft(4) + " GB  " + $veloc + "  " + $fabric)
+        }
+    }
+
+    # =========================================================================
+    # ETAPA 8 - Sugerir solucoes especificas baseadas nos erros encontrados
+    # =========================================================================
+
+    Write-Etapa '8/9  Solucoes recomendadas com base nos erros encontrados...'
+    Write-Host ''
+
+    $solucoesRecomendadas = [System.Collections.Generic.List[string]]::new()
+    $solucoesJaAdicionadas = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    function Adicionar-Solucao { param([string]$s) if ($solucoesJaAdicionadas.Add($s)) { $solucoesRecomendadas.Add($s) } }
+
+    foreach ($cod in $codigosUnicos) {
+        $info = $bsodCodigos[$cod]
+        if ($info -and $info.Solucoes) {
+            foreach ($sol in $info.Solucoes) { Adicionar-Solucao $sol }
+        }
+    }
+
+    # Adicionar solucoes gerais se houver BSODs
+    if ($codigosEncontrados.Count -gt 0) {
+        Adicionar-Solucao 'Execute: sfc /scannow no Prompt de Comando como Administrador'
+        Adicionar-Solucao 'Execute: DISM /Online /Cleanup-Image /RestoreHealth'
+        Adicionar-Solucao 'Certifique-se que o Windows esta atualizado (Windows Update)'
+    }
+
+    # Adicionar solucao de drivers suspeitos se encontrados
+    if ($driversSuspeitos.Count -gt 0) {
+        Adicionar-Solucao 'Considere reverter ou remover os drivers suspeitos identificados na Etapa 5'
+        Adicionar-Solucao 'Para reverter driver: Gerenciador de Dispositivos > driver > Propriedades > Driver > Reverter Driver'
+    }
+
+    # Adicionar solucao de SMART se ha alerta
+    $smartAlerta = $smartStatus | Where-Object { $_.PredictFailure }
+    if ($smartAlerta) {
+        $solucoesRecomendadas.Insert(0, 'URGENTE: Faca backup imediato dos dados - SMART indica falha iminente no disco!')
+        Adicionar-Solucao 'Substitua o disco com alerta SMART o mais rapido possivel'
+    }
+
+    if ($solucoesRecomendadas.Count -gt 0) {
+        $numSol = 1
+        foreach ($sol in $solucoesRecomendadas) {
+            $cor = if ($sol -match 'URGENTE') { 'Red' } elseif ($numSol -le 3) { 'Yellow' } else { 'White' }
+            Write-Host ("   $numSol. $sol") -ForegroundColor $cor
+            $numSol++
+        }
+    } else {
+        Write-Ok 'Nenhum BSOD encontrado. Nenhuma solucao corretiva necessaria no momento.'
+    }
+
+    # =========================================================================
+    # ETAPA 9 - Relatorio final com linha do tempo dos crashes
+    # =========================================================================
+
+    Write-Etapa '9/9  Relatorio final - Linha do tempo dos eventos de crash...'
+    Write-Host ''
+
+    # Consolidar todos os eventos de crash em uma linha do tempo
+    $linhaDoTempo = [System.Collections.Generic.List[PSObject]]::new()
+
+    foreach ($ev in $codigosEncontrados) {
+        $linhaDoTempo.Add([PSCustomObject]@{
+            Data   = $ev.Data
+            Tipo   = 'BSOD'
+            Codigo = $ev.Codigo
+            Nome   = $ev.Nome
+            Cor    = 'Red'
+        })
+    }
+    foreach ($ev in $eventosKernel41) {
+        $jaTemBSOD = $codigosEncontrados | Where-Object {
+            [Math]::Abs(($_.Data - $ev.TimeCreated).TotalMinutes) -lt 5
+        }
+        if (-not $jaTemBSOD) {
+            $linhaDoTempo.Add([PSCustomObject]@{
+                Data   = $ev.TimeCreated
+                Tipo   = 'Deslig.Inesperado'
+                Codigo = 'KernelPower-41'
+                Nome   = 'Desligamento inesperado sem BSOD'
+                Cor    = 'Yellow'
+            })
+        }
+    }
+    foreach ($ev in $eventosShutdown) {
+        $linhaDoTempo.Add([PSCustomObject]@{
+            Data   = $ev.TimeCreated
+            Tipo   = 'Shutdown6008'
+            Codigo = 'EventLog-6008'
+            Nome   = 'Desligamento anterior inesperado'
+            Cor    = 'DarkYellow'
+        })
+    }
+
+    $linhaOrdenada = $linhaDoTempo | Sort-Object Data -Descending
+
+    if ($linhaOrdenada.Count -gt 0) {
+        Write-Host ("   " + "Data/Hora".PadRight(20) + "  " + "Tipo".PadRight(18) + "  " + "Codigo".PadRight(14) + "  Nome") -ForegroundColor Cyan
+        Write-Host ("   " + ('-' * 20) + "  " + ('-' * 18) + "  " + ('-' * 14) + "  " + ('-' * 30)) -ForegroundColor DarkGray
+        foreach ($item in $linhaOrdenada) {
+            Write-Host ("   " + $item.Data.ToString('dd/MM/yyyy HH:mm:ss').PadRight(20) + "  " + $item.Tipo.PadRight(18) + "  " + $item.Codigo.PadRight(14) + "  " + $item.Nome) -ForegroundColor $item.Cor
+        }
+        Write-Host ''
+        Write-Host ("   Total de eventos de crash nos ultimos 30 dias: $($linhaOrdenada.Count)") -ForegroundColor White
+
+        # Agrupamento por semana para identificar padroes
+        $porSemana = $linhaOrdenada | Group-Object { $_.Data.ToString('yyyy-WW') }
+        if ($porSemana.Count -gt 1) {
+            Write-Host ''
+            Write-Info 'Distribuicao por semana:'
+            foreach ($semana in ($porSemana | Sort-Object Name -Descending)) {
+                $primeiraData = ($semana.Group | Sort-Object Data | Select-Object -First 1).Data
+                Write-Dest ("   Semana de " + $primeiraData.ToString('dd/MM/yyyy').PadRight(12) + ": " + $semana.Count + " evento(s)")
+            }
+        }
+    } else {
+        Write-Ok 'Nenhum evento de crash registrado nos ultimos 30 dias.'
+        Write-Info 'Sistema estavel no periodo analisado.'
+    }
+
+    # =========================================================================
+    # RESUMO EXECUTIVO
+    # =========================================================================
+
+    $corResumo = if ($codigosEncontrados.Count -eq 0) { 'Green' } elseif ($smartAlerta) { 'Red' } else { 'Yellow' }
+
+    Write-Host ''
+    Write-Host '   RESUMO DO DIAGNOSTICO                        ' -ForegroundColor $corResumo
+    Write-Host ''
+    Write-Host ("   BSODs nos ultimos 30 dias : $($codigosEncontrados.Count)") -ForegroundColor White
+    Write-Host ("   Codigos unicos            : $($codigosUnicos.Count)") -ForegroundColor White
+    Write-Host ("   Drivers suspeitos         : $($driversSuspeitos.Count)") -ForegroundColor White
+    Write-Host ("   Arquivos de dump          : $totalDumps") -ForegroundColor White
+    Write-Host ("   Teste de RAM recente      : $(if ($testeEncontrado) { 'Sim' } else { 'Nao encontrado' })") -ForegroundColor White
+    $smartOK = -not ($smartStatus | Where-Object { $_.PredictFailure })
+    Write-Host ("   SMART do disco            : $(if ($smartStatus) { if ($smartOK) { 'OK' } else { 'ALERTA DE FALHA' } } else { 'Nao disponivel' })") -ForegroundColor $(if ($smartOK -or -not $smartStatus) { 'White' } else { 'Red' })
+
+    if ($codigosEncontrados.Count -eq 0) {
+        Write-Host ''
+        Write-Host '   Sistema estavel no periodo analisado.' -ForegroundColor Green
+    } else {
+        Write-Host ''
+        Write-Host '   Para analise aprofundada dos arquivos .DMP use:' -ForegroundColor Cyan
+        Write-Host '   WinDbg (gratuito no Microsoft Store) ou WhoCrashed (NirSoft)' -ForegroundColor Gray
+        Write-Host '   Comando WinDbg: !analyze -v  (apos abrir o arquivo .dmp)' -ForegroundColor Gray
+    }
+
+    Write-Host ''
+    Write-Host ''
+    return [long]0
+}
+
 function Remove-PastaAnyDesk {
     param(
         [ValidateSet('Completo', 'SomenteLogs')][string]$Modo = 'SomenteLogs',
@@ -4416,6 +9645,16 @@ if ($Ferramenta) {
                 }
             }
             'certificados'  { Show-CertificadosInstalados | Out-Null }
+            'bsod'          { Show-AnaliseBSOD | Out-Null }
+            'proxycert'      { Repair-ProxyECertificados | Out-Null }
+            'limparcerts'    { Clear-CertificadosVencidos | Out-Null }
+            'pje'            { Set-AmbientePJe | Out-Null }
+            'permissoesps'   { Repair-PermissoesPowerShell | Out-Null }
+            'audio'          { Repair-Audio | Out-Null }
+            'webcam'         { Repair-Webcam | Out-Null }
+            'impressora'     { Remove-ImpressoraEDriver | Out-Null }
+            'java'           { Set-JavaJuridico | Out-Null }
+            'visualc'       { Install-VisualCRedist | Out-Null }
             'corrigirrede'  { Repair-RedeCompleta | Out-Null }
             'memoriavirtual' {
                 Write-Etapa 'Memoria virtual (arquivo de paginacao)'
@@ -4530,13 +9769,13 @@ if ($Ferramenta) {
     }
     Write-Host ''
     # Ferramentas somente-leitura nao deixam log salvo.
-    if ($chave -notin @('diagnostico', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados')) {
+    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados')) {
         Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
     }
     Write-Host ('=' * 68) -ForegroundColor Green
     try { Stop-Transcript | Out-Null } catch { }
     # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
-    if ($chave -eq 'diagnostico') { Publicar-RelatorioTemp -RemoverPastaLog }
+    if ($chave -in @('diagnostico', 'bsod')) { Publicar-RelatorioTemp -RemoverPastaLog }
     # protecaovirus/consoles: so abriram telas; nao deixam pasta de log.
     elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados')) {
         Remove-Item -LiteralPath (Join-Path $script:pastaExec 'manutencao.log') -Force -ErrorAction SilentlyContinue

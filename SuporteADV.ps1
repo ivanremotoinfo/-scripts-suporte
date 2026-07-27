@@ -36,7 +36,7 @@ $menu = @(
     @{ N=2;  Cat='DIAGNOSTICO'; Label='Saude dos Discos (SMART)';      Tipo='v2';     Args=@{ Ferramenta='smart' } }
     @{ N=3;  Cat='DIAGNOSTICO'; Label='Maiores Consumidores de RAM';   Tipo='v2';     Args=@{ Ferramenta='topprocessos' } }
     @{ N=4;  Cat='DIAGNOSTICO'; Label='Listar Certificados Digitais';  Tipo='v2';     Args=@{ Ferramenta='certificados' } }
-    @{ N=5;  Cat='DIAGNOSTICO'; Label='Analisar Tela Azul (BSOD)';     Tipo='script'; Alvo='AnalisarBSOD.ps1' }
+    @{ N=5;  Cat='DIAGNOSTICO'; Label='Analisar Tela Azul (BSOD)';     Tipo='v2';     Args=@{ Ferramenta='bsod' } }
 
     # --- MANUTENCAO E LIMPEZA ---
     @{ N=6;  Cat='MANUTENCAO';  Label='Manutencao Completa (tudo)';    Tipo='v2';     Args=@{} }
@@ -49,7 +49,7 @@ $menu = @(
     @{ N=12; Cat='MANUTENCAO';  Label='Miniaturas do Explorer';        Tipo='v2';     Args=@{ Ferramenta='miniaturas' } }
     @{ N=13; Cat='MANUTENCAO';  Label='Limpeza Pesada (WinSxS)';       Tipo='v2';     Args=@{ Ferramenta='winsxs' } }
     @{ N=14; Cat='MANUTENCAO';  Label='Apagar pasta do AnyDesk';       Tipo='v2';     Args=@{ Ferramenta='anydesk' } }
-    @{ N=15; Cat='MANUTENCAO';  Label='Visual C++ Redistribuiveis';    Tipo='script'; Alvo='InstalarVisualC.ps1' }
+    @{ N=15; Cat='MANUTENCAO';  Label='Visual C++ Redistribuiveis';    Tipo='v2';     Args=@{ Ferramenta='visualc' } }
 
     # --- SEGURANCA E ANTIVIRUS ---
     @{ N=16; Cat='SEGURANCA';   Label='Escanear Virus (ClamAV+VT)';    Tipo='v2';     Args=@{ EscanearVirus=$true } }
@@ -61,7 +61,7 @@ $menu = @(
     # --- REPAROS ---
     @{ N=21; Cat='REPAROS';     Label='Reparar Sistema (SFC/DISM)';    Tipo='v2';     Args=@{ Ferramenta='sfc' } }
     @{ N=22; Cat='REPAROS';     Label='Corrigir Rede e Internet';      Tipo='v2';     Args=@{ Ferramenta='corrigirrede' } }
-    @{ N=23; Cat='REPAROS';     Label='Corrigir Proxy e Certif. Rede'; Tipo='script'; Alvo='CorrigirProxy.ps1' }
+    @{ N=23; Cat='REPAROS';     Label='Corrigir Proxy e Certif. Rede'; Tipo='v2';     Args=@{ Ferramenta='proxycert' } }
     @{ N=24; Cat='REPAROS';     Label='Reparar Fila de Impressao';     Tipo='v2';     Args=@{ Ferramenta='spooler' } }
     @{ N=25; Cat='REPAROS';     Label='Reparar acesso a %appdata%';    Tipo='v2';     Args=@{ Ferramenta='appdata' } }
     @{ N=26; Cat='REPAROS';     Label='Reiniciar Explorer';            Tipo='v2';     Args=@{ Ferramenta='explorer' } }
@@ -70,9 +70,9 @@ $menu = @(
     @{ N=29; Cat='REPAROS';     Label='Sincronizar Horario (NTP)';     Tipo='v2';     Args=@{ Ferramenta='horario' } }
     @{ N=30; Cat='REPAROS';     Label='Renovar IP (DHCP)';             Tipo='v2';     Args=@{ Ferramenta='ip' } }
     @{ N=31; Cat='REPAROS';     Label='Atualizar GPO (dominio)';       Tipo='v2';     Args=@{ Ferramenta='gpupdate' } }
-    @{ N=32; Cat='REPAROS';     Label='Permissoes do PowerShell';      Tipo='script'; Alvo='CorrigirPermissoesPowerShell.ps1' }
-    @{ N=33; Cat='REPAROS';     Label='Reparar Audio e Microfone';     Tipo='script'; Alvo='RepararAudio.ps1' }
-    @{ N=34; Cat='REPAROS';     Label='Reparar Webcam';                Tipo='script'; Alvo='RepararWebcam.ps1' }
+    @{ N=32; Cat='REPAROS';     Label='Permissoes do PowerShell';      Tipo='v2';     Args=@{ Ferramenta='permissoesps' } }
+    @{ N=33; Cat='REPAROS';     Label='Reparar Audio e Microfone';     Tipo='v2';     Args=@{ Ferramenta='audio' } }
+    @{ N=34; Cat='REPAROS';     Label='Reparar Webcam';                Tipo='v2';     Args=@{ Ferramenta='webcam' } }
 
     # --- OTIMIZACAO ---
     @{ N=35; Cat='OTIMIZACAO';  Label='Otimizar Disco (SSD/HDD)';      Tipo='v2';     Args=@{ Ferramenta='otimizar' } }
@@ -81,13 +81,13 @@ $menu = @(
     @{ N=46; Cat='OTIMIZACAO';  Label='Memoria Virtual (pagefile)';    Tipo='v2';     Args=@{ Ferramenta='memoriavirtual' } }
 
     # --- CERTIFICADOS E JURIDICO ---
-    @{ N=38; Cat='CERTIFICADOS';Label='Limpar Certificados Vencidos';  Tipo='script'; Alvo='LimparCertificadosVencidos.ps1' }
-    @{ N=39; Cat='CERTIFICADOS';Label='Configurar Java (Juridico)';    Tipo='script'; Alvo='ConfigurarJava.ps1' }
-    @{ N=40; Cat='CERTIFICADOS';Label='Configurar Ambiente PJe';       Tipo='script'; Alvo='ConfigurarPJe.ps1' }
+    @{ N=38; Cat='CERTIFICADOS';Label='Limpar Certificados Vencidos';  Tipo='v2';     Args=@{ Ferramenta='limparcerts' } }
+    @{ N=39; Cat='CERTIFICADOS';Label='Configurar Java (Juridico)';    Tipo='v2';     Args=@{ Ferramenta='java' } }
+    @{ N=40; Cat='CERTIFICADOS';Label='Configurar Ambiente PJe';       Tipo='v2';     Args=@{ Ferramenta='pje' } }
 
     # --- PROGRAMAS ---
     @{ N=41; Cat='PROGRAMAS';   Label='Desinstalar Programa';          Tipo='v2';     Args=@{ Ferramenta='desinstalar' } }
-    @{ N=42; Cat='PROGRAMAS';   Label='Remover Impressora';            Tipo='script'; Alvo='ReinstalarImpressora.ps1' }
+    @{ N=42; Cat='PROGRAMAS';   Label='Remover Impressora';            Tipo='v2';     Args=@{ Ferramenta='impressora' } }
 
     # --- ATALHOS ADMIN ---
     @{ N=43; Cat='ATALHOS';     Label='Dispositivos, Servicos e Token';  Tipo='v2'; Args=@{ Ferramenta='consoles' } }
