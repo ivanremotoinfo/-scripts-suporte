@@ -10741,6 +10741,212 @@ function Repair-ProblemasConexao {
     return [long]0
 }
 
+function Backup-CertificadoA1 {
+    <#
+      Exporta o certificado A1 (o que fica guardado no computador) para um
+      arquivo .pfx, que e' a unica forma de reinstala-lo depois.
+
+      Por que importa: A1 vive no disco. Se o HD morre, ou o Windows e'
+      reinstalado sem exportar antes, o advogado fica sem assinar ate comprar
+      outro certificado - dias parado e custo cheio, porque a AC nao reemite.
+
+      A3 (token/cartao) NAO e' exportavel por design: a chave privada nunca
+      sai do hardware. Isso e' protecao, nao defeito - a ferramenta detecta e
+      explica em vez de falhar sem dizer o motivo.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Listaria os certificados e exportaria os A1 para .pfx.'; return [long]0 }
+
+    Write-Titulo 'BACKUP DO CERTIFICADO DIGITAL (A1)'
+    Write-Info 'Certificado A1 fica guardado no computador. Sem uma copia exportada,'
+    Write-Info 'perder o disco significa comprar outro certificado.'
+
+    # --- Levantamento -----------------------------------------------------
+    Write-Etapa '1/3  Certificados com chave privada nesta maquina'
+    $todos = [System.Collections.Generic.List[PSObject]]::new()
+    foreach ($loc in @('CurrentUser', 'LocalMachine')) {
+        try {
+            foreach ($c in @(Get-ChildItem "Cert:\$loc\My" -ErrorAction SilentlyContinue)) {
+                if (-not $c.HasPrivateKey) { continue }
+                $nome = if ($c.Subject -match 'CN=([^,]+)') { $Matches[1].Trim() } else { $c.Subject }
+                # A3 fica em provider de hardware; A1 em provider de software.
+                $tipo = 'A1'
+                $provider = ''
+                try {
+                    if ($c.PrivateKey -and $c.PrivateKey.CspKeyContainerInfo) {
+                        $provider = $c.PrivateKey.CspKeyContainerInfo.ProviderName
+                    } else {
+                        $k = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($c)
+                        if ($k -and $k.Key) { $provider = $k.Key.Provider.Provider }
+                    }
+                } catch { }
+                if ($provider -match '(?i)(smart ?card|token|etoken|safenet|gemalto|watchdata|feitian|epass|starsign|athena|scard)') { $tipo = 'A3' }
+                $todos.Add([PSCustomObject]@{
+                    Cert     = $c
+                    Nome     = $nome
+                    Local    = $loc
+                    Tipo     = $tipo
+                    Provider = $provider
+                    Expira   = $c.NotAfter
+                    Venceu   = ($c.NotAfter -lt (Get-Date))
+                })
+            }
+        } catch { }
+    }
+
+    if ($todos.Count -eq 0) {
+        Write-Aviso 'Nenhum certificado com chave privada encontrado nesta maquina.'
+        Write-Info  'Se o cliente usa token (A3), conecte-o e rode de novo - mas A3 nao'
+        Write-Info  'e exportavel de qualquer forma.'
+        return [long]0
+    }
+
+    $i = 1
+    $exportaveis = [System.Collections.Generic.List[PSObject]]::new()
+    foreach ($t in $todos) {
+        $st = if ($t.Venceu) { ' [VENCIDO]' } else { " (vence " + $t.Expira.ToString('dd/MM/yyyy') + ")" }
+        if ($t.Tipo -eq 'A3') {
+            Write-Host ("     [--] $($t.Nome)$st") -ForegroundColor DarkGray
+            Write-Host ("          A3 (token/cartao) - nao pode ser exportado") -ForegroundColor DarkGray
+        } else {
+            # Certificado do titular traz CPF/CNPJ no nome. Sem isso e' quase
+            # sempre certificado tecnico (localhost, servidor, IIS) e nao
+            # interessa ao backup do advogado.
+            $doc = ''
+            if ($t.Cert.Subject -match ':(\d{11})\b') {
+                $nn = $Matches[1]
+                $doc = 'CPF ' + $nn.Substring(0,3) + '.' + $nn.Substring(3,3) + '.' + $nn.Substring(6,3) + '-' + $nn.Substring(9,2)
+            } elseif ($t.Cert.Subject -match ':(\d{14})\b') {
+                $nn = $Matches[1]
+                $doc = 'CNPJ ' + $nn.Substring(0,2) + '.' + $nn.Substring(2,3) + '.' + $nn.Substring(5,3) + '/' + $nn.Substring(8,4) + '-' + $nn.Substring(12,2)
+            }
+            $cor = if ($doc) { 'White' } else { 'DarkGray' }
+            Write-Host ("     [{0,2}] {1}{2}" -f $i, $t.Nome, $st) -ForegroundColor $cor
+            if ($doc) {
+                Write-Info ("          $doc   -   A1 em $($t.Local)")
+            } else {
+                Write-Host ("          sem CPF/CNPJ - certificado tecnico, provavelmente nao e do advogado") -ForegroundColor DarkGray
+                Write-Host ("          A1 em $($t.Local)") -ForegroundColor DarkGray
+            }
+            $t | Add-Member -NotePropertyName Indice -NotePropertyValue $i -Force
+            $t | Add-Member -NotePropertyName Documento -NotePropertyValue $doc -Force
+            $exportaveis.Add($t)
+            $i++
+        }
+    }
+
+    $qtdA3 = @($todos | Where-Object { $_.Tipo -eq 'A3' }).Count
+    if ($qtdA3 -gt 0) {
+        Write-Host ''
+        Write-Info "$qtdA3 certificado(s) A3 (token) encontrado(s) - nao aparecem na lista"
+        Write-Info 'porque a chave privada nunca sai do token. Isso e protecao, nao'
+        Write-Info 'defeito: se o token quebrar, a renovacao e feita na Autoridade'
+        Write-Info 'Certificadora. Oriente o cliente a guardar bem o token e a senha.'
+    }
+
+    if ($exportaveis.Count -eq 0) {
+        Write-Host ''
+        Write-Ok 'Nao ha certificado A1 para exportar nesta maquina.'
+        return [long]0
+    }
+
+    if ($SemInteracao) { Write-Aviso 'Modo desatendido: a exportacao precisa de senha.'; return [long]0 }
+
+    # --- Escolha ----------------------------------------------------------
+    Write-Etapa '2/3  Qual exportar'
+    Write-Host ''
+    $sel = (Read-Host '  Numero (ou T para todos, ENTER para cancelar)').Trim()
+    $alvos = [System.Collections.Generic.List[PSObject]]::new()
+    if ($sel -match '^[Tt]$') { foreach ($e in $exportaveis) { $alvos.Add($e) } }
+    elseif ($sel -match '^\d+$' -and [int]$sel -ge 1 -and [int]$sel -le $exportaveis.Count) {
+        $alvos.Add($exportaveis[[int]$sel - 1])
+    } else { Write-Info 'Cancelado.'; return [long]0 }
+
+    # --- Senha e destino --------------------------------------------------
+    Write-Etapa '3/3  Senha de protecao e destino'
+    Write-Host ''
+    Write-Falha 'IMPORTANTE - o arquivo .pfx E O CERTIFICADO INTEIRO.'
+    Write-Info  'Quem tiver o arquivo e a senha pode assinar como o titular. Trate como'
+    Write-Info  'a propria identidade digital dele:'
+    Write-Info  '   - NAO deixe o arquivo na maquina do cliente depois de copiar;'
+    Write-Info  '   - NAO envie por e-mail nem WhatsApp;'
+    Write-Info  '   - entregue em pendrive ou guarde em cofre digital do escritorio;'
+    Write-Info  '   - a senha vai junto com a responsabilidade: quem escolhe e o cliente.'
+    Write-Host ''
+    Write-Info 'A senha sera pedida sempre que o certificado for reinstalado.'
+    Write-Info 'Se ela for perdida, o arquivo nao serve para nada.'
+    Write-Host ''
+
+    $s1 = Read-Host '  Senha para o arquivo' -AsSecureString
+    $s2 = Read-Host '  Repita a senha' -AsSecureString
+    $p1 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s1))
+    $p2 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s2))
+    if (-not $p1) { Write-Falha 'Senha em branco nao e aceita.'; return [long]0 }
+    if ($p1 -ne $p2) { Write-Falha 'As senhas nao conferem.'; return [long]0 }
+    if ($p1.Length -lt 8) {
+        Write-Aviso 'Senha curta. Este arquivo vale a identidade digital do titular.'
+        $c = Read-Host '  Usar assim mesmo? (S/N)'
+        if ($c -notmatch '^[Ss]') { Write-Info 'Cancelado.'; return [long]0 }
+    }
+
+    Write-Host ''
+    $padrao = Join-Path ([Environment]::GetFolderPath('Desktop')) 'CertificadoBackup'
+    Write-Info "Pasta de destino (ENTER para $padrao)"
+    $destino = (Read-Host '  Destino').Trim().Trim('"')
+    if (-not $destino) { $destino = $padrao }
+    if (-not (Test-Path -LiteralPath $destino)) {
+        try { New-Item -ItemType Directory -Path $destino -Force -ErrorAction Stop | Out-Null }
+        catch { Write-Falha "Nao foi possivel criar $destino"; return [long]0 }
+    }
+
+    # --- Exportacao -------------------------------------------------------
+    Write-Host ''
+    $okCount = 0
+    foreach ($a in $alvos) {
+        $limpo = ($a.Nome -replace '[^A-Za-z0-9 \-]', '').Trim()
+        if ($limpo.Length -gt 40) { $limpo = $limpo.Substring(0, 40) }
+        if (-not $limpo) { $limpo = 'certificado' }
+        $arq = Join-Path $destino ($limpo + '_' + (Get-Date -Format 'yyyy-MM-dd') + '.pfx')
+
+        try {
+            Export-PfxCertificate -Cert $a.Cert -FilePath $arq -Password $s1 -ChainOption BuildChain -ErrorAction Stop | Out-Null
+            if (Test-Path -LiteralPath $arq) {
+                Write-Ok "Exportado: $($a.Nome)"
+                Write-Info ("   arquivo: " + $arq)
+                $okCount++
+            }
+        } catch {
+            $msg = $_.Exception.Message
+            Write-Falha "Nao foi possivel exportar '$($a.Nome)'."
+            if ($msg -match '(?i)(not exportable|nao.*export|0x8009000B|key)') {
+                Write-Info 'A chave privada esta marcada como NAO EXPORTAVEL.'
+                Write-Info 'Isso e definido na instalacao do certificado e nao tem volta:'
+                Write-Info 'so a Autoridade Certificadora consegue reemitir. Se este e o'
+                Write-Info 'unico certificado do cliente, avise-o de que nao ha copia'
+                Write-Info 'possivel e que perder o disco significa comprar outro.'
+            } else {
+                Write-Info ("Erro: " + $msg)
+            }
+        }
+    }
+
+    if ($okCount -gt 0) {
+        Write-Host ''
+        Write-Titulo 'BACKUP CONCLUIDO'
+        Write-Ok "$okCount certificado(s) exportado(s) em: $destino"
+        Write-Host ''
+        Write-Falha 'AGORA, ANTES DE SAIR DA MAQUINA:'
+        Write-Info  '   1. copie a pasta para pendrive ou para o cofre do escritorio;'
+        Write-Info  '   2. APAGUE a pasta desta maquina;'
+        Write-Info  '   3. confirme com o cliente que ele guardou a senha.'
+        Write-Host ''
+        Write-Info 'Teste de verdade: reinstalar o .pfx numa maquina de teste comprova'
+        Write-Info 'que a copia presta. Backup nunca testado nao e backup.'
+        Add-Alerta "Certificado exportado para $destino - copiar e APAGAR da maquina."
+        try { Start-Process 'explorer.exe' -ArgumentList $destino -ErrorAction SilentlyContinue } catch { }
+    }
+    return [long]0
+}
+
 function Export-FichaRede {
     <#
       Ficha tecnica da rede do escritorio, para o Ivan guardar por cliente.
@@ -10900,6 +11106,24 @@ function Export-FichaRede {
         $smb1 = Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -ErrorAction SilentlyContinue
         if ($smb1 -and $smb1.State -eq 'Enabled') { & $add '  ATENCAO: SMB1 habilitado - risco de seguranca conhecido.' }
     } catch { }
+
+    # --- Falhas do proprio toolkit ---
+    # O cliente raramente avisa que uma ferramenta deu erro. Aqui elas
+    # aparecem, para o Ivan descobrir na visita em vez de nunca.
+    $arqFalhas = 'C:\ProgramData\SuporteTI\falhas.txt'
+    if (Test-Path -LiteralPath $arqFalhas) {
+        $recentes = @(Get-Content -LiteralPath $arqFalhas -ErrorAction SilentlyContinue |
+                      Select-Object -Last 15)
+        if ($recentes.Count -gt 0) {
+            & $add ''
+            & $add ('-' * 78)
+            & $add 'FALHAS REGISTRADAS DAS FERRAMENTAS'
+            & $add ('-' * 78)
+            foreach ($r in $recentes) { & $add ("  " + $r) }
+            & $add '  (historico completo em C:\ProgramData\SuporteTI\falhas.txt)'
+            Write-Aviso "$($recentes.Count) falha(s) de ferramenta registrada(s) nesta maquina."
+        }
+    }
 
     & $add ''
     & $add ('=' * 78)
@@ -13354,6 +13578,7 @@ if ($Ferramenta) {
                 }
             }
             'certificados'  { Show-CertificadosInstalados | Out-Null }
+            'backupcert'    { Backup-CertificadoA1 | Out-Null }
             'dll'           { Repair-DLLFaltando | Out-Null }
             'atendimento'   { New-RelatorioAtendimento | Out-Null }
             'desfazer'      { Undo-UltimaManutencao | Out-Null }
@@ -13485,7 +13710,25 @@ if ($Ferramenta) {
                 Write-Info 'topprocessos, programas, desinstalar.'
             }
         }
-    } catch { Write-Falha "Erro na ferramenta '$chave': $($_.Exception.Message)" }
+    } catch {
+        Write-Falha "Erro na ferramenta '$chave': $($_.Exception.Message)"
+        # Registra a falha num historico local. Sem isso, quando uma ferramenta
+        # quebra na maquina do cliente e ele nao comenta, o problema fica
+        # invisivel para sempre. A ficha da rede le este arquivo.
+        try {
+            $pastaFalhas = 'C:\ProgramData\SuporteTI'
+            if (-not (Test-Path -LiteralPath $pastaFalhas)) {
+                New-Item -ItemType Directory -Path $pastaFalhas -Force -ErrorAction SilentlyContinue | Out-Null
+            }
+            $arqFalhas = Join-Path $pastaFalhas 'falhas.txt'
+            $linha = '{0}  {1}  ferramenta={2}  erro={3}' -f (Get-Date -Format 'dd/MM/yyyy HH:mm'),
+                     $env:COMPUTERNAME, $chave, ($_.Exception.Message -replace '\s+', ' ')
+            Add-Content -LiteralPath $arqFalhas -Value $linha -ErrorAction SilentlyContinue
+            # nao deixar crescer sem fim
+            $todas = @(Get-Content -LiteralPath $arqFalhas -ErrorAction SilentlyContinue)
+            if ($todas.Count -gt 500) { $todas | Select-Object -Last 200 | Set-Content -LiteralPath $arqFalhas -ErrorAction SilentlyContinue }
+        } catch { }
+    }
 
     if ($script:alertas.Count -gt 0) {
         Write-Host ''

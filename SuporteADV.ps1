@@ -136,6 +136,7 @@ $menu = @(
     @{ Cat='REDELOCAL';   Label='Desfazer Rede no Computador';    Tipo='v2';     Args=@{ Ferramenta='sairrede' } }
 
     # --- CERTIFICADOS E JURIDICO ---
+    @{ Cat='CERTIFICADOS';Label='Backup do Certificado A1';      Tipo='v2';     Args=@{ Ferramenta='backupcert' } }
     @{ Cat='CERTIFICADOS';Label='Limpar Certificados Vencidos';  Tipo='v2';     Args=@{ Ferramenta='limparcerts' } }
     @{ Cat='CERTIFICADOS';Label='Configurar Java (Juridico)';    Tipo='v2';     Args=@{ Ferramenta='java' } }
     @{ Cat='CERTIFICADOS';Label='Configurar Ambiente PJe';       Tipo='v2';     Args=@{ Ferramenta='pje' } }
@@ -251,7 +252,7 @@ function Mostrar-Menu {
 
     Write-Host ''
     Write-Host $barra -ForegroundColor DarkCyan
-    Write-Host '  [ 0 ]  Sair        ou digite parte do nome para procurar (ex.: dll)' -ForegroundColor DarkGray
+    Write-Host '  [ 0 ]  Sair    |  procure por texto (ex.: dll)  |  "voltar" = versao anterior' -ForegroundColor DarkGray
     Write-Host $barra -ForegroundColor DarkCyan
     Write-Host ''
 }
@@ -327,6 +328,15 @@ function Get-ScriptTemp {
     if ($Cachear) {
         $arqCache = Join-Path $script:pastaCache $Arquivo
         $arqSha   = Join-Path $script:pastaCache ($Arquivo + '.sha')
+        $arqAnt   = Join-Path $script:pastaCache ($Arquivo + '.anterior')
+
+        # Guarda a versao que estava funcionando antes de sobrescrever. Se uma
+        # publicacao sair com defeito, da para voltar na hora, no cliente, sem
+        # depender de corrigir e republicar sob pressao.
+        if (Test-Path -LiteralPath $arqCache) {
+            try { Copy-Item -LiteralPath $arqCache -Destination $arqAnt -Force -ErrorAction SilentlyContinue } catch { }
+        }
+
         [System.IO.File]::WriteAllText($arqCache, $conteudo, $encSemBom)
         Unblock-File $arqCache -ErrorAction SilentlyContinue
         $sha = Get-ShaRemoto -Arquivo $Arquivo
@@ -411,6 +421,49 @@ try {
             Write-Host '  Ate logo!  suporte.adv.br' -ForegroundColor Cyan
             Write-Host ''
             break
+        }
+
+        # --- Comandos de manutencao do proprio menu ----------------------
+        if ($entrada -match '^(?i)(voltar|anterior)$') {
+            $arqCache = Join-Path $script:pastaCache $scriptV2
+            $arqAnt   = Join-Path $script:pastaCache ($scriptV2 + '.anterior')
+            Write-Host ''
+            if (-not (Test-Path -LiteralPath $arqAnt)) {
+                Write-Host '  Nao ha versao anterior guardada nesta maquina.' -ForegroundColor Yellow
+                Write-Host '  A versao anterior so passa a existir depois da primeira atualizacao.' -ForegroundColor DarkGray
+            } else {
+                $dAtual = if (Test-Path -LiteralPath $arqCache) { (Get-Item -LiteralPath $arqCache).LastWriteTime.ToString('dd/MM/yyyy HH:mm') } else { '-' }
+                $dAnt   = (Get-Item -LiteralPath $arqAnt).LastWriteTime.ToString('dd/MM/yyyy HH:mm')
+                Write-Host "  Versao em uso   : $dAtual" -ForegroundColor White
+                Write-Host "  Versao anterior : $dAnt" -ForegroundColor White
+                Write-Host ''
+                Write-Host '  Use isto quando uma atualizacao sair com defeito: volta para a' -ForegroundColor DarkGray
+                Write-Host '  versao que estava funcionando, sem depender de republicar.' -ForegroundColor DarkGray
+                Write-Host ''
+                $r = (Read-Host '  Voltar para a versao anterior? (S/N)').Trim()
+                if ($r -match '^[Ss]') {
+                    try {
+                        $troca = Join-Path $script:pastaCache ($scriptV2 + '.trocando')
+                        Copy-Item -LiteralPath $arqCache -Destination $troca -Force -ErrorAction SilentlyContinue
+                        Copy-Item -LiteralPath $arqAnt -Destination $arqCache -Force -ErrorAction Stop
+                        if (Test-Path -LiteralPath $troca) { Move-Item -LiteralPath $troca -Destination $arqAnt -Force -ErrorAction SilentlyContinue }
+                        # invalida o SHA para nao rebaixar sozinho na proxima
+                        $arqSha = Join-Path $script:pastaCache ($scriptV2 + '.sha')
+                        if (Test-Path -LiteralPath $arqSha) { Remove-Item -LiteralPath $arqSha -Force -ErrorAction SilentlyContinue }
+                        $script:v2Tmp = $null
+                        Write-Host ''
+                        Write-Host '  Pronto: a versao anterior esta ativa.' -ForegroundColor Green
+                        Write-Host '  Digite "voltar" de novo para alternar entre as duas.' -ForegroundColor DarkGray
+                        Write-Host '  Ao publicar uma correcao, o menu volta a atualizar sozinho.' -ForegroundColor DarkGray
+                    } catch {
+                        Write-Host "  Nao foi possivel trocar: $($_.Exception.Message)" -ForegroundColor Red
+                    }
+                }
+            }
+            Write-Host ''
+            Write-Host '  Pressione ENTER para voltar ao menu...' -ForegroundColor DarkGray
+            $null = Read-Host
+            continue
         }
 
         $num = 0
