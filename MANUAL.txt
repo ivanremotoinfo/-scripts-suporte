@@ -1,7 +1,7 @@
 ﻿================================================================================
                     S U P O R T E A D V  -  M A N U A L
               Ferramentas de suporte técnico - suporte.adv.br
-                        Versão 2026.07.28  |  62 opções
+                        Versão 2026.07.28  |  63 opções
 ================================================================================
 
 
@@ -11,16 +11,16 @@ SUMÁRIO
   2. Como executar
   3. Regras que valem para tudo
   4. Guia rápido: qual opção usar para cada problema
-  5. As 62 opções, uma a uma
+  5. As 63 opções, uma a uma
        DIAGNÓSTICO ................ 1 a 7
        MANUTENÇÃO E LIMPEZA ....... 8 a 19
        SEGURANÇA E ANTIVÍRUS ...... 20 a 24
        REPAROS .................... 25 a 40
        OTIMIZAÇÃO ................. 41 a 44
        REDE DO ESCRITÓRIO ......... 45 a 55
-       CERTIFICADOS E JURÍDICO .... 56 a 58
-       PROGRAMAS .................. 59 e 60
-       ATALHOS ADMINISTRATIVOS .... 61 e 62
+       CERTIFICADOS E JURÍDICO .... 56 a 59
+       PROGRAMAS .................. 60 e 61
+       ATALHOS ADMINISTRATIVOS .... 62 e 63
   6. A Manutenção Completa em detalhe (16 etapas)
   7. Uso por linha de comando
   8. Onde ficam os logs e como reverter
@@ -38,7 +38,7 @@ digital, token, Java, PJe).
 
 São apenas dois arquivos:
 
-  SuporteADV.ps1            o menu, com as 62 opções
+  SuporteADV.ps1            o menu, com as 63 opções
   ManutencaoCompleta.ps1    o motor, que faz todo o trabalho
 
 O menu baixa o motor uma vez e o mantém em cache local, atualizando só quando
@@ -99,6 +99,12 @@ O QUE NÃO DÁ PARA FAZER POR SCRIPT, ABRE A TELA DO WINDOWS
   Adulteração do Defender), a ferramenta abre a tela certa e mostra o passo a
   passo para fazer à mão.
 
+FALHAS FICAM REGISTRADAS
+  Quando uma ferramenta dá erro, além de mostrar na tela, o problema é
+  gravado em C:\ProgramData\SuporteTI\falhas.txt. A ficha da rede (opção 53)
+  mostra as últimas. Serve para você descobrir na visita o que quebrou entre
+  os atendimentos — o cliente raramente comenta.
+
 RELATÓRIOS NÃO FICAM SALVOS
   Diagnósticos abrem no Bloco de Notas a partir de arquivo temporário. Se
   quiser guardar, use Arquivo > Salvar Como. Já os backups necessários para
@@ -128,8 +134,8 @@ MODO SIMULAÇÃO
   "Sem internet"                                28
   "Não abre site do tribunal / erro de          29
    certificado"
-  "Não imprime"                                 30, depois 60 se persistir
-  "Não consigo abrir a pasta %appdata%"         31 (reparar) ou 62 (só abrir)
+  "Não imprime"                                 30, depois 61 se persistir
+  "Não consigo abrir a pasta %appdata%"         31 (reparar) ou 63 (só abrir)
   "Ícones sumiram / área de trabalho travou"    32
   "PC desligou na tomada várias vezes"          33 (chkdsk) e 2 (SMART)
   "Apps da Microsoft Store não abrem"           34
@@ -137,8 +143,8 @@ MODO SIMULAÇÃO
                                                 assinatura digital), 4, 29
   "Sem microfone na audiência" (URGENTE)        39
   "Sem câmera na audiência" (URGENTE)           40
-  "PJe não assina / Java não carrega"           58, depois 57
-  "Token não aparece"                           61, depois 4
+  "PJe não assina / Java não carrega"           59, depois 58
+  "Token não aparece"                           62, depois 4
   "Suspeita de vírus"                           20
   "Preciso instalar programa e o antivírus      22 (e 23 depois, sempre)
    bloqueia"
@@ -161,10 +167,14 @@ MODO SIMULAÇÃO
   "Rede cai sozinha / servidor some de manhã"   50 (blinda contra as causas)
   "E se o disco do servidor morrer?"            51 (backup) e 52 (monitorar)
   "Cheguei no cliente e não lembro da rede"     53 (ficha) — e gere na 1ª visita
+  "Vou reinstalar o Windows / trocar o HD"      56 (backup do certificado A1
+                                                ANTES de formatar)
+  "Perdi o certificado ao formatar"             sem backup prévio, não há
+                                                recuperação — só comprar outro
 
 
 ================================================================================
-5. AS 62 OPÇÕES, UMA A UMA
+5. AS 63 OPÇÕES, UMA A UMA
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -814,7 +824,43 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
 CERTIFICADOS E JURÍDICO
 --------------------------------------------------------------------------------
 
-[56] LIMPAR CERTIFICADOS VENCIDOS
+[56] BACKUP DO CERTIFICADO A1
+    Exporta o certificado A1 para um arquivo `.pfx` — a única forma de
+    reinstalá-lo depois.
+
+    POR QUE IMPORTA: o A1 fica guardado no computador. Se o disco morre, ou o
+    Windows é reinstalado sem exportar antes, o advogado fica sem assinar até
+    comprar outro certificado. A Autoridade Certificadora não reemite: é
+    compra nova, com custo cheio e dias parado.
+
+    RODE ANTES DE: formatar, trocar HD, migrar de máquina, ou sempre que
+    encontrar um A1 sem cópia no cliente.
+
+    Lista os certificados com chave privada e separa três situações:
+      - A1 com CPF/CNPJ no nome — o certificado do titular, exportável;
+      - A1 sem CPF/CNPJ — certificado técnico (localhost, IIS, servidor),
+        marcado em cinza porque normalmente não interessa;
+      - A3 (token/cartão) — NÃO aparece para exportação, e a ferramenta
+        explica: a chave privada nunca sai do hardware. Isso é proteção, não
+        defeito. Se o token quebrar, a renovação é na AC. Oriente o cliente a
+        guardar bem o token e a senha.
+
+    Pede uma senha (que será exigida ao reinstalar) e exporta com a cadeia
+    completa. Se a chave estiver marcada como NÃO EXPORTÁVEL — definido na
+    instalação e sem volta — avisa que não há cópia possível, para o cliente
+    saber do risco.
+
+    SEGURANÇA — o `.pfx` É O CERTIFICADO INTEIRO. Quem tiver o arquivo e a
+    senha assina como o titular. A ferramenta lembra na tela:
+      1. copie a pasta para pendrive ou cofre do escritório;
+      2. APAGUE a pasta da máquina do cliente antes de sair;
+      3. confirme que o cliente guardou a senha.
+    Nunca envie por e-mail ou WhatsApp.
+
+    Teste de verdade: reinstalar o `.pfx` numa máquina de teste comprova que a
+    cópia presta.
+
+[57] LIMPAR CERTIFICADOS VENCIDOS
     Organiza a loja Pessoal do usuário, separando em três categorias:
       A) ICP-Brasil e ICP-Portugal válidos — sempre MANTIDOS;
       B) ICP vencidos — você decide;
@@ -826,14 +872,14 @@ CERTIFICADOS E JURÍDICO
     lista em CSV e um arquivo .cer de cada certificado. Atenção: o .cer guarda
     apenas a parte pública — a chave privada NÃO é recuperável.
 
-[57] CONFIGURAR JAVA (JURÍDICO)
+[58] CONFIGURAR JAVA (JURÍDICO)
     Prepara o Java 8 para os sistemas jurídicos: localiza a instalação, faz
     backup do deployment.properties, ajusta o nível de segurança, remove os
     bloqueios (.locked) que travam o painel do Java, desativa o aviso de "Java
     desatualizado" que costuma travar o usuário, cadastra as URLs de exceção
     (Shodo, Shomei, PJe, PROJUDI dos estados, eProc) e limpa o cache do Java.
 
-[58] CONFIGURAR AMBIENTE PJE
+[59] CONFIGURAR AMBIENTE PJE
     Versão completa da anterior, aplicada a TODOS os perfis de usuário da
     máquina. Além do Java e das exceções, verifica os serviços Shodo e Shomei
     (necessários para assinatura) e tenta iniciá-los se estiverem parados, e
@@ -844,13 +890,13 @@ CERTIFICADOS E JURÍDICO
 PROGRAMAS
 --------------------------------------------------------------------------------
 
-[59] DESINSTALAR PROGRAMA
+[60] DESINSTALAR PROGRAMA
     Lista os programas instalados igual ao Painel de Controle — sem o lixo de
     componentes de sistema que aparece em outras listagens. Permite filtrar
     por nome, selecionar pelo número e desinstalar. As colunas se ajustam à
     largura da janela para os nomes aparecerem inteiros.
 
-[60] REMOVER IMPRESSORA
+[61] REMOVER IMPRESSORA
     Remoção completa de impressora e do driver: identifica os arquivos do
     driver no registro, remove a impressora, remove o driver (vários métodos),
     limpa a fila (perguntando antes, porque isso descarta documentos pendentes
@@ -863,7 +909,7 @@ PROGRAMAS
 ATALHOS ADMINISTRATIVOS
 --------------------------------------------------------------------------------
 
-[61] DISPOSITIVOS, SERVIÇOS E TOKEN
+[62] DISPOSITIVOS, SERVIÇOS E TOKEN
     Abre de uma vez: Gerenciador de Dispositivos, Serviços do Windows,
     Desinstalar um Programa (Painel de Controle) e o administrador de token de
     certificado (SafeNet, eToken, Gemalto e outros).
@@ -871,7 +917,7 @@ ATALHOS ADMINISTRATIVOS
     Se o app do token não abrir, ele procura pelo atalho no Menu Iniciar. Se
     ainda assim não achar, informe o nome exato do programa para ser incluído.
 
-[62] ABRIR PASTA %APPDATA%
+[63] ABRIR PASTA %APPDATA%
     Abre a pasta Roaming do usuário no Explorer (shell:AppData) e informa o
     caminho da pasta Local.
     NÃO ALTERA NADA.
