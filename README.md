@@ -12,9 +12,11 @@ No computador do cliente, abra o **PowerShell como Administrador** e rode:
 irm https://raw.githubusercontent.com/ivanremotoinfo/-scripts-suporte/main/SuporteADV.ps1 | iex
 ```
 
-O menu abre com as opções numeradas. Digite o número, ENTER.
+O menu abre com as opções numeradas. Digite o número, ENTER — ou parte do nome
+da opção (`dll`, `impressora`) para procurar. Se a janela não estiver elevada,
+o menu se reabre como Administrador sozinho.
 
-> A opção **45 (Simular)** roda a manutenção completa sem alterar nada: mostra o
+> A opção **Simular** roda a manutenção completa sem alterar nada: mostra o
 > que seria feito e quanto espaço seria liberado. Boa para rodar antes, com o
 > cliente junto.
 
@@ -22,11 +24,13 @@ O menu abre com as opções numeradas. Digite o número, ENTER.
 
 | Arquivo | Papel |
 |---|---|
-| `SuporteADV.ps1` | O menu (46 opções). Toda opção chama o motor com um parâmetro. |
-| `ManutencaoCompleta.ps1` | O motor. Manutenção completa (16 etapas) e 45 ferramentas avulsas. |
+| `SuporteADV.ps1` | O menu (51 opções). Toda opção chama o motor com um parâmetro. |
+| `ManutencaoCompleta.ps1` | O motor. Manutenção completa (16 etapas) e 50 ferramentas avulsas. |
 
-São só esses dois: o menu baixa o motor uma vez por sessão e todas as opções
-saem dele. Não há mais sub-script solto para manter em sincronia.
+São só esses dois: o menu baixa o motor uma vez, guarda em cache local e todas
+as opções saem dele. Não há mais sub-script solto para manter em sincronia.
+
+O manual completo, opção por opção, está no `MANUAL.txt`.
 
 ### O motor
 
@@ -42,10 +46,10 @@ saem dele. Não há mais sub-script solto para manter em sincronia.
 ```
 
 **Diagnóstico (não alteram nada):** `diagnostico`, `bsod`, `certificados`,
-`smart`, `topprocessos`, `perfis`, `programas`.
+`smart`, `topprocessos`, `perfis`, `programas`, `memoriaram`, `atendimento`.
 
 **Limpeza:** `temp`, `lixeira`, `miniaturas`, `windowsupdate`, `navegadores`,
-`appcache`, `anydesk`, `winsxs`.
+`appcache`, `anydesk`, `winsxs`, `desfazer`.
 
 **Reparos:** `sfc`, `dll`, `reparoavancado`, `corrigirrede`, `proxycert`,
 `spooler`, `appdata`, `explorer`, `chkdsk`, `appx`, `gpupdate`, `ip`, `proxy`,
