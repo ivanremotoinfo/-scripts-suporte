@@ -75,7 +75,6 @@ $menu = @(
     @{ Cat='DIAGNOSTICO'; Label='Listar Certificados Digitais';  Tipo='v2';     Args=@{ Ferramenta='certificados' } }
     @{ Cat='DIAGNOSTICO'; Label='Analisar Tela Azul (BSOD)';     Tipo='v2';     Args=@{ Ferramenta='bsod' } }
     @{ Cat='DIAGNOSTICO'; Label='Teste de Memoria RAM';          Tipo='v2';     Args=@{ Ferramenta='memoriaram' } }
-    @{ Cat='DIAGNOSTICO'; Label='Relatorio para o Cliente';      Tipo='v2';     Args=@{ Ferramenta='atendimento' } }
 
     # --- MANUTENCAO E LIMPEZA ---
     @{ Cat='MANUTENCAO';  Label='Manutencao Completa (tudo)';    Tipo='v2';     Args=@{} }
