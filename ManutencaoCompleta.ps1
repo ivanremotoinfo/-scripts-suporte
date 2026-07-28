@@ -10282,6 +10282,818 @@ function Test-RedeCompartilhamento {
     return [long]0
 }
 
+function Get-ConexoesReais {
+    <#
+      Devolve so as conexoes que valem: as que tem gateway. Adaptador de
+      Hyper-V, WSL, VirtualBox e VPN aparece com IP mas sem gateway, e so
+      confunde a leitura na hora do atendimento.
+    #>
+    $reais = [System.Collections.Generic.List[PSObject]]::new()
+    foreach ($c in @(Get-NetIPConfiguration -ErrorAction SilentlyContinue)) {
+        if ($c.NetAdapter.Status -ne 'Up') { continue }
+        $gw = if ($c.IPv4DefaultGateway) { @($c.IPv4DefaultGateway)[0].NextHop } else { $null }
+        $ip = @($c.IPv4Address)[0]
+        $virtual = ($c.InterfaceDescription -match '(?i)(hyper-v|virtual|vmware|virtualbox|loopback|tap-|tunnel|wintun|wireguard)')
+        $reais.Add([PSCustomObject]@{
+            Alias     = $c.InterfaceAlias
+            Descricao = $c.InterfaceDescription
+            Indice    = $c.InterfaceIndex
+            IP        = if ($ip) { $ip.IPAddress } else { $null }
+            Prefixo   = if ($ip) { $ip.PrefixLength } else { $null }
+            Origem    = if ($ip) { $ip.PrefixOrigin } else { $null }
+            Gateway   = $gw
+            DNS       = @($c.DNSServer | Where-Object { $_.AddressFamily -eq 2 } |
+                          ForEach-Object { $_.ServerAddresses })
+            Virtual   = $virtual
+            Vale      = ($null -ne $gw -and -not $virtual)
+        })
+    }
+    return $reais
+}
+
+function Get-FaixaRede {
+    <# Faixa da rede a partir de IP + mascara: e' o que precisa bater entre
+       as maquinas para elas se enxergarem. #>
+    param([string]$IP, [int]$Prefixo)
+    try {
+        $bytes = ([System.Net.IPAddress]::Parse($IP)).GetAddressBytes()
+        [Array]::Reverse($bytes)
+        $ipNum = [BitConverter]::ToUInt32($bytes, 0)
+        $mask  = [uint32]([math]::Pow(2, 32) - [math]::Pow(2, 32 - $Prefixo))
+        $rede  = $ipNum -band $mask
+        $b = [BitConverter]::GetBytes($rede)
+        [Array]::Reverse($b)
+        return (([System.Net.IPAddress]$b).ToString() + "/$Prefixo")
+    } catch { return '' }
+}
+
+function Get-InfoWiFi {
+    <# Dados do Wi-Fi conectado. Vazio se a maquina so tem cabo. #>
+    $info = @{}
+    try {
+        $saida = & netsh wlan show interfaces 2>&1
+        if ($LASTEXITCODE -ne 0) { return $info }
+        foreach ($l in @($saida)) {
+            $t = $l.ToString()
+            if ($t -match '(?i)^\s*SSID\s*:\s*(.+)$' -and $t -notmatch '(?i)BSSID') { $info['SSID'] = $Matches[1].Trim() }
+            elseif ($t -match '(?i)^\s*BSSID\s*:\s*(.+)$')                          { $info['BSSID'] = $Matches[1].Trim() }
+            elseif ($t -match '(?i)^\s*(Sinal|Signal)\s*:\s*(.+)$')                 { $info['Sinal'] = $Matches[2].Trim() }
+            elseif ($t -match '(?i)^\s*(R.dio|Radio type|Tipo de r.dio)\s*:\s*(.+)$') { $info['Radio'] = $Matches[2].Trim() }
+            elseif ($t -match '(?i)^\s*(Canal|Channel)\s*:\s*(.+)$')                { $info['Canal'] = $Matches[2].Trim() }
+            elseif ($t -match '(?i)^\s*(Autentica..o|Authentication)\s*:\s*(.+)$')  { $info['Auth'] = $Matches[2].Trim() }
+            elseif ($t -match '(?i)^\s*(Estado|State)\s*:\s*(.+)$')                 { $info['Estado'] = $Matches[2].Trim() }
+        }
+    } catch { }
+    return $info
+}
+
+function Show-QualRede {
+    <#
+      Cartao de identidade da rede desta maquina. Feito para ser rodado em cada
+      computador e comparado: se a FAIXA ou o GATEWAY diferem, as maquinas nao
+      se enxergam, por mais que as duas tenham internet.
+    #>
+    Write-Titulo 'EM QUAL REDE ESTE COMPUTADOR ESTA'
+
+    $conexoes = @(Get-ConexoesReais)
+    $validas  = @($conexoes | Where-Object { $_.Vale })
+
+    if ($validas.Count -eq 0) {
+        Write-Falha 'Este computador NAO esta conectado a nenhuma rede.'
+        Write-Info  'Sem gateway definido: cabo desconectado, Wi-Fi desligado ou DHCP falhou.'
+        Write-Info  'Use a opcao de resolver problemas de conexao deste menu.'
+        Add-Alerta 'Computador sem conexao de rede.'
+        return [long]0
+    }
+
+    $wifi = Get-InfoWiFi
+
+    foreach ($c in $validas) {
+        Write-Host ''
+        # Wi-Fi ou cabo
+        $ehWifi = $false
+        try {
+            $ad = Get-NetAdapter -InterfaceIndex $c.Indice -ErrorAction SilentlyContinue
+            if ($ad -and ($ad.MediaType -match '802.11' -or $ad.InterfaceDescription -match '(?i)(wi-?fi|wireless|802\.11)')) { $ehWifi = $true }
+        } catch { }
+
+        if ($ehWifi) {
+            Write-Dest '  >>> CONEXAO SEM FIO (Wi-Fi)'
+            if ($wifi['SSID']) {
+                Write-Host ''
+                Write-Host ("      Rede Wi-Fi : " + $wifi['SSID']) -ForegroundColor Yellow
+                if ($wifi['Sinal']) { Write-Info ("      Sinal      : " + $wifi['Sinal']) }
+                if ($wifi['Radio']) { Write-Info ("      Padrao     : " + $wifi['Radio']) }
+                if ($wifi['Canal']) { Write-Info ("      Canal      : " + $wifi['Canal']) }
+                if ($wifi['Auth'])  { Write-Info ("      Seguranca  : " + $wifi['Auth']) }
+
+                # Rede de visitante costuma ter isolamento de cliente ligado:
+                # a maquina navega, mas nao enxerga as outras.
+                if ($wifi['SSID'] -match '(?i)(visitante|guest|convidado|cliente|public)') {
+                    Write-Host ''
+                    Write-Falha '      ESTA E UMA REDE DE VISITANTES.'
+                    Write-Info  '      Rede de visitante normalmente isola os dispositivos: a maquina'
+                    Write-Info  '      navega na internet mas NAO enxerga as outras do escritorio.'
+                    Write-Info  '      Conecte na rede principal do escritorio.'
+                    Add-Alerta ("Maquina conectada na rede de visitantes: " + $wifi['SSID'])
+                }
+                # Sinal fraco derruba conexao com pasta compartilhada no meio do uso
+                if ($wifi['Sinal'] -match '(\d+)%') {
+                    $pct = [int]$Matches[1]
+                    if ($pct -lt 40) {
+                        Write-Aviso ("      Sinal fraco ($pct%) - a conexao pode cair ao usar arquivos em rede.")
+                        Add-Alerta "Sinal Wi-Fi fraco ($pct%)."
+                    }
+                }
+            }
+        } else {
+            Write-Dest '  >>> CONEXAO POR CABO'
+            Write-Host ''
+            try {
+                $ad = Get-NetAdapter -InterfaceIndex $c.Indice -ErrorAction SilentlyContinue
+                if ($ad) {
+                    Write-Info ("      Placa      : " + $ad.InterfaceDescription)
+                    Write-Info ("      Velocidade : " + $ad.LinkSpeed)
+                    if ($ad.LinkSpeed -match '^(\d+)\s*Mbps' -and [int]$Matches[1] -le 100) {
+                        Write-Aviso '      Link em 100 Mbps ou menos - cabo ou porta antiga.'
+                        Write-Info  '      Copiar arquivo grande pela rede vai ficar lento.'
+                    }
+                }
+            } catch { }
+        }
+
+        Write-Info ("      Adaptador  : " + $c.Alias)
+
+        # --- O que precisa bater entre as maquinas ---
+        $faixa = Get-FaixaRede -IP $c.IP -Prefixo $c.Prefixo
+        Write-Host ''
+        Write-Host '      ---- Identidade da rede (compare entre os computadores) ----' -ForegroundColor Cyan
+        Write-Host ("      FAIXA DA REDE : " + $faixa) -ForegroundColor Yellow
+        Write-Host ("      GATEWAY       : " + $c.Gateway) -ForegroundColor Yellow
+        Write-Info ("      IP desta maq. : " + $c.IP + "  (" + $(if ($c.Origem -eq 'Manual') { 'fixo' } else { 'automatico' }) + ")")
+        Write-Info ("      DNS           : " + $(if ($c.DNS.Count) { $c.DNS -join ', ' } else { '-' }))
+    }
+
+    # --- Adaptadores virtuais, so para nao confundir ---
+    $virtuais = @($conexoes | Where-Object { -not $_.Vale -and $_.IP })
+    if ($virtuais.Count -gt 0) {
+        Write-Host ''
+        Write-Info 'Outros adaptadores nesta maquina (virtuais - IGNORE na comparacao):'
+        foreach ($v in $virtuais) {
+            Write-Host ("      $($v.Alias): $($v.IP)  - $($v.Descricao)") -ForegroundColor DarkGray
+        }
+        Write-Info 'Sao do Hyper-V, WSL, VPN ou maquina virtual. Nao servem para o'
+        Write-Info 'compartilhamento entre os computadores do escritorio.'
+    }
+
+    # --- A regra ---
+    Write-Host ''
+    Write-Titulo 'PARA OS COMPUTADORES SE ENXERGAREM'
+    Write-Info 'Rode esta opcao em CADA computador do escritorio e compare:'
+    Write-Host ''
+    Write-Host '   1. A FAIXA DA REDE tem de ser a mesma em todos.' -ForegroundColor White
+    Write-Host '   2. O GATEWAY tem de ser o mesmo em todos.' -ForegroundColor White
+    Write-Host ''
+    Write-Info 'Se um PC esta em 192.168.0.x e outro em 192.168.15.x, eles NAO se'
+    Write-Info 'enxergam - mesmo os dois tendo internet normal. Isso acontece quando:'
+    Write-Info '   - um esta no Wi-Fi de visitantes e outro na rede principal;'
+    Write-Info '   - alguem ligou um roteador extra e criou uma segunda rede;'
+    Write-Info '   - um esta no cabo e outro num repetidor mal configurado;'
+    Write-Info '   - alguem esta com VPN ligada.'
+    Write-Host ''
+    Write-Info 'Mesma faixa e mesmo gateway, e ainda assim nao se enxergam? Ai o'
+    Write-Info 'problema e firewall, perfil de rede ou isolamento no roteador -'
+    Write-Info 'use o diagnostico da rede local.'
+    return [long]0
+}
+
+function Repair-ProblemasConexao {
+    <#
+      Diagnostica a conexao em camadas, de baixo para cima: cabo/Wi-Fi, IP,
+      gateway, DNS e internet. Assim o problema aparece na camada certa em vez
+      de virar "a internet caiu".
+    #>
+    Write-Titulo 'RESOLVER PROBLEMAS DE CONEXAO'
+
+    $achados = [System.Collections.Generic.List[string]]::new()
+    $sugestoes = [System.Collections.Generic.List[string]]::new()
+
+    # --- 1. Camada fisica -------------------------------------------------
+    Write-Etapa '1/7  Placa de rede e cabo/Wi-Fi'
+    $adaptadores = @(Get-NetAdapter -ErrorAction SilentlyContinue |
+                     Where-Object { $_.InterfaceDescription -notmatch '(?i)(hyper-v|virtual|vmware|virtualbox|loopback|tap-|wintun)' })
+    if ($adaptadores.Count -eq 0) {
+        Write-Falha 'Nenhuma placa de rede fisica encontrada.'
+        $achados.Add('Nenhuma placa de rede fisica')
+    }
+    foreach ($a in $adaptadores) {
+        if ($a.Status -eq 'Up') {
+            Write-Ok "$($a.Name): conectado ($($a.LinkSpeed))"
+        } elseif ($a.Status -eq 'Disabled') {
+            Write-Falha "$($a.Name): DESATIVADA no Windows."
+            $achados.Add("Placa '$($a.Name)' desativada")
+            $sugestoes.Add("Ativar a placa '$($a.Name)'")
+        } else {
+            $ehWifi = ($a.MediaType -match '802.11' -or $a.InterfaceDescription -match '(?i)(wi-?fi|wireless)')
+            if ($ehWifi) {
+                Write-Falha "$($a.Name): sem conexao (Wi-Fi desconectado)."
+                $sugestoes.Add('Conectar no Wi-Fi do escritorio')
+            } else {
+                Write-Falha "$($a.Name): sem link - CABO DESCONECTADO ou porta do switch morta."
+                $sugestoes.Add('Conferir o cabo de rede nas duas pontas e a porta do switch')
+            }
+            $achados.Add("'$($a.Name)' sem conexao")
+        }
+    }
+
+    # --- 2. Endereco IP ---------------------------------------------------
+    Write-Etapa '2/7  Endereco IP'
+    $conexoes = @(Get-ConexoesReais)
+    $validas  = @($conexoes | Where-Object { $_.Vale })
+    $apipa    = @($conexoes | Where-Object { $_.IP -like '169.254.*' })
+
+    if ($apipa.Count -gt 0) {
+        foreach ($a in $apipa) {
+            Write-Falha "$($a.Alias): IP $($a.IP) - o DHCP NAO respondeu."
+        }
+        Write-Info 'IP 169.254.x.x significa que o Windows nao conseguiu endereco do roteador.'
+        Write-Info 'Causas: roteador desligado, cabo ruim, DHCP cheio, ou porta bloqueada.'
+        $achados.Add('DHCP nao respondeu (IP 169.254.x.x)')
+        $sugestoes.Add('Renovar o IP; se nao resolver, reiniciar o roteador')
+    }
+    if ($validas.Count -eq 0 -and $apipa.Count -eq 0) {
+        Write-Falha 'Nenhuma conexao com gateway definido.'
+        $achados.Add('Sem gateway')
+    }
+    foreach ($c in $validas) {
+        $faixa = Get-FaixaRede -IP $c.IP -Prefixo $c.Prefixo
+        Write-Ok "$($c.Alias): $($c.IP)/$($c.Prefixo)  faixa $faixa  gateway $($c.Gateway)"
+    }
+
+    # Mais de um gateway = rotas competindo, causa classica de rede instavel
+    $comGw = @($conexoes | Where-Object { $_.Gateway })
+    if ($comGw.Count -gt 1) {
+        Write-Host ''
+        Write-Aviso "$($comGw.Count) conexoes com gateway ao mesmo tempo:"
+        foreach ($g in $comGw) { Write-Info ("   $($g.Alias): gateway $($g.Gateway)") }
+        Write-Info 'Duas rotas competindo deixam a rede instavel e podem impedir o acesso'
+        Write-Info 'as pastas compartilhadas. Comum quando o cabo e o Wi-Fi estao ligados'
+        Write-Info 'juntos, ou com VPN ativa.'
+        $achados.Add('Mais de um gateway ativo')
+        $sugestoes.Add('Desligar o Wi-Fi quando usar cabo (ou desconectar a VPN)')
+    }
+
+    # --- 3. Gateway -------------------------------------------------------
+    Write-Etapa '3/7  Comunicacao com o roteador'
+    $gwOk = $false
+    foreach ($c in $validas) {
+        $r = Test-Connection -ComputerName $c.Gateway -Count 2 -Quiet -ErrorAction SilentlyContinue
+        if ($r) { Write-Ok "Roteador $($c.Gateway) respondeu."; $gwOk = $true }
+        else {
+            Write-Falha "Roteador $($c.Gateway) NAO respondeu."
+            $achados.Add("Gateway $($c.Gateway) sem resposta")
+            $sugestoes.Add('Verificar se o roteador esta ligado e o cabo conectado')
+        }
+    }
+
+    # --- 4. DNS -----------------------------------------------------------
+    Write-Etapa '4/7  Resolucao de nomes (DNS)'
+    $dnsOk = $false
+    foreach ($nome in @('www.google.com', 'pje.jus.br')) {
+        try {
+            $res = Resolve-DnsName -Name $nome -Type A -ErrorAction Stop -QuickTimeout
+            if ($res) { Write-Ok "$nome resolveu para $(@($res | Where-Object { $_.IPAddress })[0].IPAddress)"; $dnsOk = $true }
+        } catch {
+            Write-Falha "$nome NAO resolveu."
+        }
+    }
+    if (-not $dnsOk) {
+        $achados.Add('DNS nao resolve nomes')
+        $sugestoes.Add('Limpar o cache DNS; se persistir, trocar o DNS para 8.8.8.8')
+        Write-Info 'Sem DNS o navegador nao abre site nenhum, mesmo com a rede funcionando.'
+    }
+
+    # --- 5. Internet ------------------------------------------------------
+    Write-Etapa '5/7  Acesso a internet'
+    $netOk = $false
+    foreach ($alvo in @('1.1.1.1', '8.8.8.8')) {
+        $r = Test-Connection -ComputerName $alvo -Count 3 -ErrorAction SilentlyContinue
+        if ($r) {
+            $ms = [math]::Round(($r | Measure-Object -Property ResponseTime -Average).Average)
+            $perdidos = 3 - @($r).Count
+            Write-Ok "$alvo respondeu - latencia $ms ms$(if ($perdidos -gt 0) { ", $perdidos pacote(s) perdido(s)" })"
+            $netOk = $true
+            if ($ms -gt 150) {
+                Write-Aviso 'Latencia alta - conexao lenta ou congestionada.'
+                $achados.Add("Latencia alta ($ms ms)")
+            }
+            if ($perdidos -gt 0) {
+                Write-Aviso 'Perda de pacotes - cabo, conector ou Wi-Fi com interferencia.'
+                $achados.Add('Perda de pacotes')
+            }
+        } else {
+            Write-Falha "$alvo nao respondeu."
+        }
+    }
+    if (-not $netOk) {
+        $achados.Add('Sem acesso a internet')
+        if ($gwOk) {
+            Write-Info 'O roteador responde mas a internet nao: o problema esta no link do'
+            Write-Info 'provedor, nao na rede interna. As pastas compartilhadas continuam'
+            Write-Info 'funcionando normalmente.'
+            $sugestoes.Add('Falar com o provedor - a rede interna esta boa')
+        }
+    }
+
+    # --- 6. Proxy ---------------------------------------------------------
+    Write-Etapa '6/7  Proxy'
+    try {
+        $rp = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+        $pe = (Get-ItemProperty -Path $rp -Name ProxyEnable -ErrorAction SilentlyContinue).ProxyEnable
+        $ps = (Get-ItemProperty -Path $rp -Name ProxyServer -ErrorAction SilentlyContinue).ProxyServer
+        $pac = (Get-ItemProperty -Path $rp -Name AutoConfigURL -ErrorAction SilentlyContinue).AutoConfigURL
+        if ($pe -eq 1 -or $pac) {
+            Write-Aviso "Proxy configurado: $(if ($ps) { $ps } else { $pac })"
+            Write-Info 'Proxy indevido bloqueia sites e sistemas de tribunal.'
+            $achados.Add('Proxy configurado')
+            $sugestoes.Add('Se o escritorio nao usa proxy, limpar pela opcao de corrigir proxy')
+        } else { Write-Ok 'Sem proxy configurado.' }
+    } catch { }
+
+    # --- 7. Servidores DNS ------------------------------------------------
+    # DNS configurado mas inalcancavel deixa tudo lento: cada consulta espera
+    # o tempo limite antes de tentar o proximo servidor.
+    Write-Etapa '7/7  Servidores DNS configurados'
+    $dnsTestados = 0
+    foreach ($c in $validas) {
+        foreach ($d in $c.DNS) {
+            if ($d -match '^127\.' -or $d -like '169.254.*') { continue }
+            $dnsTestados++
+            $inicio = Get-Date
+            $resp = $false
+            try {
+                $r = Resolve-DnsName -Name 'www.google.com' -Server $d -Type A -ErrorAction Stop -QuickTimeout
+                if ($r) { $resp = $true }
+            } catch { }
+            $ms = [int]((Get-Date) - $inicio).TotalMilliseconds
+            if ($resp) {
+                if ($ms -gt 800) {
+                    Write-Aviso "DNS $d responde, mas devagar ($ms ms) - navegacao fica arrastada."
+                    $achados.Add("DNS $d lento ($ms ms)")
+                    $sugestoes.Add('Trocar o DNS para 8.8.8.8 e 1.1.1.1')
+                } else {
+                    Write-Ok "DNS $d respondeu ($ms ms)."
+                }
+            } else {
+                Write-Falha "DNS $d NAO responde."
+                Write-Info  'Cada consulta espera o tempo limite antes de tentar outro servidor:'
+                Write-Info  'e o que faz "a internet ficar lenta" mesmo com a conexao boa.'
+                $achados.Add("DNS $d inalcancavel")
+                $sugestoes.Add('Trocar o DNS para 8.8.8.8 e 1.1.1.1, ou deixar automatico')
+            }
+        }
+    }
+    if ($dnsTestados -eq 0) { Write-Info 'Nenhum servidor DNS configurado para testar.' }
+
+    # --- Resultado ---------------------------------------------------------
+    Write-Host ''
+    if ($achados.Count -eq 0) {
+        Write-Titulo 'CONEXAO SAUDAVEL'
+        Write-Ok 'Placa, IP, roteador, DNS e internet: tudo funcionando.'
+        Write-Info 'Se mesmo assim o cliente nao acessa a pasta compartilhada, o problema'
+        Write-Info 'nao e a conexao - use o diagnostico da rede local.'
+        return [long]0
+    }
+
+    Write-Titulo 'PROBLEMAS ENCONTRADOS'
+    foreach ($a in $achados) { Write-Falha $a; Add-Alerta ("Conexao: " + $a) }
+    if ($sugestoes.Count -gt 0) {
+        Write-Host ''
+        Write-Dest 'O que fazer:'
+        foreach ($s in ($sugestoes | Select-Object -Unique)) { Write-Info ("   - " + $s) }
+    }
+
+    if ($SomenteRelatorio -or $SemInteracao) { return [long]0 }
+
+    # --- Correcoes ---------------------------------------------------------
+    Write-Host ''
+    Write-Host '     [1] Tentar corrigir agora (limpar DNS, renovar IP, reiniciar a placa)' -ForegroundColor White
+    Write-Host '     [2] So limpar o cache DNS (rapido, nao derruba a conexao)' -ForegroundColor White
+    Write-Host '     [0] Nao corrigir agora' -ForegroundColor DarkGray
+    Write-Host ''
+    $opc = (Read-Host '  Opcao').Trim()
+
+    if ($opc -eq '2') {
+        try { Clear-DnsClientCache -ErrorAction Stop; Write-Ok 'Cache DNS limpo.' }
+        catch { & ipconfig /flushdns | Out-Null; Write-Ok 'Cache DNS limpo.' }
+        return [long]0
+    }
+    if ($opc -ne '1') { Write-Info 'Nada foi alterado.'; return [long]0 }
+
+    # Reiniciar placa derruba sessao remota: avisar.
+    $remoto = @(Get-Process -ErrorAction SilentlyContinue |
+                Where-Object { $_.ProcessName -match '(?i)^(anydesk|teamviewer|rustdesk)' })
+    if ($remoto.Count -gt 0 -or ($env:SESSIONNAME -match '(?i)^RDP')) {
+        Write-Host ''
+        Write-Falha 'ACESSO REMOTO ATIVO NESTA MAQUINA.'
+        Write-Info  'Reiniciar a placa de rede DERRUBA a sua conexao com o cliente.'
+        $c = Read-Host '  Continuar mesmo assim? (S/N)'
+        if ($c -notmatch '^[Ss]') { Write-Info 'Cancelado. Limpando so o cache DNS.';
+            try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch { }
+            Write-Ok 'Cache DNS limpo.'
+            return [long]0 }
+    }
+
+    Write-Etapa 'Limpando cache DNS...'
+    try { Clear-DnsClientCache -ErrorAction Stop; Write-Ok 'Cache DNS limpo.' }
+    catch { & ipconfig /flushdns | Out-Null; Write-Ok 'Cache DNS limpo.' }
+
+    Write-Etapa 'Renovando endereco IP...'
+    try {
+        & ipconfig /release 2>&1 | Out-Null
+        & ipconfig /renew 2>&1 | Out-Null
+        Write-Ok 'IP renovado.'
+    } catch { Write-Aviso "Falha ao renovar: $($_.Exception.Message)" }
+
+    Write-Etapa 'Reiniciando a placa de rede...'
+    foreach ($a in @($adaptadores | Where-Object { $_.Status -eq 'Up' })) {
+        try {
+            Restart-NetAdapter -Name $a.Name -ErrorAction Stop
+            Write-Ok "Placa '$($a.Name)' reiniciada."
+            Start-Sleep -Seconds 5
+        } catch { Write-Aviso "Nao foi possivel reiniciar '$($a.Name)': $($_.Exception.Message)" }
+    }
+
+    Write-Etapa 'Conferindo o resultado...'
+    Start-Sleep -Seconds 3
+    $depois = @(Get-ConexoesReais | Where-Object { $_.Vale })
+    if ($depois.Count -gt 0) {
+        foreach ($d in $depois) { Write-Ok "$($d.Alias): $($d.IP)  gateway $($d.Gateway)" }
+        $t = Test-Connection -ComputerName '1.1.1.1' -Count 2 -Quiet -ErrorAction SilentlyContinue
+        if ($t) { Write-Ok 'Internet respondendo.' }
+        else { Write-Aviso 'Ainda sem internet. Se o roteador responde, o problema e do provedor.' }
+    } else {
+        Write-Falha 'Ainda sem endereco valido.'
+        Write-Info  'Proximos passos: trocar o cabo, testar outra porta do switch, e'
+        Write-Info  'reiniciar o roteador. Se nada resolver, use a opcao de corrigir'
+        Write-Info  'rede no modo profundo (reset de TCP/IP e Winsock).'
+    }
+    return [long]0
+}
+
+function Repair-AcessoAoServidor {
+    <#
+      "Esse computador parou de acessar o servidor."
+      Segue a cadeia na ordem em que ela quebra e para no primeiro elo com
+      defeito, em vez de despejar tudo de uma vez. Cada elo tem a correcao
+      correspondente.
+    #>
+    Write-Titulo 'ESTE COMPUTADOR NAO CONECTA NO SERVIDOR'
+
+    # --- Descobrir o servidor --------------------------------------------
+    $candidatos = [System.Collections.Generic.List[string]]::new()
+    foreach ($m in @(Get-CimInstance Win32_NetworkConnection -ErrorAction SilentlyContinue)) {
+        if ($m.RemoteName -match '^\\\\([^\\]+)\\') {
+            if (-not $candidatos.Contains($Matches[1])) { [void]$candidatos.Add($Matches[1]) }
+        }
+    }
+    try {
+        foreach ($l in @(& cmdkey.exe /list 2>&1)) {
+            if ($l.ToString() -match '(?i)(Destino|Target):\s*Domain:target=(.+)$') {
+                $a = $Matches[2].Trim()
+                if ($a -match '^[A-Za-z0-9][A-Za-z0-9\.\-_]{0,62}$' -and -not $candidatos.Contains($a)) {
+                    [void]$candidatos.Add($a)
+                }
+            }
+        }
+    } catch { }
+
+    $servidor = ''
+    if ($candidatos.Count -gt 0) {
+        Write-Info 'Servidores que este computador ja usou:'
+        $i = 1
+        foreach ($c in $candidatos) { Write-Host ("     [$i] $c") -ForegroundColor White; $i++ }
+        Write-Host ''
+        if ($SemInteracao) { $servidor = $candidatos[0] }
+        else {
+            $s = (Read-Host '  Numero, ou digite o nome/IP do servidor').Trim().TrimStart('\')
+            if ($s -match '^\d+$' -and [int]$s -ge 1 -and [int]$s -le $candidatos.Count) { $servidor = $candidatos[[int]$s - 1] }
+            elseif ($s) { $servidor = ($s -split '\\')[0] }
+        }
+    } else {
+        if ($SemInteracao) { Write-Aviso 'Modo desatendido e nenhum servidor conhecido nesta maquina.'; return [long]0 }
+        Write-Info 'Nenhum servidor conhecido nesta maquina.'
+        Write-Info 'Informe o nome ou IP do servidor (ex.: SERVIDOR ou 192.168.0.10).'
+        $servidor = (Read-Host '  Servidor').Trim().TrimStart('\')
+        $servidor = ($servidor -split '\\')[0]
+    }
+    if (-not $servidor) { Write-Info 'Cancelado.'; return [long]0 }
+
+    Write-Host ''
+    Write-Dest ("Diagnosticando o acesso a: " + $servidor)
+
+    $ondeQuebrou = ''
+    $comoResolver = [System.Collections.Generic.List[string]]::new()
+
+    # --- ELO 1: esta maquina esta em rede? -------------------------------
+    Write-Etapa '1/6  Esta maquina esta conectada a uma rede?'
+    $minhas = @(Get-ConexoesReais | Where-Object { $_.Vale })
+    if ($minhas.Count -eq 0) {
+        Write-Falha 'Este computador nao esta em nenhuma rede.'
+        $ondeQuebrou = 'sem rede'
+        $comoResolver.Add('Conferir cabo / Wi-Fi. Use a opcao de resolver problemas de conexao.')
+    } else {
+        foreach ($c in $minhas) {
+            $faixa = Get-FaixaRede -IP $c.IP -Prefixo $c.Prefixo
+            Write-Ok "$($c.Alias): $($c.IP)  faixa $faixa  gateway $($c.Gateway)"
+        }
+    }
+
+    # --- ELO 2: o servidor esta na MESMA rede? ---------------------------
+    if (-not $ondeQuebrou) {
+        Write-Etapa '2/6  O servidor esta na mesma rede que este computador?'
+        # Um nome pode resolver para VARIOS IPs: servidor com duas placas, ou
+        # com adaptador virtual (Hyper-V, VPN, WSL). Pegar so o primeiro da
+        # lista da diagnostico errado - basta UM deles estar na nossa faixa
+        # para as maquinas se enxergarem.
+        $ipsServidor = [System.Collections.Generic.List[string]]::new()
+        if ($servidor -match '^\d{1,3}(\.\d{1,3}){3}$') { [void]$ipsServidor.Add($servidor) }
+        else {
+            try {
+                $r = Resolve-DnsName -Name $servidor -Type A -ErrorAction Stop -QuickTimeout
+                foreach ($x in @($r | Where-Object { $_.IPAddress })) {
+                    if (-not $ipsServidor.Contains($x.IPAddress)) { [void]$ipsServidor.Add($x.IPAddress) }
+                }
+                if ($ipsServidor.Count -gt 1) {
+                    Write-Ok ("O nome '$servidor' resolveu para " + $ipsServidor.Count + " enderecos: " + ($ipsServidor -join ', '))
+                } elseif ($ipsServidor.Count -eq 1) {
+                    Write-Ok "O nome '$servidor' resolveu para $($ipsServidor[0])"
+                }
+            } catch { }
+
+            if ($ipsServidor.Count -eq 0) {
+                Write-Aviso "O nome '$servidor' nao foi resolvido por DNS."
+                # NetBIOS ainda pode achar na rede local
+                try {
+                    $t = Test-Connection -ComputerName $servidor -Count 1 -ErrorAction Stop
+                    [void]$ipsServidor.Add($t.IPV4Address.IPAddressToString)
+                    Write-Ok "Encontrado pela rede local: $($ipsServidor[0])"
+                } catch {
+                    Write-Falha "Nao foi possivel descobrir o IP de '$servidor'."
+                    Write-Info  'O servidor pode estar desligado, ou o nome mudou.'
+                    $ondeQuebrou = 'nome nao resolve'
+                    $comoResolver.Add("Tentar pelo IP em vez do nome (\\IP\Pasta)")
+                    $comoResolver.Add('Conferir se o servidor esta ligado')
+                }
+            }
+        }
+
+        if ($ipsServidor.Count -gt 0 -and -not $ondeQuebrou) {
+            $ipNaMinhaRede = ''
+            foreach ($c in $minhas) {
+                $minhaFaixa = Get-FaixaRede -IP $c.IP -Prefixo $c.Prefixo
+                foreach ($ipS in $ipsServidor) {
+                    if ((Get-FaixaRede -IP $ipS -Prefixo $c.Prefixo) -eq $minhaFaixa) {
+                        $ipNaMinhaRede = $ipS
+                        break
+                    }
+                }
+                if ($ipNaMinhaRede) { break }
+            }
+
+            if ($ipNaMinhaRede) {
+                Write-Ok "Servidor $ipNaMinhaRede esta na mesma faixa de rede. Correto."
+                if ($ipsServidor.Count -gt 1) {
+                    Write-Info 'Os outros enderecos sao de placa extra ou adaptador virtual do'
+                    Write-Info 'servidor - nao atrapalham, mas se o mapeamento usar um deles,'
+                    Write-Info ("prefira " + $ipNaMinhaRede + " ou o proprio nome.")
+                }
+            } else {
+                Write-Falha 'O SERVIDOR ESTA EM OUTRA REDE.'
+                Write-Info  ("   Este computador : " + (Get-FaixaRede -IP $minhas[0].IP -Prefixo $minhas[0].Prefixo))
+                Write-Info  ("   Servidor        : " + ($ipsServidor -join ', '))
+                Write-Host ''
+                Write-Info 'Esta e a causa mais comum de "parou de acessar o servidor".'
+                Write-Info 'Acontece quando a maquina cai no Wi-Fi de visitantes, quando'
+                Write-Info 'alguem liga um roteador extra, ou quando ha VPN ativa.'
+                Write-Info 'Confira a rede das duas maquinas com a opcao "Qual Rede Estou Usando".'
+                $ondeQuebrou = 'redes diferentes'
+                $comoResolver.Add('Conectar este computador na MESMA rede do servidor')
+                $comoResolver.Add('Se for Wi-Fi: trocar da rede de visitantes para a principal')
+                $comoResolver.Add('Se houver VPN ligada: desconectar')
+                Add-Alerta "Computador em rede diferente do servidor $servidor."
+            }
+        }
+    }
+
+    # --- ELO 3: o servidor responde? -------------------------------------
+    if (-not $ondeQuebrou) {
+        Write-Etapa '3/6  O servidor responde?'
+        $ping = Test-Connection -ComputerName $servidor -Count 2 -Quiet -ErrorAction SilentlyContinue
+        if ($ping) { Write-Ok "$servidor respondeu ao ping." }
+        else { Write-Aviso "$servidor nao respondeu ao ping (o firewall dele pode so estar bloqueando ping)." }
+
+        $porta = $false
+        try {
+            $t = Test-NetConnection -ComputerName $servidor -Port 445 -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
+            $porta = ($t -and $t.TcpTestSucceeded)
+        } catch { }
+
+        if ($porta) {
+            Write-Ok "Porta 445 (compartilhamento) aberta em $servidor."
+        } else {
+            Write-Falha "Porta 445 fechada ou sem resposta em $servidor."
+            if ($ping) {
+                Write-Info 'O servidor esta ligado e na rede, mas nao aceita compartilhamento.'
+                Write-Info 'No SERVIDOR: o servico de compartilhamento pode ter parado, ou o'
+                Write-Info 'firewall dele fechou. Rode o diagnostico da rede local NELE.'
+                $comoResolver.Add("No servidor $servidor : rodar o diagnostico da rede local")
+                $comoResolver.Add('No servidor: conferir se o servico LanmanServer esta rodando')
+            } else {
+                Write-Info 'O servidor parece desligado ou fora da rede.'
+                $comoResolver.Add("Conferir se o servidor $servidor esta ligado")
+            }
+            $ondeQuebrou = 'servidor nao aceita conexao'
+        }
+    }
+
+    # --- ELO 4: credencial ------------------------------------------------
+    if (-not $ondeQuebrou) {
+        Write-Etapa '4/6  Autenticacao (usuario e senha)'
+        $listou = $false
+        try {
+            $saida = & net view "\\$servidor" 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Ok 'Autenticacao aceita pelo servidor.'
+                # O net view escreve na codepage do console e as mensagens dele
+                # saem com acento quebrado. Ficamos so com as linhas que sao
+                # nome de pasta (comecam na coluna 0 e tem tipo "Disco").
+                $pastas = [System.Collections.Generic.List[string]]::new()
+                foreach ($l in @($saida)) {
+                    $t = $l.ToString()
+                    if ($t -match '^(\S+)\s+(Disco|Disk)\s*') { [void]$pastas.Add($Matches[1]) }
+                }
+                if ($pastas.Count -gt 0) {
+                    Write-Info 'Pastas compartilhadas visiveis:'
+                    foreach ($p in $pastas) { Write-Info ("   " + $p) }
+                } else {
+                    Write-Aviso 'O servidor respondeu, mas nao mostrou nenhuma pasta compartilhada.'
+                    Write-Info  'Ou o servidor nao compartilha nada, ou este usuario nao tem'
+                    Write-Info  'permissao para ver as pastas. No servidor, rode o diagnostico'
+                    Write-Info  'da rede local para conferir os compartilhamentos.'
+                    $comoResolver.Add("No servidor $servidor : conferir se ha pasta compartilhada e a permissao do usuario")
+                }
+                $listou = $true
+            } else {
+                $txt = ($saida -join ' ')
+                Write-Falha 'O servidor recusou a autenticacao.'
+                if ($txt -match '(?i)(5|acesso negado|access is denied)') {
+                    Write-Info 'Acesso negado: usuario ou senha errados, ou a senha mudou no servidor.'
+                } elseif ($txt -match '(?i)(1219|conflito|conflict|multiple connections)') {
+                    Write-Falha 'CONFLITO DE CREDENCIAL (erro 1219).'
+                    Write-Info  'O Windows ja tem uma conexao aberta com esse servidor usando outro'
+                    Write-Info  'usuario. E' + [char]39 + ' a causa classica de "parou do nada" depois que a'
+                    Write-Info  'senha foi trocada no servidor.'
+                }
+                $ondeQuebrou = 'credencial'
+                $comoResolver.Add('Apagar a credencial salva e entrar de novo com a senha atual')
+            }
+        } catch {
+            Write-Falha "Nao foi possivel consultar o servidor: $($_.Exception.Message)"
+            $ondeQuebrou = 'credencial'
+        }
+    }
+
+    # --- ELO 5: unidades mapeadas ----------------------------------------
+    # Se a cadeia ja quebrou, os elos seguintes nao teriam como passar: dizer
+    # isso e' melhor do que deixar o numero das etapas saltando sem explicacao.
+    if ($ondeQuebrou) {
+        Write-Host ''
+        Write-Info "Etapas seguintes puladas: a cadeia ja quebrou em '$ondeQuebrou'."
+        Write-Info 'Resolva esse ponto primeiro e rode de novo.'
+    }
+    Write-Etapa '5/6  Unidades de rede deste computador'
+    $mapeadas = @(Get-CimInstance Win32_NetworkConnection -ErrorAction SilentlyContinue |
+                  Where-Object { $_.RemoteName -match "(?i)^\\\\$([regex]::Escape($servidor))\\" })
+    if ($mapeadas.Count -eq 0) {
+        Write-Info "Nenhuma unidade mapeada para $servidor."
+        Write-Info 'O acesso pode estar sendo feito pelo caminho completo (\\SERVIDOR\Pasta).'
+    } else {
+        foreach ($m in $mapeadas) {
+            if ($m.ConnectionState -eq 'Connected') {
+                Write-Ok "$($m.LocalName) -> $($m.RemoteName)  (conectada)"
+            } else {
+                Write-Falha "$($m.LocalName) -> $($m.RemoteName)  ($($m.ConnectionState))"
+                if (-not $ondeQuebrou) { $ondeQuebrou = 'unidade desconectada' }
+                $comoResolver.Add("Reconectar a unidade $($m.LocalName)")
+            }
+        }
+    }
+
+    # --- ELO 6: configuracao local ---------------------------------------
+    Write-Etapa '6/6  Configuracao de rede deste computador'
+    foreach ($p in @(Get-NetConnectionProfile -ErrorAction SilentlyContinue)) {
+        if ($p.NetworkCategory -eq 'Public') {
+            Write-Falha "Rede '$($p.Name)': perfil PUBLICO - bloqueia o acesso a rede."
+            if (-not $ondeQuebrou) { $ondeQuebrou = 'perfil publico' }
+            $comoResolver.Add('Mudar o perfil da rede para Privado')
+        }
+    }
+    $ws = Get-Service -Name 'LanmanWorkstation' -ErrorAction SilentlyContinue
+    if ($ws -and $ws.Status -ne 'Running') {
+        Write-Falha 'Servico "Estacao de trabalho" parado - sem ele nao se acessa rede nenhuma.'
+        if (-not $ondeQuebrou) { $ondeQuebrou = 'servico parado' }
+        $comoResolver.Add('Iniciar o servico LanmanWorkstation')
+    } elseif ($ws) { Write-Ok 'Servico "Estacao de trabalho": em execucao.' }
+
+    # --- Conclusao ---------------------------------------------------------
+    Write-Host ''
+    if (-not $ondeQuebrou -and $comoResolver.Count -eq 0) {
+        Write-Titulo 'ACESSO AO SERVIDOR ESTA FUNCIONANDO'
+        Write-Ok "Este computador alcanca $servidor, autentica e enxerga as pastas."
+        Write-Info 'Se o usuario ainda reclama, pode ser permissao na pasta especifica'
+        Write-Info 'ou o programa dele apontando para um caminho antigo.'
+        return [long]0
+    }
+
+    Write-Titulo 'ONDE ESTA O PROBLEMA'
+    Write-Falha ("Elo que quebrou: " + $ondeQuebrou)
+    Write-Host ''
+    Write-Dest 'O que resolve:'
+    foreach ($s in ($comoResolver | Select-Object -Unique)) { Write-Info ("   - " + $s) }
+    Add-Alerta ("Acesso ao servidor $servidor : $ondeQuebrou")
+
+    if ($SomenteRelatorio -or $SemInteracao) { return [long]0 }
+
+    # --- Correcoes guiadas -------------------------------------------------
+    Write-Host ''
+    Write-Host '     [1] Renovar a credencial (apaga a salva e entra com a senha atual)' -ForegroundColor White
+    Write-Host '     [2] Reconectar as unidades de rede' -ForegroundColor White
+    Write-Host '     [3] Corrigir a configuracao local (perfil privado + servicos)' -ForegroundColor White
+    Write-Host '     [4] Limpar cache de nomes (DNS e NetBIOS)' -ForegroundColor White
+    Write-Host '     [0] Nao corrigir agora' -ForegroundColor DarkGray
+    Write-Host ''
+    $opc = (Read-Host '  Opcao').Trim()
+
+    switch ($opc) {
+        '1' {
+            Write-Etapa 'Renovando a credencial'
+            # Derrubar as conexoes abertas evita o erro 1219 (conflito)
+            foreach ($m in $mapeadas) { & net use $m.LocalName /delete /y 2>&1 | Out-Null }
+            & net use "\\$servidor" /delete /y 2>&1 | Out-Null
+            & cmdkey.exe /delete:$servidor 2>&1 | Out-Null
+            Write-Ok 'Credencial antiga e conexoes removidas.'
+            Write-Host ''
+            $u = (Read-Host '  Usuario do servidor').Trim()
+            if ($u) {
+                $pw = Read-Host '  Senha' -AsSecureString
+                $pwT = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pw))
+                $alvo = if ($u -match '\\') { $u } else { "$servidor\$u" }
+                & cmdkey.exe /add:$servidor /user:$alvo /pass:$pwT | Out-Null
+                Write-Ok 'Credencial nova salva.'
+                $t = & net view "\\$servidor" 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Ok 'Autenticacao funcionando agora.'
+                    foreach ($m in $mapeadas) {
+                        & net use $m.LocalName $m.RemoteName /persistent:yes 2>&1 | Out-Null
+                        if ($LASTEXITCODE -eq 0) { Write-Ok "Unidade $($m.LocalName) reconectada." }
+                    }
+                } else {
+                    Write-Falha 'Ainda recusado. Confira o usuario e a senha no servidor.'
+                }
+            }
+        }
+        '2' {
+            Write-Etapa 'Reconectando as unidades'
+            foreach ($m in $mapeadas) {
+                & net use $m.LocalName /delete /y 2>&1 | Out-Null
+                & net use $m.LocalName $m.RemoteName /persistent:yes 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) { Write-Ok "$($m.LocalName) reconectada." }
+                else { Write-Falha "$($m.LocalName) nao reconectou - veja a credencial (opcao 1)." }
+            }
+        }
+        '3' {
+            Write-Etapa 'Corrigindo a configuracao local'
+            Set-PerfilRedePrivado | Out-Null
+            Set-ServicosRede
+            Enable-RegrasFirewallRede -Grupo $script:GrupoFWDescoberta `
+                -RegexNome 'Descoberta de Rede|Network Discovery' -Rotulo 'Descoberta de rede'
+            Enable-RegrasFirewallRede -Grupo $script:GrupoFWCompartilhamento `
+                -RegexNome 'Compartilhamento de Arquivo e Impressora|File and Printer Sharing' `
+                -Rotulo 'Compartilhamento de arquivos'
+        }
+        '4' {
+            Write-Etapa 'Limpando cache de nomes'
+            try { Clear-DnsClientCache -ErrorAction Stop; Write-Ok 'Cache DNS limpo.' }
+            catch { & ipconfig /flushdns | Out-Null; Write-Ok 'Cache DNS limpo.' }
+            try { & nbtstat -R 2>&1 | Out-Null; & nbtstat -RR 2>&1 | Out-Null; Write-Ok 'Cache NetBIOS limpo.' } catch { }
+            Write-Info 'Util quando o servidor trocou de IP e o nome ainda aponta para o antigo.'
+        }
+        default { Write-Info 'Nada foi alterado.' }
+    }
+    return [long]0
+}
+
 function Remove-ConfiguracaoRede {
     <#
       Tira a maquina da rede de compartilhamento: para de compartilhar pastas,
@@ -11552,6 +12364,9 @@ if ($Ferramenta) {
             'clienterede'   { Set-MaquinaClienteRede | Out-Null }
             'diagrede'      { Test-RedeCompartilhamento | Out-Null }
             'sairrede'      { Remove-ConfiguracaoRede | Out-Null }
+            'qualrede'      { Show-QualRede | Out-Null }
+            'conexao'       { Repair-ProblemasConexao | Out-Null }
+            'semservidor'   { Repair-AcessoAoServidor | Out-Null }
             'memoriaram'    { Test-MemoriaRAM | Out-Null }
             'reparoavancado' { Repair-SistemaAvancado | Out-Null }
             'bsod'          { Show-AnaliseBSOD | Out-Null }
@@ -11678,7 +12493,7 @@ if ($Ferramenta) {
     }
     Write-Host ''
     # Ferramentas somente-leitura nao deixam log salvo.
-    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede')) {
+    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede', 'qualrede')) {
         Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
     }
     Write-Host ('=' * 68) -ForegroundColor Green
@@ -11686,7 +12501,7 @@ if ($Ferramenta) {
     # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
     if ($chave -in @('diagnostico', 'bsod')) { Publicar-RelatorioTemp -RemoverPastaLog }
     # protecaovirus/consoles: so abriram telas; nao deixam pasta de log.
-    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede')) {
+    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede', 'qualrede')) {
         Remove-Item -LiteralPath (Join-Path $script:pastaExec 'manutencao.log') -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 200
         if ($script:pastaExec -and (Test-Path -LiteralPath $script:pastaExec)) {

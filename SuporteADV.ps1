@@ -123,6 +123,9 @@ $menu = @(
     @{ Cat='OTIMIZACAO';  Label='Memoria Virtual (pagefile)';    Tipo='v2';     Args=@{ Ferramenta='memoriavirtual' } }
 
     # --- REDE DO ESCRITORIO ---
+    @{ Cat='REDELOCAL';   Label='Qual Rede Estou Usando';         Tipo='v2';     Args=@{ Ferramenta='qualrede' } }
+    @{ Cat='REDELOCAL';   Label='Nao Conecta no Servidor';        Tipo='v2';     Args=@{ Ferramenta='semservidor' } }
+    @{ Cat='REDELOCAL';   Label='Problemas de Conexao';           Tipo='v2';     Args=@{ Ferramenta='conexao' } }
     @{ Cat='REDELOCAL';   Label='Configurar Servidor de Arquivos'; Tipo='v2';     Args=@{ Ferramenta='servidor' } }
     @{ Cat='REDELOCAL';   Label='Conectar a Rede/Servidor';        Tipo='v2';     Args=@{ Ferramenta='clienterede' } }
     @{ Cat='REDELOCAL';   Label='Diagnostico da Rede Local';       Tipo='v2';     Args=@{ Ferramenta='diagrede' } }
