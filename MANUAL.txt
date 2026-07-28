@@ -1,7 +1,7 @@
 ﻿================================================================================
                     S U P O R T E A D V  -  M A N U A L
               Ferramentas de suporte técnico - suporte.adv.br
-                        Versão 2026.07.28  |  63 opções
+                        Versão 2026.07.28  |  65 opções
 ================================================================================
 
 
@@ -11,16 +11,16 @@ SUMÁRIO
   2. Como executar
   3. Regras que valem para tudo
   4. Guia rápido: qual opção usar para cada problema
-  5. As 63 opções, uma a uma
-       DIAGNÓSTICO ................ 1 a 7
-       MANUTENÇÃO E LIMPEZA ....... 8 a 19
-       SEGURANÇA E ANTIVÍRUS ...... 20 a 24
-       REPAROS .................... 25 a 40
-       OTIMIZAÇÃO ................. 41 a 44
-       REDE DO ESCRITÓRIO ......... 45 a 55
-       CERTIFICADOS E JURÍDICO .... 56 a 59
-       PROGRAMAS .................. 60 e 61
-       ATALHOS ADMINISTRATIVOS .... 62 e 63
+  5. As 65 opções, uma a uma
+       DIAGNÓSTICO ................ 1 a 8
+       MANUTENÇÃO E LIMPEZA ....... 9 a 20
+       SEGURANÇA E ANTIVÍRUS ...... 21 a 25
+       REPAROS .................... 26 a 41
+       OTIMIZAÇÃO ................. 42 a 45
+       REDE DO ESCRITÓRIO ......... 46 a 57
+       CERTIFICADOS E JURÍDICO .... 58 a 61
+       PROGRAMAS .................. 62 e 63
+       ATALHOS ADMINISTRATIVOS .... 64 e 65
   6. A Manutenção Completa em detalhe (16 etapas)
   7. Uso por linha de comando
   8. Onde ficam os logs e como reverter
@@ -38,7 +38,7 @@ digital, token, Java, PJe).
 
 São apenas dois arquivos:
 
-  SuporteADV.ps1            o menu, com as 63 opções
+  SuporteADV.ps1            o menu, com as 65 opções
   ManutencaoCompleta.ps1    o motor, que faz todo o trabalho
 
 O menu baixa o motor uma vez e o mantém em cache local, atualizando só quando
@@ -101,7 +101,7 @@ O QUE NÃO DÁ PARA FAZER POR SCRIPT, ABRE A TELA DO WINDOWS
 
 FALHAS FICAM REGISTRADAS
   Quando uma ferramenta dá erro, além de mostrar na tela, o problema é
-  gravado em C:\ProgramData\SuporteTI\falhas.txt. A ficha da rede (opção 53)
+  gravado em C:\ProgramData\SuporteTI\falhas.txt. A ficha da rede (opção 55)
   mostra as últimas. Serve para você descobrir na visita o que quebrou entre
   os atendimentos — o cliente raramente comenta.
 
@@ -111,7 +111,7 @@ RELATÓRIOS NÃO FICAM SALVOS
   desfazer alterações (registro, credenciais) ficam salvos na pasta de log.
 
 MODO SIMULAÇÃO
-  A opção 9 roda a manutenção inteira sem alterar nada: mostra o que seria
+  A opção 10 roda a manutenção inteira sem alterar nada: mostra o que seria
   feito e quanto espaço seria liberado. Boa para rodar na frente do cliente
   antes de autorizar.
 
@@ -174,7 +174,7 @@ MODO SIMULAÇÃO
 
 
 ================================================================================
-5. AS 63 OPÇÕES, UMA A UMA
+5. AS 65 OPÇÕES, UMA A UMA
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -217,7 +217,39 @@ DIAGNÓSTICO
     IMPORTANTE: rode esta opção ANTES da manutenção completa. A limpeza apaga
     dumps com mais de 30 dias, e o dump é a única evidência da tela azul.
 
-[6] TESTE DE MEMÓRIA RAM
+[6] PRONTO PARA A AUDIÊNCIA?
+    NÃO ALTERA NADA. Verificação pré-audiência com VEREDICTO, não com lista de
+    dados para você interpretar sob pressão:
+
+        PRONTO PARA A AUDIÊNCIA
+        PRONTO, COM RESSALVAS
+        NÃO ENTRE ASSIM NA AUDIÊNCIA
+
+    Rode na véspera, ou pelo menos 15 minutos antes. As opções de reparar
+    áudio e webcam consertam DEPOIS que deu errado — esta existe para o
+    problema aparecer enquanto ainda há tempo.
+
+    Verifica em 6 etapas:
+      1. CÂMERA — existe, funciona, permissão liberada, e principalmente: se
+         algum programa está SEGURANDO a câmera agora. Câmera presa pelo Teams
+         aberto em segundo plano é a causa nº 1 de "a câmera não funciona"
+         cinco minutos antes. Mostra qual programa é, para você fechar.
+      2. MICROFONE — dispositivo ativo, permissão, e se está em uso.
+      3. SOM — dispositivos de saída ativos e serviço de áudio rodando.
+      4. QUALIDADE DA CONEXÃO — mede 20 amostras e calcula PERDA e JITTER, não
+         só latência média. Jitter é a variação da latência: uma conexão de
+         30 ms com jitter alto pica a voz, uma de 80 ms estável funciona bem.
+         Acima de 30 ms de jitter, ou 5% de perda, bloqueia.
+      5. TIPO DE CONEXÃO E ENERGIA — sinal Wi-Fi fraco, e notebook na bateria
+         (economia de energia derruba o desempenho do vídeo).
+      6. PROGRAMA — Teams, Zoom, Chrome e Edge instalados.
+
+    Sobre volume e "mudo": o script não lê isso de forma confiável e diz isso
+    em vez de fingir que verificou. Ao final oferece abrir a tela de som para
+    a conferência visual de 10 segundos — fale e veja se a barra do microfone
+    se mexe, e toque um som de teste.
+
+[7] TESTE DE MEMÓRIA RAM
     Mostra a memória instalada pente a pente (capacidade, velocidade,
     fabricante), lista os testes de memória já realizados e permite agendar um
     novo — o diagnóstico do próprio Windows, que roda antes do sistema iniciar.
@@ -226,7 +258,7 @@ DIAGNÓSTICO
     Use quando a tela azul volta mesmo depois do reparo: aí os suspeitos que
     sobram são memória defeituosa e disco ruim.
 
-[7] RELATÓRIO PARA O CLIENTE
+[8] RELATÓRIO PARA O CLIENTE
     Gera o documento que você ENTREGA ao escritório — diferente do log técnico.
     Traz: identificação do equipamento, situação dos discos (espaço e saúde
     SMART, tratados separadamente), estado do antivírus e do firewall,
@@ -244,18 +276,18 @@ DIAGNÓSTICO
 MANUTENÇÃO E LIMPEZA
 --------------------------------------------------------------------------------
 
-[8] MANUTENÇÃO COMPLETA (TUDO)
+[9] MANUTENÇÃO COMPLETA (TUDO)
     A rotina completa, com 16 etapas. Detalhada na seção 6 deste manual.
     Faz ponto de restauração e backup do registro antes de mexer em qualquer
     coisa. Ao final abre o relatório e confere se nenhuma senha sumiu.
 
-[9] SIMULAR (NÃO ALTERA NADA)
+[10] SIMULAR (NÃO ALTERA NADA)
     Roda a manutenção completa em modo simulação: percorre todas as etapas,
     calcula quanto espaço seria liberado, lista o que seria desativado — e não
     altera absolutamente nada.
-    Use antes da opção 8 para mostrar ao cliente o que vai acontecer.
+    Use antes da opção 9 para mostrar ao cliente o que vai acontecer.
 
-[10] LIMPAR TEMPORÁRIOS
+[11] LIMPAR TEMPORÁRIOS
     Apaga: pasta TEMP do usuário, TEMP do sistema, relatórios de erro do
     Windows (WER), dumps de aplicativos, Prefetch, logs do CBS com mais de 7
     dias e caches de instaladores com mais de 90 dias.
@@ -264,37 +296,37 @@ MANUTENÇÃO E LIMPEZA
     Efeito conhecido do Prefetch: os 3 a 5 boots seguintes ficam um pouco mais
     lentos até o Windows reconstruir o cache.
 
-[11] ESVAZIAR LIXEIRA
+[12] ESVAZIAR LIXEIRA
     Esvazia a lixeira de todos os discos fixos e mostra quanto liberou.
     Confirme com o cliente antes: pode haver algo que ele pretenda recuperar.
 
-[12] CACHE DOS NAVEGADORES
+[13] CACHE DOS NAVEGADORES
     Limpa somente o cache de Chrome, Edge, Brave, Vivaldi, Opera e Firefox.
     Senhas, cookies, sessões logadas, favoritos e histórico são preservados.
     Se o navegador estiver ABERTO, ele é pulado (evita corromper o perfil):
     feche o navegador e rode de novo.
 
-[13] CACHE DE APLICATIVOS
+[14] CACHE DE APLICATIVOS
     Limpa cache de Java, PjeOffice, Teams e Office.
     Útil quando o PJe ou o Java começam a se comportar de forma estranha.
 
-[14] CACHE DO WINDOWS UPDATE
+[15] CACHE DO WINDOWS UPDATE
     Para os serviços de atualização, limpa a pasta SoftwareDistribution e
     reinicia os serviços.
     Use quando o Windows Update fica travado ou dando erro.
 
-[15] MINIATURAS DO EXPLORER
+[16] MINIATURAS DO EXPLORER
     Apaga o cache de miniaturas e ícones. O Windows refaz sozinho.
     Use quando a miniatura mostra a imagem errada ou os ícones ficam brancos.
     Isto NÃO desliga as miniaturas — só limpa o cache delas.
 
-[16] LIMPEZA PESADA (WINSXS)
+[17] LIMPEZA PESADA (WINSXS)
     Limpa componentes antigos do Windows (WinSxS) e roda a limpeza de disco.
     Libera bastante espaço, mas demora e, depois dela, não dá mais para
     desinstalar as atualizações já aplicadas.
     Use só quando o disco estiver realmente apertado.
 
-[17] APAGAR PASTA DO ANYDESK
+[18] APAGAR PASTA DO ANYDESK
     Apaga a pasta INTEIRA do AnyDesk em %APPDATA% e %LOCALAPPDATA%.
     ATENÇÃO: o ID da máquina no AnyDesk e a senha de acesso não supervisionado
     SÃO PERDIDOS — será gerado um ID novo. Se você usa esse AnyDesk para
@@ -303,14 +335,14 @@ MANUTENÇÃO E LIMPEZA
     encerrar — e avisa que, se você estiver atendendo por ele, a sessão cai.
     Um backup da pasta é gravado na pasta de log antes de apagar.
 
-[18] VISUAL C++ REDISTRIBUÍVEIS
+[19] VISUAL C++ REDISTRIBUÍVEIS
     Verifica quais redistribuíveis Visual C++ estão instalados (2005 até
     2015-2022, x86 e x64) e instala os que faltam.
     Antes de executar cada instalador baixado, confere a ASSINATURA DIGITAL da
     Microsoft — se não conferir, aborta e descarta o arquivo.
     Use quando um sistema jurídico antigo se recusa a abrir.
 
-[19] DESFAZER UM ATENDIMENTO
+[20] DESFAZER UM ATENDIMENTO
     Caminho de volta guiado. Lista as execuções registradas na máquina, mais
     recentes primeiro, mostrando o que cada uma tem para reverter. Permite:
       - restaurar registro e programas de inicialização (RESTAURAR.cmd);
@@ -325,7 +357,7 @@ MANUTENÇÃO E LIMPEZA
 SEGURANÇA E ANTIVÍRUS
 --------------------------------------------------------------------------------
 
-[20] ESCANEAR VÍRUS (CLAMAV + VIRUSTOTAL)
+[21] ESCANEAR VÍRUS (CLAMAV + VIRUSTOTAL)
     Varredura independente do antivírus instalado. Baixa o ClamAV, atualiza as
     assinaturas, varre a máquina e envia os hashes suspeitos ao VirusTotal para
     confirmação com dezenas de motores.
@@ -333,11 +365,11 @@ SEGURANÇA E ANTIVÍRUS
     Use para segunda opinião, quando o antivírus do cliente não acusa nada mas
     a máquina se comporta de forma suspeita.
 
-[21] RESTAURAR QUARENTENA
-    Devolve ao lugar original arquivos que a opção 20 colocou em quarentena.
+[22] RESTAURAR QUARENTENA
+    Devolve ao lugar original arquivos que a opção 21 colocou em quarentena.
     Use quando um falso positivo tirou do ar um sistema do cliente.
 
-[22] DESATIVAR ANTIVÍRUS + FIREWALL
+[23] DESATIVAR ANTIVÍRUS + FIREWALL
     Desativa firewall, SmartScreen, proteção por reputação, bloqueio de PUA e
     acesso controlado a pastas. Pede confirmação S/N.
     LIMITE IMPORTANTE: se a Proteção contra Adulteração (Tamper Protection)
@@ -346,13 +378,13 @@ SEGURANÇA E ANTIVÍRUS
     A opção abre a tela do Windows com o passo a passo para você desligar a
     Tamper Protection à mão antes. Mesmo assim o Defender tende a religar
     sozinho depois de algum tempo.
-    SEMPRE rode a opção 23 ao terminar o serviço.
+    SEMPRE rode a opção 24 ao terminar o serviço.
 
-[23] REATIVAR ANTIVÍRUS + FIREWALL
-    Religa tudo que a opção 22 desativou.
+[24] REATIVAR ANTIVÍRUS + FIREWALL
+    Religa tudo que a opção 23 desativou.
     Não deixe a máquina do cliente desprotegida: rode sempre ao final.
 
-[24] ABRIR PROTEÇÃO VÍRUS/AMEAÇAS
+[25] ABRIR PROTEÇÃO VÍRUS/AMEAÇAS
     Abre direto a tela de Proteção contra vírus e ameaças do Windows, onde
     ficam as configurações e a Proteção contra Adulteração.
     NÃO ALTERA NADA, só abre a tela.
@@ -361,7 +393,7 @@ SEGURANÇA E ANTIVÍRUS
 REPAROS
 --------------------------------------------------------------------------------
 
-[25] REPARAR SISTEMA (SFC/DISM)
+[26] REPARAR SISTEMA (SFC/DISM)
     Repara arquivos do próprio Windows. Roda o DISM em escada — CheckHealth,
     depois ScanHealth só se precisar, depois RestoreHealth só se confirmar
     corrupção — e por fim o SFC. Numa máquina sadia isso economiza os 10 a 30
@@ -371,11 +403,11 @@ REPAROS
     Use quando o Windows apresenta erros estranhos, serviços que não iniciam,
     telas azuis recorrentes.
 
-[26] FALTA DLL (ACHAR O PACOTE)
+[27] FALTA DLL (ACHAR O PACOTE)
     Para o erro "não foi possível iniciar o programa porque falta X.dll".
     IMPORTANTE: esse erro quase nunca é arquivo do Windows corrompido. A DLL
     vem de um REDISTRIBUÍVEL que não foi instalado — por isso rodar SFC/DISM
-    (opção 25) não resolve.
+    (opção 26) não resolve.
     A ferramenta oferece três caminhos:
       1) procurar sozinha no log de eventos dos últimos 60 dias e listar os
          arquivos citados em falhas, ordenados por número de ocorrências;
@@ -393,8 +425,8 @@ REPAROS
     NUNCA baixe DLL avulsa de site de download de DLL: é fonte comum de
     malware. Instale sempre o pacote oficial.
 
-[27] REPARO AVANÇADO (ISO/CBS)
-    Para quando a opção 25 encontrou corrupção e NÃO conseguiu reparar.
+[28] REPARO AVANÇADO (ISO/CBS)
+    Para quando a opção 26 encontrou corrupção e NÃO conseguiu reparar.
       - Lê o CBS.log e mostra EXATAMENTE quais arquivos falharam no reparo
         (antes você só sabia que "algo" falhou);
       - Repara usando uma ISO ou DVD do Windows como fonte. Detecta mídia já
@@ -406,7 +438,7 @@ REPAROS
     A edição e a versão da ISO precisam bater com as da máquina, senão o DISM
     recusa a fonte. Confira com o comando winver.
 
-[28] CORRIGIR REDE E INTERNET
+[29] CORRIGIR REDE E INTERNET
     Dois níveis, você escolhe:
       BÁSICO   - limpa cache DNS e ARP e renova o IP. NÃO derruba a conexão.
                  Resolve a maioria dos casos.
@@ -418,7 +450,7 @@ REPAROS
     Detecta se há AnyDesk, TeamViewer ou sessão RDP em uso e avisa em vermelho:
     NO MODO PROFUNDO VOCÊ PERDE O ACESSO REMOTO NA HORA.
 
-[29] CORRIGIR PROXY E CERTIFICADOS DE REDE
+[30] CORRIGIR PROXY E CERTIFICADOS DE REDE
     Feita para o erro de acesso a site de tribunal.
       - Mostra e, se você autorizar, limpa as configurações de proxy (usuário,
         sistema, WinHTTP e proxy por conexão do IE/Edge);
@@ -432,45 +464,45 @@ REPAROS
         ou certificado.
     As alterações de TLS só valem por completo após reiniciar.
 
-[30] REPARAR FILA DE IMPRESSÃO
+[31] REPARAR FILA DE IMPRESSÃO
     Para o serviço de spool, limpa os trabalhos travados e religa o serviço.
     Primeira coisa a tentar quando "não imprime" ou o documento fica preso na
     fila.
 
-[31] REPARAR ACESSO A %APPDATA%
+[32] REPARAR ACESSO A %APPDATA%
     Corrige o caso em que digitar %appdata% no Executar não abre a pasta.
     Repara as variáveis de ambiente e as permissões, e cria atalhos.
 
-[32] REINICIAR EXPLORER
+[33] REINICIAR EXPLORER
     Reinicia o Windows Explorer. Recria barra de tarefas, ícones e miniaturas
     na hora, sem precisar reiniciar a máquina.
     Use quando a área de trabalho trava, some a barra ou os ícones ficam
     brancos.
 
-[33] AGENDAR CHKDSK (VERIFICAÇÃO DE DISCO)
+[34] AGENDAR CHKDSK (VERIFICAÇÃO DE DISCO)
     Agenda a verificação e correção do disco C: para o próximo boot.
     Use após desligamento abrupto, ou quando há erro de leitura/gravação.
     Avise o cliente: o próximo boot vai demorar bem mais.
 
-[34] REPARAR APPS DA STORE (APPX)
+[35] REPARAR APPS DA STORE (APPX)
     Reregistra os aplicativos da Microsoft Store.
     Use quando Calculadora, Fotos, Configurações ou o Menu Iniciar param de
     abrir.
 
-[35] SINCRONIZAR HORÁRIO (NTP)
+[36] SINCRONIZAR HORÁRIO (NTP)
     Acerta o relógio pelo servidor de horário e corrige o serviço de tempo.
     MAIS IMPORTANTE DO QUE PARECE: relógio errado quebra assinatura digital,
     HTTPS e login em sistema de tribunal. Se o cliente reclama de certificado
     recusado, confira o horário antes de qualquer outra coisa.
 
-[36] RENOVAR IP (DHCP)
-    Libera e renova o endereço IP. Versão rápida, sem os resets da opção 28.
+[37] RENOVAR IP (DHCP)
+    Libera e renova o endereço IP. Versão rápida, sem os resets da opção 29.
 
-[37] ATUALIZAR GPO (DOMÍNIO)
+[38] ATUALIZAR GPO (DOMÍNIO)
     Força a aplicação das políticas de grupo (gpupdate).
     Só faz sentido em máquina que está num domínio.
 
-[38] PERMISSÕES DO POWERSHELL
+[39] PERMISSÕES DO POWERSHELL
     Resolve os bloqueios que impedem rodar script: ajusta a ExecutionPolicy em
     todos os escopos para RemoteSigned, corrige o registro (64 e 32 bits),
     desbloqueia arquivos .ps1 marcados como vindos da internet
@@ -479,7 +511,7 @@ REPAROS
     Usa RemoteSigned de propósito, e não Unrestricted: libera o que é criado na
     própria máquina e mantém a exigência de assinatura no que vem da internet.
 
-[39] REPARAR ÁUDIO E MICROFONE
+[40] REPARAR ÁUDIO E MICROFONE
     Diagnóstico e reparo em 8 etapas: reabilita dispositivos desativados,
     conserta e reinicia os serviços de áudio, corrige as permissões de
     microfone (inclusive para programas Win32 e navegadores, que é o que
@@ -487,8 +519,8 @@ REPAROS
     registro inválidos e força nova detecção de hardware.
     Para assim que o áudio volta a funcionar — não executa etapas à toa.
 
-[40] REPARAR WEBCAM
-    Mesma lógica da opção 39, para câmera: reabilita dispositivos, reinstala
+[41] REPARAR WEBCAM
+    Mesma lógica da opção 40, para câmera: reabilita dispositivos, reinstala
     driver com problema, corrige permissões de câmera do sistema e do usuário
     (inclusive para programas de desktop) e limpa filtros inválidos.
     Use antes de audiência por videoconferência.
@@ -497,12 +529,12 @@ REPAROS
 OTIMIZAÇÃO
 --------------------------------------------------------------------------------
 
-[41] OTIMIZAR DISCO (SSD/HDD)
+[42] OTIMIZAR DISCO (SSD/HDD)
     Identifica o tipo de disco e aplica o tratamento certo: TRIM em SSD,
     desfragmentação em HD. Pergunta quais discos além do C: devem entrar.
     Nunca desfragmenta SSD (isso só gastaria a vida do disco).
 
-[42] GERENCIAR INICIALIZAÇÃO
+[43] GERENCIAR INICIALIZAÇÃO
     Lista os programas que sobem com o Windows, marca como MANTIDO os que são
     protegidos (antivírus, áudio, agentes essenciais) e pede confirmação S/N
     antes de desativar os demais.
@@ -510,7 +542,7 @@ OTIMIZAÇÃO
     Para reverter: Gerenciador de Tarefas > Inicializar, ou o RESTAURAR.cmd
     gravado na pasta de log.
 
-[43] EFEITOS VISUAIS + ENERGIA
+[44] EFEITOS VISUAIS + ENERGIA
     Desliga animações e efeitos que pesam, MANTENDO o ClearType (texto continua
     legível), e ativa o plano de energia de Alto Desempenho.
     Também GARANTE AS MINIATURAS LIGADAS: força a exibição de miniaturas e
@@ -521,7 +553,7 @@ OTIMIZAÇÃO
     Observação: esta opção muda a aparência do Windows sem perguntar. Se o
     cliente for sensível a isso, avise antes.
 
-[44] MEMÓRIA VIRTUAL (PAGEFILE)
+[45] MEMÓRIA VIRTUAL (PAGEFILE)
     Mostra a memória RAM instalada, como está o arquivo de paginação
     (automático ou tamanho fixo), quanto dele está em uso, o pico histórico e
     o espaço livre em disco. Avisa quando o pico passa de 90% do tamanho — o
@@ -548,7 +580,33 @@ Dividem-se em duas famílias:
 Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
 49 em cada computador. Para resolver problema: comece pela 46.
 
-[45] QUAL REDE ESTOU USANDO
+[46] PREPARAR MÁQUINA DO ESCRITÓRIO
+    Roteiro para computador novo, formatado, ou que trocou de usuário. Não
+    acrescenta capacidade: encadeia na ordem certa o que hoje são oito opções
+    espalhadas pelo menu. O ganho é não esquecer passo — o erro clássico é
+    entregar a máquina e descobrir depois que faltou o certificado ou a
+    unidade de rede.
+
+    Cada etapa pergunta antes e pode ser pulada (máquina de estagiário não
+    precisa de certificado; quem não usa PJe não precisa de Java):
+
+      1. Nome do computador — nome claro (RECEPCAO, DR-CARLOS) facilita achar
+         na rede depois;
+      2. Redistribuíveis Visual C++ — sistema jurídico antigo não abre sem;
+      3. Java e ambiente PJe;
+      4. Certificado digital — importa o `.pfx` do A1 (como EXPORTÁVEL, para
+         permitir backup depois), ou confere o token A3 conectado;
+      5. Rede e pasta compartilhada — grupo de trabalho e unidade do servidor;
+      6. Impressora compartilhada da rede, com opção de definir como padrão;
+      7. Ajustes de uso — miniaturas ligadas, efeitos leves, plano de energia;
+      8. Ficha da rede — gera a documentação para a pasta do cliente.
+
+    Ao final lista o que foi feito, o que foi pulado (para você conferir se
+    realmente não se aplica), e os itens que só a conferência manual resolve:
+    salvar um arquivo na pasta da rede, assinar um documento de teste,
+    imprimir uma página, e rodar a verificação de audiência se for o caso.
+
+[47] QUAL REDE ESTOU USANDO
     NÃO ALTERA NADA. É o cartão de identidade da rede desta máquina, feito
     para ser rodado em CADA computador e comparado.
 
@@ -575,7 +633,7 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
     Use quando o cliente disser que as máquinas não se veem: rode nas duas e
     compare as duas linhas destacadas.
 
-[46] NÃO CONECTA NO SERVIDOR
+[48] NÃO CONECTA NO SERVIDOR
     Para o chamado mais comum: "esse computador parou de acessar o servidor".
 
     Percorre a cadeia inteira na ordem em que ela quebra e PARA no primeiro
@@ -600,7 +658,7 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
       [4] Limpar cache de nomes (DNS e NetBIOS) — resolve quando o servidor
           trocou de IP e o nome ainda aponta para o antigo.
 
-[47] PROBLEMAS DE CONEXÃO
+[49] PROBLEMAS DE CONEXÃO
     Diagnóstico da conexão em camadas, de baixo para cima, para o problema
     aparecer na camada certa em vez de virar "a internet caiu":
       1. placa de rede — cabo desconectado, Wi-Fi fora, placa desativada;
@@ -623,7 +681,7 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
     TeamViewer ou RDP ativos, avisa em vermelho antes — reiniciar a placa
     derruba o seu atendimento.
 
-[48] CONFIGURAR SERVIDOR DE ARQUIVOS
+[50] CONFIGURAR SERVIDOR DE ARQUIVOS
     Transforma esta máquina no servidor de arquivos do escritório, em 7 etapas:
       1. mostra a situação atual (nome, grupo de trabalho, IP, SMB);
       2. coloca a rede no perfil PRIVADO (perfil Público bloqueia tudo);
@@ -658,7 +716,7 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
     A máquina precisa ficar LIGADA para as outras acessarem. E lembre:
     compartilhar pasta NÃO é backup — os arquivos seguem num disco só.
 
-[49] CONECTAR À REDE/SERVIDOR
+[51] CONECTAR À REDE/SERVIDOR
     Prepara um computador do escritório para usar o servidor, em 5 etapas:
     perfil de rede privado, serviços, firewall, grupo de trabalho e a unidade
     de rede.
@@ -671,9 +729,9 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
     Sugere uma letra livre (Z:, Y:...) e avisa se a escolhida já está em uso.
     Ao terminar, abre a unidade no Explorer para conferir.
 
-[50] BLINDAR SERVIDOR
+[52] BLINDAR SERVIDOR
     Rode UMA VEZ na máquina que guarda os arquivos, logo depois de montar a
-    rede. Enquanto as opções 45 a 47 diagnosticam depois que o cliente ligou,
+    rede. Enquanto as opções 47 a 47 diagnosticam depois que o cliente ligou,
     esta existe para o chamado não acontecer.
 
     Corrige as cinco causas estruturais de "a rede funcionava e parou sozinha":
@@ -702,7 +760,7 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
     Trocar o IP derruba conexão remota: avisa em vermelho antes se houver
     AnyDesk, TeamViewer ou RDP ativos.
 
-[51] BACKUP DA PASTA COMPARTILHADA
+[53] BACKUP DA PASTA COMPARTILHADA
     Compartilhar pasta NÃO é backup — os arquivos seguem num disco só. Esta
     opção cria a cópia automática que salva o escritório quando aquele disco
     falhar.
@@ -732,7 +790,7 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
     E o lembrete que vale ouro: uma vez por mês, abra um arquivo direto do
     destino. Backup que nunca foi restaurado não é backup comprovado.
 
-[52] MONITORAMENTO DO SERVIDOR
+[54] MONITORAMENTO DO SERVIDOR
     Verificação automática que roda ao ligar a máquina e a cada 4 horas, para
     você saber do problema antes do cliente ligar.
 
@@ -753,7 +811,7 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
     aconteceu entre as suas visitas. Também permite verificar na hora ou
     remover o monitoramento.
 
-[53] FICHA DA REDE DO ESCRITÓRIO
+[55] FICHA DA REDE DO ESCRITÓRIO
     NÃO ALTERA NADA. Gera a ficha técnica da rede daquele escritório para você
     guardar na pasta do cliente e não redescobrir a topologia a cada visita.
 
@@ -768,7 +826,7 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
     Rode em cada computador do escritório na primeira visita e guarde tudo
     junto: fica sendo a documentação daquele cliente.
 
-[54] DIAGNÓSTICO DA REDE LOCAL
+[56] DIAGNÓSTICO DA REDE LOCAL
     NÃO ALTERA NADA. Percorre, em 8 etapas, as causas que derrubam rede de
     escritório, na ordem em que costumam acontecer:
       1. identificação (nome, grupo de trabalho, IPs);
@@ -786,8 +844,8 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
     No fim lista o que precisa ser corrigido. Use esta antes de mexer em
     qualquer coisa quando "a rede parou".
 
-[55] DESFAZER REDE NO COMPUTADOR
-    O contrário das opções 48 e 46: tira a máquina da rede de compartilhamento.
+[57] DESFAZER REDE NO COMPUTADOR
+    O contrário das opções 50 e 46: tira a máquina da rede de compartilhamento.
     Use quando o computador sai do escritório, é vendido, ou quando a rede
     precisa ser refeita do zero.
 
@@ -804,7 +862,7 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
       [4] Só apagar as credenciais salvas
 
     No modo completo ele ainda trata, cada um com sua confirmação:
-      - a conta de acesso criada pela opção 48 — desativar (reversível) ou
+      - a conta de acesso criada pela opção 50 — desativar (reversível) ou
         remover;
       - religar o compartilhamento protegido por senha, se estiver desligado;
       - fechar as regras de firewall, deixando a máquina invisível na rede;
@@ -824,7 +882,7 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
 CERTIFICADOS E JURÍDICO
 --------------------------------------------------------------------------------
 
-[56] BACKUP DO CERTIFICADO A1
+[58] BACKUP DO CERTIFICADO A1
     Exporta o certificado A1 para um arquivo `.pfx` — a única forma de
     reinstalá-lo depois.
 
@@ -860,7 +918,7 @@ CERTIFICADOS E JURÍDICO
     Teste de verdade: reinstalar o `.pfx` numa máquina de teste comprova que a
     cópia presta.
 
-[57] LIMPAR CERTIFICADOS VENCIDOS
+[59] LIMPAR CERTIFICADOS VENCIDOS
     Organiza a loja Pessoal do usuário, separando em três categorias:
       A) ICP-Brasil e ICP-Portugal válidos — sempre MANTIDOS;
       B) ICP vencidos — você decide;
@@ -872,14 +930,14 @@ CERTIFICADOS E JURÍDICO
     lista em CSV e um arquivo .cer de cada certificado. Atenção: o .cer guarda
     apenas a parte pública — a chave privada NÃO é recuperável.
 
-[58] CONFIGURAR JAVA (JURÍDICO)
+[60] CONFIGURAR JAVA (JURÍDICO)
     Prepara o Java 8 para os sistemas jurídicos: localiza a instalação, faz
     backup do deployment.properties, ajusta o nível de segurança, remove os
     bloqueios (.locked) que travam o painel do Java, desativa o aviso de "Java
     desatualizado" que costuma travar o usuário, cadastra as URLs de exceção
     (Shodo, Shomei, PJe, PROJUDI dos estados, eProc) e limpa o cache do Java.
 
-[59] CONFIGURAR AMBIENTE PJE
+[61] CONFIGURAR AMBIENTE PJE
     Versão completa da anterior, aplicada a TODOS os perfis de usuário da
     máquina. Além do Java e das exceções, verifica os serviços Shodo e Shomei
     (necessários para assinatura) e tenta iniciá-los se estiverem parados, e
@@ -890,13 +948,13 @@ CERTIFICADOS E JURÍDICO
 PROGRAMAS
 --------------------------------------------------------------------------------
 
-[60] DESINSTALAR PROGRAMA
+[62] DESINSTALAR PROGRAMA
     Lista os programas instalados igual ao Painel de Controle — sem o lixo de
     componentes de sistema que aparece em outras listagens. Permite filtrar
     por nome, selecionar pelo número e desinstalar. As colunas se ajustam à
     largura da janela para os nomes aparecerem inteiros.
 
-[61] REMOVER IMPRESSORA
+[63] REMOVER IMPRESSORA
     Remoção completa de impressora e do driver: identifica os arquivos do
     driver no registro, remove a impressora, remove o driver (vários métodos),
     limpa a fila (perguntando antes, porque isso descarta documentos pendentes
@@ -909,7 +967,7 @@ PROGRAMAS
 ATALHOS ADMINISTRATIVOS
 --------------------------------------------------------------------------------
 
-[62] DISPOSITIVOS, SERVIÇOS E TOKEN
+[64] DISPOSITIVOS, SERVIÇOS E TOKEN
     Abre de uma vez: Gerenciador de Dispositivos, Serviços do Windows,
     Desinstalar um Programa (Painel de Controle) e o administrador de token de
     certificado (SafeNet, eToken, Gemalto e outros).
@@ -917,7 +975,7 @@ ATALHOS ADMINISTRATIVOS
     Se o app do token não abrir, ele procura pelo atalho no Menu Iniciar. Se
     ainda assim não achar, informe o nome exato do programa para ser incluído.
 
-[63] ABRIR PASTA %APPDATA%
+[65] ABRIR PASTA %APPDATA%
     Abre a pasta Roaming do usuário no Explorer (shell:AppData) e informa o
     caminho da pasta Local.
     NÃO ALTERA NADA.
@@ -925,7 +983,7 @@ ATALHOS ADMINISTRATIVOS
 
 
 ================================================================================
-6. A MANUTENÇÃO COMPLETA EM DETALHE (OPÇÃO 8)
+6. A MANUTENÇÃO COMPLETA EM DETALHE (OPÇÃO 9)
 ================================================================================
 
 São 16 etapas. Rodando pelo menu, 11 executam e 5 ficam de fora — estas últimas
@@ -940,7 +998,7 @@ ANTES DE COMEÇAR
 
 ETAPAS QUE RODAM
    1. Backup: ponto de restauração, backup do registro e das credenciais.
-   2. Arquivos temporários (ver opção 10).
+   2. Arquivos temporários (ver opção 11).
    3. Lixeira de todos os discos.
    4. Cache de miniaturas.
    5. Cache do Windows Update.
@@ -953,14 +1011,14 @@ ETAPAS QUE RODAM
   16. Otimização de disco (TRIM ou desfragmentação).
 
 ETAPAS QUE NÃO RODAM PELO MENU
-   8. AnyDesk .................. use a opção 17
-   9. WinSxS / limpeza pesada .. use a opção 16
-  11. Acesso a %appdata% ....... use a opção 31
-  14. Reparos rápidos .......... use as opções 30, 32, 33 e 34
-  15. DISM + SFC ............... use a opção 25
+   8. AnyDesk .................. use a opção 18
+   9. WinSxS / limpeza pesada .. use a opção 17
+  11. Acesso a %appdata% ....... use a opção 32
+  14. Reparos rápidos .......... use as opções 31, 32, 33 e 34
+  15. DISM + SFC ............... use a opção 26
 
   ATENÇÃO: a Manutenção Completa NÃO roda SFC/DISM. Se o chamado for corrupção
-  do Windows, é preciso rodar a opção 25 separadamente.
+  do Windows, é preciso rodar a opção 26 separadamente.
 
 AO FINAL
   Compara as credenciais com a foto do início (nenhuma senha pode ter sumido),
@@ -1053,7 +1111,7 @@ COMO DESFAZER
                                RESTAURAR.cmd que aplica tudo de volta.
   Inicialização .............. Gerenciador de Tarefas > Inicializar, ou o
                                RESTAURAR.cmd.
-  Quarentena do antivírus .... opção 21.
+  Quarentena do antivírus .... opção 22.
   AnyDesk .................... copie de volta a pasta backup-anydesk da pasta
                                de log.
   Certificados removidos ..... a pasta CertificadosBackup_<data> na Área de
@@ -1081,11 +1139,11 @@ DISCO COM ALERTA SMART
 TAMPER PROTECTION
   A proteção contra adulteração do Windows impede, POR DESIGN, que qualquer
   script desligue o núcleo do Defender. Não é limitação desta ferramenta.
-  Só desligando à mão na tela que a opção 22 abre.
+  Só desligando à mão na tela que a opção 23 abre.
 
 DLL AVULSA
   Nunca baixe DLL de site de download de DLL. Instale o pacote oficial que a
-  contém (a opção 26 identifica qual é). Em escritório de advocacia, malware
+  contém (a opção 27 identifica qual é). Em escritório de advocacia, malware
   significa dado de processo exposto.
 
 MÁQUINA EM DOMÍNIO
@@ -1094,7 +1152,7 @@ MÁQUINA EM DOMÍNIO
   domínio resolve.
 
 ACESSO REMOTO
-  A opção 28 no modo PROFUNDO e a opção 17 derrubam a conexão remota. Ambas
+  A opção 29 no modo PROFUNDO e a opção 18 derrubam a conexão remota. Ambas
   avisam antes, mas confirme que há alguém no local se for arriscado.
 
 
