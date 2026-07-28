@@ -1,7 +1,7 @@
 ﻿================================================================================
                     S U P O R T E A D V  -  M A N U A L
               Ferramentas de suporte técnico - suporte.adv.br
-                        Versão 2026.07.28  |  58 opções
+                        Versão 2026.07.28  |  62 opções
 ================================================================================
 
 
@@ -11,16 +11,16 @@ SUMÁRIO
   2. Como executar
   3. Regras que valem para tudo
   4. Guia rápido: qual opção usar para cada problema
-  5. As 58 opções, uma a uma
+  5. As 62 opções, uma a uma
        DIAGNÓSTICO ................ 1 a 7
        MANUTENÇÃO E LIMPEZA ....... 8 a 19
        SEGURANÇA E ANTIVÍRUS ...... 20 a 24
        REPAROS .................... 25 a 40
        OTIMIZAÇÃO ................. 41 a 44
-       REDE DO ESCRITÓRIO ......... 45 a 51
-       CERTIFICADOS E JURÍDICO .... 52 a 54
-       PROGRAMAS .................. 55 e 56
-       ATALHOS ADMINISTRATIVOS .... 57 e 58
+       REDE DO ESCRITÓRIO ......... 45 a 55
+       CERTIFICADOS E JURÍDICO .... 56 a 58
+       PROGRAMAS .................. 59 e 60
+       ATALHOS ADMINISTRATIVOS .... 61 e 62
   6. A Manutenção Completa em detalhe (16 etapas)
   7. Uso por linha de comando
   8. Onde ficam os logs e como reverter
@@ -38,7 +38,7 @@ digital, token, Java, PJe).
 
 São apenas dois arquivos:
 
-  SuporteADV.ps1            o menu, com as 58 opções
+  SuporteADV.ps1            o menu, com as 62 opções
   ManutencaoCompleta.ps1    o motor, que faz todo o trabalho
 
 O menu baixa o motor uma vez e o mantém em cache local, atualizando só quando
@@ -128,8 +128,8 @@ MODO SIMULAÇÃO
   "Sem internet"                                28
   "Não abre site do tribunal / erro de          29
    certificado"
-  "Não imprime"                                 30, depois 56 se persistir
-  "Não consigo abrir a pasta %appdata%"         31 (reparar) ou 58 (só abrir)
+  "Não imprime"                                 30, depois 60 se persistir
+  "Não consigo abrir a pasta %appdata%"         31 (reparar) ou 62 (só abrir)
   "Ícones sumiram / área de trabalho travou"    32
   "PC desligou na tomada várias vezes"          33 (chkdsk) e 2 (SMART)
   "Apps da Microsoft Store não abrem"           34
@@ -137,8 +137,8 @@ MODO SIMULAÇÃO
                                                 assinatura digital), 4, 29
   "Sem microfone na audiência" (URGENTE)        39
   "Sem câmera na audiência" (URGENTE)           40
-  "PJe não assina / Java não carrega"           54, depois 53
-  "Token não aparece"                           57, depois 4
+  "PJe não assina / Java não carrega"           58, depois 57
+  "Token não aparece"                           61, depois 4
   "Suspeita de vírus"                           20
   "Preciso instalar programa e o antivírus      22 (e 23 depois, sempre)
    bloqueia"
@@ -156,12 +156,15 @@ MODO SIMULAÇÃO
   "Sem internet"                                47
   "Quero montar a rede do escritório"           48 (no PC que guarda os
                                                 arquivos), depois 49 nos demais
-  "A rede toda parou de funcionar"              50 (diagnóstico da rede local)
-  "PC vai sair do escritório / foi vendido"     51 (desfaz a rede nele)
+  "A rede toda parou de funcionar"              54 (diagnóstico da rede local)
+  "PC vai sair do escritório / foi vendido"     55 (desfaz a rede nele)
+  "Rede cai sozinha / servidor some de manhã"   50 (blinda contra as causas)
+  "E se o disco do servidor morrer?"            51 (backup) e 52 (monitorar)
+  "Cheguei no cliente e não lembro da rede"     53 (ficha) — e gere na 1ª visita
 
 
 ================================================================================
-5. AS 58 OPÇÕES, UMA A UMA
+5. AS 62 OPÇÕES, UMA A UMA
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -528,7 +531,9 @@ computadores do escritório. A ideia: **uma** máquina guarda os documentos
 
 Dividem-se em duas famílias:
   45 a 47 — SOLUÇÃO DE PROBLEMAS (rede que parou de funcionar)
-  48 a 51 — MONTAGEM (criar a rede e desfazê-la)
+  48 a 49 — MONTAGEM (criar a rede)
+  50 a 53 — PREVENÇÃO (evitar que o problema aconteça)
+  54 e 55 — DIAGNÓSTICO GERAL e DESFAZER
 
 Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
 49 em cada computador. Para resolver problema: comece pela 46.
@@ -656,7 +661,104 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
     Sugere uma letra livre (Z:, Y:...) e avisa se a escolhida já está em uso.
     Ao terminar, abre a unidade no Explorer para conferir.
 
-[50] DIAGNÓSTICO DA REDE LOCAL
+[50] BLINDAR SERVIDOR
+    Rode UMA VEZ na máquina que guarda os arquivos, logo depois de montar a
+    rede. Enquanto as opções 45 a 47 diagnosticam depois que o cliente ligou,
+    esta existe para o chamado não acontecer.
+
+    Corrige as cinco causas estruturais de "a rede funcionava e parou sozinha":
+
+      1. IP DO SERVIDOR — se o roteador entregar outro endereço, as unidades
+         de rede de TODAS as máquinas quebram de uma vez. Converte para IP
+         fixo, conferindo antes se o endereço está livre e se pertence à faixa
+         da rede. Explica que a reserva no roteador é a forma mais correta, e
+         avisa que um IP fixo dentro da faixa do DHCP pode dar conflito.
+      2. SERVIDOR DORMINDO — desktop que suspende de madrugada é o chamado
+         clássico de segunda-feira. Desativa suspensão, hibernação,
+         desligamento de disco e a inicialização rápida.
+      3. ECONOMIA DE ENERGIA DA PLACA DE REDE — o Windows desliga a placa para
+         poupar energia e a conexão cai sozinha. É a causa mais difícil de
+         diagnosticar, porque é intermitente e some quando você chega.
+         Desmarca a opção e também as propriedades do driver (Energy Efficient
+         Ethernet, Green Ethernet, Power Saving Mode).
+      4. PERFIL DE REDE — garante Privado. Atualização de recurso do Windows
+         às vezes devolve para Público e a máquina some da rede.
+      5. DESEMPENHO COM BANCO COMPARTILHADO — só se o escritório usa sistema
+         com base de dados na pasta compartilhada: exclui a pasta da varredura
+         em tempo real do antivírus e desativa o cache do SMB (leasing), que é
+         o que trava registro quando duas pessoas usam ao mesmo tempo.
+         Não faça por padrão — reduz a proteção naquela pasta.
+
+    Trocar o IP derruba conexão remota: avisa em vermelho antes se houver
+    AnyDesk, TeamViewer ou RDP ativos.
+
+[51] BACKUP DA PASTA COMPARTILHADA
+    Compartilhar pasta NÃO é backup — os arquivos seguem num disco só. Esta
+    opção cria a cópia automática que salva o escritório quando aquele disco
+    falhar.
+
+    Usa o robocopy do próprio Windows em modo espelho, agendado nas Tarefas do
+    Windows rodando como SISTEMA: funciona sem ninguém logado e, se a máquina
+    estiver desligada na hora marcada, executa assim que ela ligar.
+
+    Protege contra os erros clássicos: recusa destino DENTRO da origem (a
+    cópia se copiaria), alerta quando o destino está no mesmo disco físico
+    (não protege do risco principal, que é o disco falhar) e lista os discos
+    com espaço suficiente.
+
+    Agendamento: todo dia, dias úteis, semanal, ou manual. Sugere horário de
+    almoço em vez de madrugada — de madrugada o servidor pode estar desligado.
+
+    Gera `_relatorio_backup.txt` no destino, com o histórico de cada execução
+    e o resultado. Rodando a opção de novo, você vê os backups configurados,
+    quando rodaram, se deram certo, e pode executar na hora ou remover.
+
+    O QUE ESTE BACKUP NÃO PROTEGE — está escrito na tela ao final:
+      - é espelho: arquivo apagado na origem some do destino na próxima cópia,
+        então não recupera algo apagado semana passada;
+      - se o destino for disco interno da mesma máquina, incêndio, roubo ou
+        ransomware levam os dois;
+      - para cobertura real, some a isto uma cópia FORA do local.
+    E o lembrete que vale ouro: uma vez por mês, abra um arquivo direto do
+    destino. Backup que nunca foi restaurado não é backup comprovado.
+
+[52] MONITORAMENTO DO SERVIDOR
+    Verificação automática que roda ao ligar a máquina e a cada 4 horas, para
+    você saber do problema antes do cliente ligar.
+
+    Verifica: perfil de rede, serviços de compartilhamento, pastas
+    compartilhadas ainda existindo, espaço em disco, saúde SMART, e se o
+    backup rodou e deu certo.
+
+    O diferencial é que ele COMPARA com a execução anterior e detecta
+    mudanças: se o IP do servidor mudou, se o gateway mudou (a máquina foi
+    para outra rede), ou se um compartilhamento sumiu. São exatamente as
+    coisas que quebram tudo silenciosamente.
+
+    Quando encontra problema, grava no histórico e cria o arquivo
+    "ATENCAO - AVISAR O SUPORTE.txt" na Área de Trabalho de todos os usuários
+    — visível para quem senta na máquina.
+
+    Ao chegar no cliente, rode esta opção: ela mostra o histórico do que
+    aconteceu entre as suas visitas. Também permite verificar na hora ou
+    remover o monitoramento.
+
+[53] FICHA DA REDE DO ESCRITÓRIO
+    NÃO ALTERA NADA. Gera a ficha técnica da rede daquele escritório para você
+    guardar na pasta do cliente e não redescobrir a topologia a cada visita.
+
+    Contém: identificação da máquina, faixa da rede e gateway destacados,
+    IP (marcando quando é DHCP, que é risco), DNS, rede Wi-Fi, pastas
+    compartilhadas com caminho real, permissões e tamanho, unidades de rede
+    mapeadas, aparelhos vistos na rede (IP, MAC e nome), e a situação do
+    backup — marcando em destaque quando NÃO há backup configurado.
+
+    Salva na Área de Trabalho como RedeEscritorio_<PC>_<data>.txt.
+
+    Rode em cada computador do escritório na primeira visita e guarde tudo
+    junto: fica sendo a documentação daquele cliente.
+
+[54] DIAGNÓSTICO DA REDE LOCAL
     NÃO ALTERA NADA. Percorre, em 8 etapas, as causas que derrubam rede de
     escritório, na ordem em que costumam acontecer:
       1. identificação (nome, grupo de trabalho, IPs);
@@ -674,7 +776,7 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
     No fim lista o que precisa ser corrigido. Use esta antes de mexer em
     qualquer coisa quando "a rede parou".
 
-[51] DESFAZER REDE NO COMPUTADOR
+[55] DESFAZER REDE NO COMPUTADOR
     O contrário das opções 48 e 46: tira a máquina da rede de compartilhamento.
     Use quando o computador sai do escritório, é vendido, ou quando a rede
     precisa ser refeita do zero.
@@ -712,7 +814,7 @@ Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
 CERTIFICADOS E JURÍDICO
 --------------------------------------------------------------------------------
 
-[52] LIMPAR CERTIFICADOS VENCIDOS
+[56] LIMPAR CERTIFICADOS VENCIDOS
     Organiza a loja Pessoal do usuário, separando em três categorias:
       A) ICP-Brasil e ICP-Portugal válidos — sempre MANTIDOS;
       B) ICP vencidos — você decide;
@@ -724,14 +826,14 @@ CERTIFICADOS E JURÍDICO
     lista em CSV e um arquivo .cer de cada certificado. Atenção: o .cer guarda
     apenas a parte pública — a chave privada NÃO é recuperável.
 
-[53] CONFIGURAR JAVA (JURÍDICO)
+[57] CONFIGURAR JAVA (JURÍDICO)
     Prepara o Java 8 para os sistemas jurídicos: localiza a instalação, faz
     backup do deployment.properties, ajusta o nível de segurança, remove os
     bloqueios (.locked) que travam o painel do Java, desativa o aviso de "Java
     desatualizado" que costuma travar o usuário, cadastra as URLs de exceção
     (Shodo, Shomei, PJe, PROJUDI dos estados, eProc) e limpa o cache do Java.
 
-[54] CONFIGURAR AMBIENTE PJE
+[58] CONFIGURAR AMBIENTE PJE
     Versão completa da anterior, aplicada a TODOS os perfis de usuário da
     máquina. Além do Java e das exceções, verifica os serviços Shodo e Shomei
     (necessários para assinatura) e tenta iniciá-los se estiverem parados, e
@@ -742,13 +844,13 @@ CERTIFICADOS E JURÍDICO
 PROGRAMAS
 --------------------------------------------------------------------------------
 
-[55] DESINSTALAR PROGRAMA
+[59] DESINSTALAR PROGRAMA
     Lista os programas instalados igual ao Painel de Controle — sem o lixo de
     componentes de sistema que aparece em outras listagens. Permite filtrar
     por nome, selecionar pelo número e desinstalar. As colunas se ajustam à
     largura da janela para os nomes aparecerem inteiros.
 
-[56] REMOVER IMPRESSORA
+[60] REMOVER IMPRESSORA
     Remoção completa de impressora e do driver: identifica os arquivos do
     driver no registro, remove a impressora, remove o driver (vários métodos),
     limpa a fila (perguntando antes, porque isso descarta documentos pendentes
@@ -761,7 +863,7 @@ PROGRAMAS
 ATALHOS ADMINISTRATIVOS
 --------------------------------------------------------------------------------
 
-[57] DISPOSITIVOS, SERVIÇOS E TOKEN
+[61] DISPOSITIVOS, SERVIÇOS E TOKEN
     Abre de uma vez: Gerenciador de Dispositivos, Serviços do Windows,
     Desinstalar um Programa (Painel de Controle) e o administrador de token de
     certificado (SafeNet, eToken, Gemalto e outros).
@@ -769,7 +871,7 @@ ATALHOS ADMINISTRATIVOS
     Se o app do token não abrir, ele procura pelo atalho no Menu Iniciar. Se
     ainda assim não achar, informe o nome exato do programa para ser incluído.
 
-[58] ABRIR PASTA %APPDATA%
+[62] ABRIR PASTA %APPDATA%
     Abre a pasta Roaming do usuário no Explorer (shell:AppData) e informa o
     caminho da pasta Local.
     NÃO ALTERA NADA.
