@@ -122,6 +122,11 @@ $menu = @(
     @{ Cat='OTIMIZACAO';  Label='Efeitos Visuais + Energia';     Tipo='v2';     Args=@{ Ferramenta='efeitos' } }
     @{ Cat='OTIMIZACAO';  Label='Memoria Virtual (pagefile)';    Tipo='v2';     Args=@{ Ferramenta='memoriavirtual' } }
 
+    # --- REDE DO ESCRITORIO ---
+    @{ Cat='REDELOCAL';   Label='Configurar Servidor de Arquivos'; Tipo='v2';     Args=@{ Ferramenta='servidor' } }
+    @{ Cat='REDELOCAL';   Label='Conectar a Rede/Servidor';        Tipo='v2';     Args=@{ Ferramenta='clienterede' } }
+    @{ Cat='REDELOCAL';   Label='Diagnostico da Rede Local';       Tipo='v2';     Args=@{ Ferramenta='diagrede' } }
+
     # --- CERTIFICADOS E JURIDICO ---
     @{ Cat='CERTIFICADOS';Label='Limpar Certificados Vencidos';  Tipo='v2';     Args=@{ Ferramenta='limparcerts' } }
     @{ Cat='CERTIFICADOS';Label='Configurar Java (Juridico)';    Tipo='v2';     Args=@{ Ferramenta='java' } }
@@ -155,6 +160,7 @@ $categorias = @(
     @{ Nome='SEGURANCA';    Titulo='SEGURANCA E ANTIVIRUS'; Cor='Red' }
     @{ Nome='REPAROS';      Titulo='REPAROS';               Cor='Yellow' }
     @{ Nome='OTIMIZACAO';   Titulo='OTIMIZACAO';            Cor='White' }
+    @{ Nome='REDELOCAL';  Titulo='REDE DO ESCRITORIO';    Cor='Cyan' }
     @{ Nome='CERTIFICADOS'; Titulo='CERTIFICADOS E JURIDICO'; Cor='Magenta' }
     @{ Nome='PROGRAMAS';    Titulo='PROGRAMAS';             Cor='Blue' }
     @{ Nome='ATALHOS';      Titulo='ATALHOS ADMINISTRATIVOS'; Cor='Cyan' }

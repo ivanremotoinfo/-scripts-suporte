@@ -9523,6 +9523,765 @@ function Test-MemoriaRAM {
     return [long]0
 }
 
+# =========================================================================
+# REGIAO: REDE DE COMPARTILHAMENTO (servidor, cliente e diagnostico)
+# =========================================================================
+#
+# Postura de seguranca destas ferramentas - escritorio de advocacia guarda
+# processo sob sigilo, entao o padrao aqui e' compartilhamento AUTENTICADO:
+#   - SMB1 NUNCA e' habilitado (e' o buraco do WannaCry/EternalBlue).
+#   - Regras de firewall so no perfil PRIVADO. Nunca no publico.
+#   - Nao compartilha raiz de disco (C:\).
+#   - Acesso por usuario e senha, com a credencial salva nos clientes para
+#     nao incomodar o advogado no dia a dia. Acesso anonimo existe como
+#     opcao, mas com aviso do custo.
+
+# Grupos de regra do firewall: o nome que aparece na tela e traduzido, mas o
+# identificador interno nao muda. Usamos o interno e caimos no texto so se
+# preciso.
+$script:GrupoFWCompartilhamento = '@FirewallAPI.dll,-28502'
+$script:GrupoFWDescoberta       = '@FirewallAPI.dll,-32752'
+
+function Enable-RegrasFirewallRede {
+    param([string]$Grupo, [string]$RegexNome, [string]$Rotulo)
+    $ok = 0
+    try {
+        $regras = @(Get-NetFirewallRule -Group $Grupo -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Profile -match 'Private|Any' })
+        if ($regras.Count -eq 0) {
+            $regras = @(Get-NetFirewallRule -ErrorAction SilentlyContinue |
+                        Where-Object { $_.DisplayGroup -match $RegexNome -and $_.Profile -match 'Private|Any' })
+        }
+        foreach ($r in $regras) {
+            if ($r.Enabled -ne 'True') {
+                try { Enable-NetFirewallRule -Name $r.Name -ErrorAction Stop; $ok++ } catch { }
+            }
+        }
+        $total = @(Get-NetFirewallRule -Group $Grupo -ErrorAction SilentlyContinue |
+                   Where-Object { $_.Enabled -eq 'True' }).Count
+        if ($ok -gt 0) { Write-Ok "$Rotulo : $ok regra(s) habilitada(s) no perfil Privado." }
+        else { Write-Ok "$Rotulo : ja estava liberado ($total regras ativas)." }
+    } catch {
+        Write-Aviso "$Rotulo : nao foi possivel ajustar - $($_.Exception.Message)"
+    }
+}
+
+function Set-ServicosRede {
+    <# Servicos sem os quais a maquina nao aparece na rede nem serve arquivo. #>
+    $servicos = @(
+        @{ Nome = 'LanmanServer';      Tipo = 'Automatic'; Desc = 'Servidor (compartilhar arquivos)' }
+        @{ Nome = 'LanmanWorkstation'; Tipo = 'Automatic'; Desc = 'Estacao de trabalho (acessar rede)' }
+        @{ Nome = 'FDResPub';          Tipo = 'Automatic'; Desc = 'Publicacao de recursos (aparecer na rede)' }
+        @{ Nome = 'fdPHost';           Tipo = 'Automatic'; Desc = 'Descoberta de dispositivos' }
+        @{ Nome = 'SSDPSRV';           Tipo = 'Manual';    Desc = 'Descoberta SSDP' }
+        @{ Nome = 'upnphost';          Tipo = 'Manual';    Desc = 'Host de dispositivo UPnP' }
+    )
+    foreach ($s in $servicos) {
+        $sv = Get-Service -Name $s.Nome -ErrorAction SilentlyContinue
+        if (-not $sv) { Write-Info "$($s.Desc): servico nao existe nesta versao."; continue }
+        try {
+            if ($sv.StartType -ne $s.Tipo) {
+                Set-Service -Name $s.Nome -StartupType $s.Tipo -ErrorAction Stop
+            }
+            if ($sv.Status -ne 'Running') {
+                Start-Service -Name $s.Nome -ErrorAction Stop
+                Write-Ok "$($s.Desc): iniciado."
+            } else {
+                Write-Ok "$($s.Desc): em execucao."
+            }
+        } catch {
+            Write-Aviso "$($s.Desc): $($_.Exception.Message)"
+        }
+    }
+}
+
+function Set-PerfilRedePrivado {
+    <#
+      Perfil Publico bloqueia descoberta e compartilhamento por design. E' a
+      causa numero 1 de "a maquina sumiu da rede".
+    #>
+    $mudou = $false
+    foreach ($p in @(Get-NetConnectionProfile -ErrorAction SilentlyContinue)) {
+        if ($p.NetworkCategory -eq 'Public') {
+            try {
+                Set-NetConnectionProfile -InterfaceIndex $p.InterfaceIndex -NetworkCategory Private -ErrorAction Stop
+                Write-Ok "Rede '$($p.Name)' ($($p.InterfaceAlias)): Publica -> PRIVADA."
+                $mudou = $true
+            } catch {
+                Write-Falha "Nao foi possivel mudar '$($p.Name)' para privada: $($_.Exception.Message)"
+            }
+        } elseif ($p.NetworkCategory -eq 'DomainAuthenticated') {
+            Write-Info "Rede '$($p.Name)': autenticada em dominio (as politicas do dominio mandam)."
+        } else {
+            Write-Ok "Rede '$($p.Name)' ($($p.InterfaceAlias)): ja e privada."
+        }
+    }
+    return $mudou
+}
+
+function Test-SMB1Perigoso {
+    <# SMB1 e' o vetor do WannaCry. Nunca ligar; avisar se estiver ligado. #>
+    try {
+        $f = Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -ErrorAction SilentlyContinue
+        if ($f -and $f.State -eq 'Enabled') {
+            Write-Falha 'SMB1 esta HABILITADO nesta maquina.'
+            Write-Info  'SMB1 e o protocolo explorado pelo WannaCry. Deve ser desligado.'
+            Write-Info  'Desligar: Painel de Controle > Programas > Ativar ou desativar recursos'
+            Write-Info  '          do Windows > desmarcar "Suporte a Compartilhamento de Arquivos SMB 1.0".'
+            Add-Alerta 'SMB1 habilitado - risco de seguranca conhecido. Desativar.'
+            return $true
+        }
+        Write-Ok 'SMB1 (protocolo antigo e inseguro): desabilitado, como deve ser.'
+    } catch { }
+    return $false
+}
+
+function Get-IPsLocais {
+    return @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+             Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' -and
+                            $_.PrefixOrigin -ne 'WellKnown' })
+}
+
+function Set-MaquinaServidor {
+    <#
+      Prepara a maquina para servir arquivos na rede do escritorio e cria os
+      compartilhamentos. Nao instala nada: usa o compartilhamento do proprio
+      Windows, que e o suficiente para o porte de um escritorio.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Configuraria esta maquina como servidor de arquivos da rede.'; return [long]0 }
+
+    Write-Titulo 'CONFIGURAR ESTA MAQUINA COMO SERVIDOR DE ARQUIVOS'
+    Write-Info 'Esta maquina passa a hospedar as pastas que os outros computadores acessam.'
+    Write-Info 'Ela precisa ficar LIGADA para os demais enxergarem os arquivos.'
+
+    # --- 1. Diagnostico inicial -----------------------------------------
+    Write-Etapa '1/7  Situacao atual'
+    $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+    Write-Info ("Nome desta maquina : " + $env:COMPUTERNAME)
+    if ($cs) {
+        if ($cs.PartOfDomain) {
+            Write-Aviso "Esta maquina esta no DOMINIO $($cs.Domain)."
+            Write-Info  'Num dominio quem manda sao as politicas de grupo (GPO). Ajustes locais'
+            Write-Info  'podem ser revertidos no proximo gpupdate. Fale com o administrador.'
+        } else {
+            Write-Info ("Grupo de trabalho  : " + $cs.Workgroup)
+        }
+    }
+    $ips = @(Get-IPsLocais)
+    foreach ($ip in $ips) {
+        $fixo = if ($ip.PrefixOrigin -eq 'Manual') { 'IP FIXO' } else { 'IP automatico (DHCP)' }
+        Write-Info ("Endereco IP        : $($ip.IPAddress)  ($fixo)")
+    }
+    Test-SMB1Perigoso | Out-Null
+
+    if ($SemInteracao) { Write-Aviso 'Modo desatendido: esta ferramenta precisa de interacao.'; return [long]0 }
+
+    # IP fixo importa: se o IP muda, as unidades mapeadas nos clientes quebram.
+    $temFixo = @($ips | Where-Object { $_.PrefixOrigin -eq 'Manual' }).Count -gt 0
+    if (-not $temFixo -and $ips.Count -gt 0) {
+        Write-Host ''
+        Write-Aviso 'O IP desta maquina e automatico (DHCP).'
+        Write-Info  'Servidor com IP que muda faz a unidade de rede dos outros PCs parar de'
+        Write-Info  'funcionar do nada. Recomendado: reservar o IP no roteador, ou fixar aqui.'
+        Write-Info  'Os clientes tambem podem se conectar pelo NOME da maquina, que nao muda -'
+        Write-Info  'e o que esta ferramenta configura por padrao.'
+    }
+
+    Write-Host ''
+    $ok = Read-Host '  Continuar e configurar esta maquina como servidor? (S/N)'
+    if ($ok -notmatch '^[Ss]') { Write-Info 'Cancelado. Nada foi alterado.'; return [long]0 }
+
+    # --- 2. Perfil de rede ----------------------------------------------
+    Write-Etapa '2/7  Perfil da rede'
+    Set-PerfilRedePrivado | Out-Null
+
+    # --- 3. Servicos ------------------------------------------------------
+    Write-Etapa '3/7  Servicos de rede'
+    Set-ServicosRede
+
+    # --- 4. Firewall ------------------------------------------------------
+    Write-Etapa '4/7  Firewall (somente no perfil Privado)'
+    Enable-RegrasFirewallRede -Grupo $script:GrupoFWCompartilhamento `
+        -RegexNome 'Compartilhamento de Arquivo e Impressora|File and Printer Sharing' `
+        -Rotulo 'Compartilhamento de arquivos e impressoras'
+    Enable-RegrasFirewallRede -Grupo $script:GrupoFWDescoberta `
+        -RegexNome 'Descoberta de Rede|Network Discovery' `
+        -Rotulo 'Descoberta de rede'
+    Write-Info 'As regras foram habilitadas SO no perfil Privado - em rede publica'
+    Write-Info '(hotel, aeroporto) a maquina continua fechada.'
+
+    # --- 5. Grupo de trabalho --------------------------------------------
+    Write-Etapa '5/7  Grupo de trabalho'
+    if ($cs -and -not $cs.PartOfDomain) {
+        Write-Info ("Atual: " + $cs.Workgroup)
+        Write-Info 'Todos os computadores do escritorio devem usar o MESMO grupo de trabalho.'
+        $novoWg = (Read-Host '  Grupo de trabalho (ENTER para manter)').Trim()
+        if ($novoWg -and $novoWg -ne $cs.Workgroup) {
+            if ($novoWg -notmatch '^[A-Za-z0-9\-]{1,15}$') {
+                Write-Aviso 'Nome invalido (use ate 15 letras/numeros, sem espaco). Mantido o atual.'
+            } else {
+                try {
+                    Add-Computer -WorkgroupName $novoWg -ErrorAction Stop
+                    Write-Ok "Grupo de trabalho alterado para $novoWg."
+                    Write-Aviso 'Precisa REINICIAR para o grupo de trabalho valer.'
+                    $script:precisaReiniciar = $true
+                } catch {
+                    Write-Falha "Nao foi possivel alterar: $($_.Exception.Message)"
+                }
+            }
+        }
+    }
+
+    # --- 6. Conta de acesso ----------------------------------------------
+    Write-Etapa '6/7  Como os outros computadores vao se autenticar'
+    Write-Host ''
+    Write-Host '     [1] Com usuario e senha (RECOMENDADO)' -ForegroundColor Green
+    Write-Host '         Cria uma conta so para a rede. A senha fica salva nos computadores' -ForegroundColor DarkGray
+    Write-Host '         do escritorio, entao ninguem digita nada no dia a dia - mas o acesso' -ForegroundColor DarkGray
+    Write-Host '         e identificado e pode ser revogado.' -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host '     [2] Sem senha (qualquer um na rede acessa)' -ForegroundColor Yellow
+    Write-Host '         Mais simples, porem QUALQUER dispositivo conectado a rede - inclusive' -ForegroundColor DarkGray
+    Write-Host '         visitante no Wi-Fi - le os arquivos. Em escritorio de advocacia isso' -ForegroundColor DarkGray
+    Write-Host '         significa processo sob sigilo exposto. Exige tambem afrouxar a' -ForegroundColor DarkGray
+    Write-Host '         seguranca do SMB nos clientes.' -ForegroundColor DarkGray
+    Write-Host ''
+    $modo = (Read-Host '  Opcao').Trim()
+
+    $usuarioRede = ''
+    if ($modo -eq '2') {
+        Write-Host ''
+        Write-Falha 'Voce escolheu acesso sem senha.'
+        Write-Info  'Confirme que a rede do escritorio e fechada (sem Wi-Fi de visitante).'
+        $c2 = Read-Host '  Tem certeza? (S/N)'
+        if ($c2 -notmatch '^[Ss]') { Write-Info 'Voltando para o modo com senha.'; $modo = '1' }
+    }
+
+    if ($modo -ne '2') {
+        $modo = '1'
+        Write-Host ''
+        Write-Info 'Nome da conta que os outros PCs usarao (ex.: rede, arquivos, escritorio).'
+        $usuarioRede = (Read-Host '  Nome do usuario [rede]').Trim()
+        if (-not $usuarioRede) { $usuarioRede = 'rede' }
+
+        $existe = Get-LocalUser -Name $usuarioRede -ErrorAction SilentlyContinue
+        if ($existe) {
+            Write-Ok "A conta '$usuarioRede' ja existe nesta maquina."
+            Write-Info 'A senha atual dela sera usada nos clientes.'
+        } else {
+            Write-Host ''
+            Write-Info "A conta '$usuarioRede' sera criada. Escolha uma senha."
+            Write-Info 'Anote: ela sera digitada uma vez em cada computador do escritorio.'
+            $senha1 = Read-Host '  Senha' -AsSecureString
+            $senha2 = Read-Host '  Repita a senha' -AsSecureString
+            $p1 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($senha1))
+            $p2 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($senha2))
+            if (-not $p1 -or $p1 -ne $p2) {
+                Write-Falha 'As senhas nao conferem (ou ficou em branco). Conta nao criada.'
+                Write-Info  'Rode a ferramenta de novo.'
+                return [long]0
+            }
+            try {
+                New-LocalUser -Name $usuarioRede -Password $senha1 -FullName 'Acesso a rede do escritorio' `
+                    -Description 'Conta usada pelos computadores para acessar as pastas compartilhadas' `
+                    -PasswordNeverExpires -UserMayNotChangePassword -ErrorAction Stop | Out-Null
+                Write-Ok "Conta '$usuarioRede' criada."
+                # Conta de rede nao deve aparecer na tela de login nem ser admin.
+                try {
+                    $regLogin = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList'
+                    if (-not (Test-Path $regLogin)) { New-Item -Path $regLogin -Force | Out-Null }
+                    Set-ItemProperty -Path $regLogin -Name $usuarioRede -Value 0 -Type DWord -Force
+                    Write-Ok 'Conta ocultada da tela de login (so serve para acesso pela rede).'
+                } catch { }
+            } catch {
+                Write-Falha "Nao foi possivel criar a conta: $($_.Exception.Message)"
+                Write-Info  'Se a senha foi recusada, a politica local exige senha mais forte.'
+                return [long]0
+            }
+        }
+    } else {
+        # Acesso anonimo: desliga o compartilhamento protegido por senha.
+        try {
+            Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'everyoneincludesanonymous' -Value 1 -Type DWord -Force
+            Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'LimitBlankPasswordUse' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' -Name 'RestrictNullSessAccess' -Value 0 -Type DWord -Force
+            Write-Ok 'Compartilhamento protegido por senha DESLIGADO nesta maquina.'
+            Add-Alerta 'Compartilhamento sem senha ativado - qualquer dispositivo na rede acessa as pastas.'
+        } catch {
+            Write-Aviso "Nao foi possivel liberar o acesso sem senha: $($_.Exception.Message)"
+        }
+    }
+
+    # --- 7. Compartilhar a pasta -----------------------------------------
+    Write-Etapa '7/7  Pasta compartilhada'
+
+    # Pasta padrao: fica no disco de dados com mais espaco livre. Documento de
+    # escritorio so cresce, e deixar fora do C: facilita reinstalar o Windows
+    # sem perder nada. Se so existe o C:, usa ele mesmo.
+    $pastaPadrao = 'C:\Compartilhado'
+    try {
+        $melhor = @(Get-Volume -ErrorAction SilentlyContinue |
+                    Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter -and
+                                   $_.DriveLetter -ne 'C' -and $_.SizeRemaining -gt 5GB } |
+                    Sort-Object SizeRemaining -Descending | Select-Object -First 1)
+        if ($melhor) { $pastaPadrao = "$($melhor.DriveLetter):\Compartilhado" }
+    } catch { }
+
+    Write-Host ''
+    Write-Info 'Pasta que sera compartilhada com o escritorio.'
+    Write-Info ("Sugestao: $pastaPadrao")
+    Write-Info '(ENTER aceita a sugestao; ou digite outro caminho, ex.: D:\Documentos)'
+    $pasta = (Read-Host "  Pasta [$pastaPadrao]").Trim().Trim('"')
+    if (-not $pasta) { $pasta = $pastaPadrao }
+
+    # Compartilhar raiz de disco expoe o Windows inteiro.
+    if ($pasta -match '^[A-Za-z]:\\?$') {
+        Write-Falha 'Nao compartilhe a raiz de um disco (C:\, D:\...).'
+        Write-Info  'Isso expoe o Windows inteiro na rede. Crie uma pasta especifica.'
+        return [long]0
+    }
+    if ($pasta -match '(?i)^C:\\(Windows|Program Files|Users)\\?$') {
+        Write-Falha 'Esta pasta e do sistema e nao deve ser compartilhada.'
+        return [long]0
+    }
+
+    if (-not (Test-Path -LiteralPath $pasta)) {
+        Write-Info "A pasta $pasta ainda nao existe."
+        $cr = Read-Host '  Criar agora? (S/N) [S]'
+        if (-not $cr -or $cr -match '^[Ss]') {
+            try { New-Item -ItemType Directory -Path $pasta -Force -ErrorAction Stop | Out-Null; Write-Ok "Pasta criada: $pasta" }
+            catch { Write-Falha "Nao foi possivel criar: $($_.Exception.Message)"; return [long]0 }
+        } else { Write-Info 'Cancelado.'; return [long]0 }
+    } else {
+        Write-Ok "Pasta encontrada: $pasta"
+    }
+
+    # Nome na rede: por padrao o proprio nome da pasta, que e o que o pessoal
+    # do escritorio ja reconhece.
+    $nomePadrao = Split-Path $pasta -Leaf
+    if (-not $nomePadrao -or $nomePadrao -match '[\\/\[\]:|<>+=;,?*"]') { $nomePadrao = 'Compartilhado' }
+    $nomeCompart = (Read-Host "  Nome que aparecera na rede [$nomePadrao]").Trim()
+    if (-not $nomeCompart) { $nomeCompart = $nomePadrao }
+    if ($nomeCompart -match '[\\/\[\]:|<>+=;,?*"]') {
+        Write-Falha 'Nome de compartilhamento invalido.'
+        return [long]0
+    }
+
+    Write-Host ''
+    Write-Host '     [1] Leitura e gravacao (o escritorio edita os arquivos)' -ForegroundColor White
+    Write-Host '     [2] Somente leitura (ninguem altera nada pela rede)' -ForegroundColor White
+    $perm = (Read-Host '  Opcao [1]').Trim()
+    $somenteLeitura = ($perm -eq '2')
+
+    $jaExiste = Get-SmbShare -Name $nomeCompart -ErrorAction SilentlyContinue
+    if ($jaExiste) {
+        Write-Aviso "Ja existe um compartilhamento chamado '$nomeCompart' apontando para:"
+        Write-Info  ("   " + $jaExiste.Path)
+        $sub = Read-Host '  Substituir? (S/N)'
+        if ($sub -match '^[Ss]') {
+            try { Remove-SmbShare -Name $nomeCompart -Force -ErrorAction Stop; Write-Ok 'Compartilhamento anterior removido.' }
+            catch { Write-Falha "Nao foi possivel remover: $($_.Exception.Message)"; return [long]0 }
+        } else { Write-Info 'Cancelado.'; return [long]0 }
+    }
+
+    # Nome dos grupos internos muda com o idioma do Windows (Administradores x
+    # Administrators, Todos x Everyone). Resolver pelo SID, que e' fixo.
+    function Resolve-NomePorSID {
+        param([string]$SID)
+        try {
+            return (New-Object System.Security.Principal.SecurityIdentifier($SID)).Translate(
+                    [System.Security.Principal.NTAccount]).Value
+        } catch { return $null }
+    }
+    $grpAdmin = Resolve-NomePorSID 'S-1-5-32-544'   # Administradores
+    $grpTodos = Resolve-NomePorSID 'S-1-1-0'        # Todos / Everyone
+
+    try {
+        if ($modo -eq '2') {
+            # Sem senha: acesso para todos (inclusive convidado).
+            $quemShare = if ($grpTodos) { $grpTodos } else { 'Everyone' }
+            if ($somenteLeitura) { New-SmbShare -Name $nomeCompart -Path $pasta -ReadAccess $quemShare -ErrorAction Stop | Out-Null }
+            else { New-SmbShare -Name $nomeCompart -Path $pasta -ChangeAccess $quemShare -ErrorAction Stop | Out-Null }
+        } else {
+            # Com senha: a conta de rede acessa; administradores mantem controle.
+            $param = @{ Name = $nomeCompart; Path = $pasta; ErrorAction = 'Stop' }
+            if ($somenteLeitura) { $param['ReadAccess'] = $usuarioRede } else { $param['ChangeAccess'] = $usuarioRede }
+            if ($grpAdmin) { $param['FullAccess'] = $grpAdmin }
+            New-SmbShare @param | Out-Null
+        }
+        Write-Ok "Compartilhamento '$nomeCompart' criado."
+    } catch {
+        Write-Falha "Nao foi possivel compartilhar: $($_.Exception.Message)"
+        return [long]0
+    }
+
+    # Permissao NTFS: o Windows aplica a mais restritiva entre share e NTFS,
+    # entao sem isso o acesso e negado mesmo com o compartilhamento liberado.
+    try {
+        $direito = if ($somenteLeitura) { 'ReadAndExecute' } else { 'Modify' }
+        $candidatos = if ($modo -eq '2') {
+            @($grpTodos, 'Everyone', 'Todos') | Where-Object { $_ }
+        } else {
+            @("$env:COMPUTERNAME\$usuarioRede", $usuarioRede)
+        }
+        $aplicado = $false
+        foreach ($nome in $candidatos) {
+            try {
+                $acl = Get-Acl -LiteralPath $pasta
+                $regra = New-Object System.Security.AccessControl.FileSystemAccessRule(
+                    $nome, $direito, 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+                $acl.AddAccessRule($regra)
+                Set-Acl -LiteralPath $pasta -AclObject $acl -ErrorAction Stop
+                Write-Ok "Permissao da pasta ajustada: $direito para $nome."
+                $aplicado = $true
+                break
+            } catch { }
+        }
+        if (-not $aplicado) {
+            Write-Aviso 'Compartilhamento criado, mas a permissao da pasta nao pode ser ajustada.'
+            Write-Info  'Ajuste a mao: botao direito na pasta > Propriedades > Seguranca.'
+        }
+    } catch {
+        Write-Aviso "Permissao da pasta: $($_.Exception.Message)"
+    }
+
+    # --- Instrucoes para os clientes -------------------------------------
+    Write-Host ''
+    Write-Titulo 'PRONTO - COMO CONECTAR OS OUTROS COMPUTADORES'
+    $caminhoRede = "\\$env:COMPUTERNAME\$nomeCompart"
+    Write-Dest ("Caminho da rede : " + $caminhoRede)
+    foreach ($ip in @(Get-IPsLocais)) {
+        Write-Info ("Ou pelo IP      : \\$($ip.IPAddress)\$nomeCompart")
+    }
+    if ($modo -ne '2') {
+        Write-Info ("Usuario         : " + $usuarioRede)
+        Write-Info  'Senha           : a que voce acabou de definir'
+    } else {
+        Write-Info  'Sem usuario e senha (acesso liberado na rede)'
+    }
+    Write-Host ''
+    Write-Info 'Em cada computador do escritorio, rode este mesmo menu e escolha'
+    Write-Info '"Conectar a Rede/Servidor" - ele pergunta esse caminho e ja deixa a'
+    Write-Info 'unidade de rede fixa, com a senha salva.'
+    Write-Host ''
+    Write-Aviso 'Esta maquina precisa ficar LIGADA para os outros acessarem os arquivos.'
+    Write-Info  'E backup: compartilhar pasta nao e backup. Os arquivos continuam num disco so.'
+    Add-Alerta "Servidor de arquivos configurado: $caminhoRede"
+    return [long]0
+}
+
+function Set-MaquinaClienteRede {
+    <#
+      Prepara um computador do escritorio para enxergar e usar o servidor:
+      perfil de rede, servicos, firewall, grupo de trabalho e a unidade de
+      rede fixa com a credencial salva.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Configuraria esta maquina para acessar o servidor de arquivos.'; return [long]0 }
+
+    Write-Titulo 'CONECTAR ESTA MAQUINA A REDE DO ESCRITORIO'
+
+    Write-Etapa '1/5  Perfil da rede'
+    Set-PerfilRedePrivado | Out-Null
+
+    Write-Etapa '2/5  Servicos de rede'
+    Set-ServicosRede
+
+    Write-Etapa '3/5  Firewall (somente no perfil Privado)'
+    Enable-RegrasFirewallRede -Grupo $script:GrupoFWDescoberta `
+        -RegexNome 'Descoberta de Rede|Network Discovery' -Rotulo 'Descoberta de rede'
+    Enable-RegrasFirewallRede -Grupo $script:GrupoFWCompartilhamento `
+        -RegexNome 'Compartilhamento de Arquivo e Impressora|File and Printer Sharing' `
+        -Rotulo 'Compartilhamento de arquivos e impressoras'
+
+    Test-SMB1Perigoso | Out-Null
+
+    if ($SemInteracao) { Write-Aviso 'Modo desatendido: o resto desta ferramenta precisa de interacao.'; return [long]0 }
+
+    # --- Grupo de trabalho ---
+    Write-Etapa '4/5  Grupo de trabalho'
+    $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+    if ($cs -and $cs.PartOfDomain) {
+        Write-Info "Maquina em dominio ($($cs.Domain)) - grupo de trabalho nao se aplica."
+    } elseif ($cs) {
+        Write-Info ("Atual: " + $cs.Workgroup + "   (deve ser igual ao do servidor)")
+        $wg = (Read-Host '  Grupo de trabalho (ENTER para manter)').Trim()
+        if ($wg -and $wg -ne $cs.Workgroup) {
+            if ($wg -notmatch '^[A-Za-z0-9\-]{1,15}$') {
+                Write-Aviso 'Nome invalido. Mantido o atual.'
+            } else {
+                try {
+                    Add-Computer -WorkgroupName $wg -ErrorAction Stop
+                    Write-Ok "Grupo de trabalho alterado para $wg."
+                    Write-Aviso 'Precisa REINICIAR para valer.'
+                    $script:precisaReiniciar = $true
+                } catch { Write-Falha "Nao foi possivel alterar: $($_.Exception.Message)" }
+            }
+        }
+    }
+
+    # --- Unidade de rede ---
+    Write-Etapa '5/5  Unidade de rede'
+    Write-Host ''
+    Write-Info 'Informe o caminho do servidor, como ele apareceu no final da configuracao.'
+    Write-Info 'Ex.: \\SERVIDOR\Documentos   ou   \\192.168.0.10\Documentos'
+    $caminho = (Read-Host '  Caminho (ENTER para pular)').Trim().Trim('"')
+    if (-not $caminho) { Write-Info 'Unidade de rede nao configurada. O resto ja esta pronto.'; return [long]0 }
+
+    if ($caminho -notmatch '^\\\\[^\\]+\\[^\\]+') {
+        Write-Falha 'Caminho invalido. Use o formato \\NOME\Pasta'
+        return [long]0
+    }
+
+    $servidor = ($caminho -split '\\')[2]
+    Write-Etapa "Testando o servidor $servidor ..."
+    $alcancou = $false
+    try {
+        $t = Test-NetConnection -ComputerName $servidor -Port 445 -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
+        if ($t -and $t.TcpTestSucceeded) { Write-Ok "Servidor $servidor respondeu na porta de compartilhamento (445)."; $alcancou = $true }
+        else {
+            Write-Falha "Nao consegui falar com $servidor na porta 445."
+            Write-Info  'Verifique: o servidor esta ligado? Esta na mesma rede? O firewall dele foi liberado?'
+            Write-Info  'Rode a opcao de configurar servidor naquela maquina antes desta etapa.'
+        }
+    } catch { Write-Aviso 'Nao foi possivel testar a conexao.' }
+
+    if (-not $alcancou) {
+        $ir = Read-Host '  Tentar mapear mesmo assim? (S/N)'
+        if ($ir -notmatch '^[Ss]') { Write-Info 'Cancelado.'; return [long]0 }
+    }
+
+    # Credencial
+    Write-Host ''
+    Write-Info 'Usuario e senha criados no servidor (ex.: rede).'
+    Write-Info 'Deixe o usuario em branco se o servidor foi configurado sem senha.'
+    $usu = (Read-Host '  Usuario').Trim()
+    $temCred = $false
+    if ($usu) {
+        $pw = Read-Host '  Senha' -AsSecureString
+        $pwTexto = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pw))
+        # Salva no Gerenciador de Credenciais do Windows: reconecta sozinho
+        # depois de reiniciar, sem pedir senha ao advogado.
+        $alvo = if ($usu -match '\\') { $usu } else { "$servidor\$usu" }
+        try {
+            & cmdkey.exe /add:$servidor /user:$alvo /pass:$pwTexto | Out-Null
+            Write-Ok 'Credencial salva no Gerenciador de Credenciais do Windows.'
+            $temCred = $true
+        } catch { Write-Aviso 'Nao foi possivel salvar a credencial.' }
+    }
+
+    # Letra da unidade
+    $usadas = @(Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+    $sugerida = @('Z','Y','X','W','V','U','T','S','R','Q','P') | Where-Object { $usadas -notcontains $_ } | Select-Object -First 1
+    Write-Host ''
+    Write-Info ("Letras em uso: " + ($usadas -join ', '))
+    $letra = (Read-Host "  Letra para a unidade de rede [$sugerida]").Trim().TrimEnd(':').ToUpper()
+    if (-not $letra) { $letra = $sugerida }
+    if ($letra -notmatch '^[D-Z]$') { Write-Falha 'Letra invalida.'; return [long]0 }
+    if ($usadas -contains $letra) {
+        Write-Aviso "A letra $letra ja esta em uso."
+        $sub = Read-Host '  Substituir? (S/N)'
+        if ($sub -match '^[Ss]') {
+            & net use "${letra}:" /delete /y 2>&1 | Out-Null
+        } else { Write-Info 'Cancelado.'; return [long]0 }
+    }
+
+    # /persistent:yes reconecta ao ligar o computador
+    try {
+        $saida = if ($temCred) {
+            & net use "${letra}:" $caminho /persistent:yes 2>&1
+        } else {
+            & net use "${letra}:" $caminho /persistent:yes 2>&1
+        }
+        if ($LASTEXITCODE -eq 0) {
+            Write-Ok "Unidade ${letra}: conectada a $caminho"
+            Write-Info 'Ela reconecta sozinha toda vez que o computador ligar.'
+            try { Start-Process 'explorer.exe' -ArgumentList "${letra}:\" -ErrorAction SilentlyContinue } catch { }
+        } else {
+            Write-Falha 'Nao foi possivel mapear a unidade.'
+            foreach ($l in @($saida)) { if ($l.ToString().Trim()) { Write-Info ("   " + $l) } }
+            Write-Info 'Causas comuns: usuario/senha errados, servidor desligado, ou o nome'
+            Write-Info 'do compartilhamento diferente do que foi criado no servidor.'
+        }
+    } catch {
+        Write-Falha "Erro ao mapear: $($_.Exception.Message)"
+    }
+
+    Write-Host ''
+    Write-Info 'Para conferir depois: abra o Explorer e veja a unidade na lateral,'
+    Write-Info 'ou use a opcao de diagnostico de rede deste menu.'
+    return [long]0
+}
+
+function Test-RedeCompartilhamento {
+    <#
+      Diagnostico somente-leitura de compartilhamento. Percorre as causas que
+      derrubam rede de escritorio, na ordem em que costumam acontecer.
+    #>
+    Write-Titulo 'DIAGNOSTICO DA REDE DE COMPARTILHAMENTO'
+
+    $problemas = [System.Collections.Generic.List[string]]::new()
+
+    # 1. Identificacao
+    Write-Etapa '1/8  Identificacao da maquina'
+    $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+    Write-Info ("Nome        : " + $env:COMPUTERNAME)
+    if ($cs) {
+        if ($cs.PartOfDomain) { Write-Info ("Dominio     : " + $cs.Domain) }
+        else { Write-Info ("Grupo trab. : " + $cs.Workgroup) }
+    }
+    foreach ($ip in @(Get-IPsLocais)) {
+        $orig = if ($ip.PrefixOrigin -eq 'Manual') { 'fixo' } else { 'DHCP' }
+        Write-Info ("IP          : $($ip.IPAddress)  ($orig, $($ip.InterfaceAlias))")
+    }
+
+    # 2. Perfil de rede
+    Write-Etapa '2/8  Perfil da rede'
+    foreach ($p in @(Get-NetConnectionProfile -ErrorAction SilentlyContinue)) {
+        if ($p.NetworkCategory -eq 'Public') {
+            Write-Falha "Rede '$($p.Name)': PUBLICA - bloqueia descoberta e compartilhamento."
+            $problemas.Add('Perfil de rede publico (mudar para privado)')
+        } else {
+            Write-Ok "Rede '$($p.Name)': $($p.NetworkCategory)"
+        }
+    }
+
+    # 3. Servicos
+    Write-Etapa '3/8  Servicos'
+    foreach ($s in @('LanmanServer','LanmanWorkstation','FDResPub','fdPHost')) {
+        $sv = Get-Service -Name $s -ErrorAction SilentlyContinue
+        if (-not $sv) { continue }
+        if ($sv.Status -ne 'Running') {
+            Write-Falha "$s : $($sv.Status) (deveria estar rodando)"
+            $problemas.Add("Servico $s parado")
+        } else {
+            Write-Ok "$s : em execucao ($($sv.StartType))"
+        }
+    }
+
+    # 4. Firewall
+    Write-Etapa '4/8  Firewall'
+    foreach ($g in @(@{ G = $script:GrupoFWCompartilhamento; N = 'Compartilhamento de arquivos' },
+                     @{ G = $script:GrupoFWDescoberta;       N = 'Descoberta de rede' })) {
+        $regras = @(Get-NetFirewallRule -Group $g.G -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Profile -match 'Private|Any' })
+        $on = @($regras | Where-Object { $_.Enabled -eq 'True' }).Count
+        if ($regras.Count -gt 0 -and $on -eq 0) {
+            Write-Falha "$($g.N): bloqueado pelo firewall no perfil privado."
+            $problemas.Add("Firewall bloqueando: $($g.N)")
+        } else {
+            Write-Ok "$($g.N): $on regra(s) ativa(s) no perfil privado."
+        }
+    }
+
+    # 5. SMB
+    Write-Etapa '5/8  Protocolo SMB'
+    Test-SMB1Perigoso | Out-Null
+    try {
+        $srv = Get-SmbServerConfiguration -ErrorAction SilentlyContinue
+        if ($srv) {
+            if (-not $srv.EnableSMB2Protocol) {
+                Write-Falha 'SMB2/SMB3 desabilitado - compartilhamento moderno nao funciona.'
+                $problemas.Add('SMB2/SMB3 desabilitado')
+            } else { Write-Ok 'SMB2/SMB3: habilitado.' }
+        }
+        $cli = Get-SmbClientConfiguration -ErrorAction SilentlyContinue
+        if ($cli -and $cli.EnableInsecureGuestLogons) {
+            Write-Aviso 'Logon de convidado inseguro esta PERMITIDO neste cliente.'
+            Write-Info  'Necessario para alguns NAS e para compartilhamento sem senha,'
+            Write-Info  'mas deixa a conexao sem assinatura (sujeita a interceptacao).'
+        }
+    } catch { }
+
+    # 6. Compartilhamentos locais
+    Write-Etapa '6/8  Pastas compartilhadas nesta maquina'
+    $shares = @(Get-SmbShare -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '\$$' })
+    if ($shares.Count -eq 0) {
+        Write-Info 'Nenhuma pasta compartilhada (esta maquina nao e servidor de arquivos).'
+    } else {
+        foreach ($sh in $shares) {
+            Write-Ok ("\\$env:COMPUTERNAME\$($sh.Name)  ->  $($sh.Path)")
+            try {
+                foreach ($a in @(Get-SmbShareAccess -Name $sh.Name -ErrorAction SilentlyContinue)) {
+                    Write-Info ("     $($a.AccountName): $($a.AccessRight) ($($a.AccessControlType))")
+                    if ($a.AccountName -match '(?i)^(Everyone|Todos)$' -and $a.AccessRight -eq 'Full') {
+                        $problemas.Add("Compartilhamento '$($sh.Name)' com acesso total para Todos")
+                    }
+                }
+            } catch { }
+            if (-not (Test-Path -LiteralPath $sh.Path)) {
+                Write-Falha "   A pasta de origem nao existe mais: $($sh.Path)"
+                $problemas.Add("Compartilhamento '$($sh.Name)' aponta para pasta inexistente")
+            }
+        }
+    }
+
+    # 7. Unidades de rede
+    Write-Etapa '7/8  Unidades de rede mapeadas'
+    $mapeadas = @(Get-CimInstance Win32_NetworkConnection -ErrorAction SilentlyContinue)
+    if ($mapeadas.Count -eq 0) {
+        Write-Info 'Nenhuma unidade de rede mapeada nesta maquina.'
+    } else {
+        foreach ($m in $mapeadas) {
+            $estado = if ($m.ConnectionState -eq 'Connected') { 'conectada' } else { $m.ConnectionState }
+            if ($m.ConnectionState -eq 'Connected') {
+                Write-Ok ("$($m.LocalName)  ->  $($m.RemoteName)   ($estado)")
+            } else {
+                Write-Falha ("$($m.LocalName)  ->  $($m.RemoteName)   ($estado)")
+                $problemas.Add("Unidade $($m.LocalName) desconectada")
+            }
+        }
+    }
+
+    # 8. Teste de alcance
+    Write-Etapa '8/8  Teste de conexao com o servidor'
+    if (-not $SemInteracao) {
+        Write-Info 'Informe o nome ou IP do servidor para testar (ENTER para pular).'
+        $alvo = (Read-Host '  Servidor').Trim().TrimStart('\')
+        if ($alvo) {
+            $alvo = ($alvo -split '\\')[0]
+            $pingOk = Test-Connection -ComputerName $alvo -Count 2 -Quiet -ErrorAction SilentlyContinue
+            if ($pingOk) { Write-Ok "$alvo responde ao ping." }
+            else { Write-Aviso "$alvo nao responde ao ping (pode ser so o firewall dele bloqueando ICMP)." }
+
+            try {
+                $t = Test-NetConnection -ComputerName $alvo -Port 445 -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
+                if ($t -and $t.TcpTestSucceeded) {
+                    Write-Ok "Porta 445 (compartilhamento) aberta em $alvo."
+                    try {
+                        $lista = & net view "\\$alvo" 2>&1
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Ok 'Pastas compartilhadas visiveis:'
+                            foreach ($l in @($lista)) { if ($l -match '\S' -and $l -notmatch 'comando|command') { Write-Info ("   " + $l) } }
+                        } else {
+                            Write-Aviso 'Servidor alcancado, mas nao foi possivel listar as pastas.'
+                            Write-Info  'Normalmente e credencial: usuario/senha errados ou nao salvos.'
+                            $problemas.Add("Sem credencial valida para $alvo")
+                        }
+                    } catch { }
+                } else {
+                    Write-Falha "Porta 445 fechada ou inalcancavel em $alvo."
+                    Write-Info  'O servidor pode estar desligado, em outra rede, ou com o firewall fechado.'
+                    $problemas.Add("Servidor $alvo inalcancavel na porta 445")
+                }
+            } catch { Write-Aviso 'Nao foi possivel testar a porta 445.' }
+        }
+    }
+
+    # --- Conclusao ---
+    Write-Host ''
+    if ($problemas.Count -eq 0) {
+        Write-Ok 'Nenhum problema encontrado na configuracao de rede desta maquina.'
+    } else {
+        Write-Falha "$($problemas.Count) ponto(s) a corrigir:"
+        foreach ($p in $problemas) { Write-Info ("   - " + $p) }
+        Write-Host ''
+        Write-Info 'Para corrigir: use "Configurar Servidor de Arquivos" na maquina que'
+        Write-Info 'guarda os documentos, e "Conectar a Rede/Servidor" nas demais.'
+        foreach ($p in $problemas) { Add-Alerta ("Rede: " + $p) }
+    }
+    return [long]0
+}
+
 function Remove-PastaAnyDesk {
     param(
         [ValidateSet('Completo', 'SomenteLogs')][string]$Modo = 'SomenteLogs',
@@ -10508,6 +11267,9 @@ if ($Ferramenta) {
             'dll'           { Repair-DLLFaltando | Out-Null }
             'atendimento'   { New-RelatorioAtendimento | Out-Null }
             'desfazer'      { Undo-UltimaManutencao | Out-Null }
+            'servidor'      { Set-MaquinaServidor | Out-Null }
+            'clienterede'   { Set-MaquinaClienteRede | Out-Null }
+            'diagrede'      { Test-RedeCompartilhamento | Out-Null }
             'memoriaram'    { Test-MemoriaRAM | Out-Null }
             'reparoavancado' { Repair-SistemaAvancado | Out-Null }
             'bsod'          { Show-AnaliseBSOD | Out-Null }
@@ -10634,7 +11396,7 @@ if ($Ferramenta) {
     }
     Write-Host ''
     # Ferramentas somente-leitura nao deixam log salvo.
-    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento')) {
+    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede')) {
         Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
     }
     Write-Host ('=' * 68) -ForegroundColor Green
@@ -10642,7 +11404,7 @@ if ($Ferramenta) {
     # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
     if ($chave -in @('diagnostico', 'bsod')) { Publicar-RelatorioTemp -RemoverPastaLog }
     # protecaovirus/consoles: so abriram telas; nao deixam pasta de log.
-    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento')) {
+    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede')) {
         Remove-Item -LiteralPath (Join-Path $script:pastaExec 'manutencao.log') -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 200
         if ($script:pastaExec -and (Test-Path -LiteralPath $script:pastaExec)) {
