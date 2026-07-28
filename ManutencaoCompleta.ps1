@@ -10282,6 +10282,287 @@ function Test-RedeCompartilhamento {
     return [long]0
 }
 
+function Remove-ConfiguracaoRede {
+    <#
+      Tira a maquina da rede de compartilhamento: para de compartilhar pastas,
+      desconecta unidades, apaga credenciais salvas e pode remover a conta de
+      acesso criada pela ferramenta de servidor.
+
+      NAO APAGA ARQUIVO NENHUM. Parar de compartilhar so remove o "atalho" que
+      a rede enxerga; a pasta e o conteudo continuam no disco, intactos.
+
+      Os compartilhamentos administrativos (C$, ADMIN$, IPC$) NAO sao tocados:
+      sao padrao do Windows, o proprio sistema recria, e remove-los quebra
+      administracao remota.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Listaria e removeria as configuracoes de rede desta maquina.'; return [long]0 }
+
+    Write-Titulo 'DESFAZER A CONFIGURACAO DE REDE DESTA MAQUINA'
+    Write-Info 'Use quando o computador sai do escritorio, e vendido, ou quando a rede'
+    Write-Info 'precisa ser refeita do zero.'
+    Write-Host ''
+    Write-Ok 'NENHUM ARQUIVO E APAGADO. Parar de compartilhar nao mexe no conteudo'
+    Write-Ok 'das pastas - elas continuam no disco exatamente como estao.'
+
+    # --- Levantamento ----------------------------------------------------
+    Write-Etapa '1/2  O que existe hoje nesta maquina'
+
+    $shares = @(Get-SmbShare -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '\$$' })
+    Write-Host ''
+    Write-Dest 'Pastas compartilhadas:'
+    if ($shares.Count -eq 0) { Write-Info '   nenhuma' }
+    else { foreach ($s in $shares) { Write-Info ("   \\$env:COMPUTERNAME\$($s.Name)  ->  $($s.Path)") } }
+
+    $mapeadas = @(Get-CimInstance Win32_NetworkConnection -ErrorAction SilentlyContinue)
+    Write-Dest 'Unidades de rede mapeadas:'
+    if ($mapeadas.Count -eq 0) { Write-Info '   nenhuma' }
+    else { foreach ($m in $mapeadas) { Write-Info ("   $($m.LocalName)  ->  $($m.RemoteName)") } }
+
+    # Credenciais de rede salvas.
+    # CUIDADO: o cofre do Windows guarda de tudo - token do GitHub, conta
+    # Microsoft, licenca de aplicativo. Apagar por engano quebra outras coisas.
+    # Credencial de compartilhamento e SEMPRE do tipo 'Domain:target=' ("Senha
+    # do dominio"); aplicativo e site usam 'LegacyGeneric:' ou 'WindowsLive:'.
+    # Por isso so aceitamos Domain:target= e ainda conferimos se o alvo parece
+    # nome de maquina ou IP.
+    $creds = [System.Collections.Generic.List[string]]::new()
+    try {
+        $saida = & cmdkey.exe /list 2>&1
+        foreach ($l in @($saida)) {
+            $t = $l.ToString()
+            if ($t -match '(?i)(Destino|Target):\s*Domain:target=(.+)$') {
+                $alvo = $Matches[2].Trim()
+                # nome de maquina (NetBIOS/DNS) ou IP - nada de espaco, barra ou esquema
+                if ($alvo -match '^[A-Za-z0-9][A-Za-z0-9\.\-_]{0,62}$') {
+                    if (-not $creds.Contains($alvo)) { [void]$creds.Add($alvo) }
+                }
+            }
+        }
+    } catch { }
+    Write-Dest 'Credenciais de rede salvas:'
+    if ($creds.Count -eq 0) { Write-Info '   nenhuma' }
+    else { foreach ($c in $creds) { Write-Info ("   $c") } }
+
+    # Contas locais que parecem ter sido criadas para a rede
+    $contasRede = @(Get-LocalUser -ErrorAction SilentlyContinue |
+        Where-Object { $_.Description -match 'pastas compartilhadas|acesso a rede' -or
+                       $_.FullName -match 'Acesso a rede' })
+    Write-Dest 'Contas de acesso a rede (criadas por esta ferramenta):'
+    if ($contasRede.Count -eq 0) { Write-Info '   nenhuma' }
+    else { foreach ($u in $contasRede) { Write-Info ("   $($u.Name)   habilitada: $($u.Enabled)") } }
+
+    # Perfil e senha
+    $perfis = @(Get-NetConnectionProfile -ErrorAction SilentlyContinue)
+    Write-Dest 'Perfil da rede:'
+    foreach ($p in $perfis) { Write-Info ("   $($p.Name) ($($p.InterfaceAlias)): $($p.NetworkCategory)") }
+
+    $semSenha = $false
+    try {
+        $v = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'everyoneincludesanonymous' -ErrorAction SilentlyContinue).everyoneincludesanonymous
+        if ($v -eq 1) { $semSenha = $true }
+    } catch { }
+    if ($semSenha) {
+        Write-Aviso 'Compartilhamento SEM SENHA esta ativo nesta maquina.'
+    }
+
+    $temAlgo = ($shares.Count + $mapeadas.Count + $creds.Count + $contasRede.Count) -gt 0 -or $semSenha
+    if (-not $temAlgo) {
+        Write-Host ''
+        Write-Ok 'Esta maquina nao tem configuracao de rede de compartilhamento para desfazer.'
+        return [long]0
+    }
+
+    if ($SemInteracao) { Write-Aviso 'Modo desatendido: esta ferramenta precisa de confirmacao.'; return [long]0 }
+
+    # --- O que desfazer ---------------------------------------------------
+    Write-Etapa '2/2  O que voce quer desfazer'
+    Write-Host ''
+    Write-Host '     [1] TUDO - tirar a maquina da rede por completo' -ForegroundColor White
+    Write-Host '     [2] So parar de compartilhar as pastas (deixa de ser servidor)' -ForegroundColor White
+    Write-Host '     [3] So desconectar as unidades de rede (deixa de acessar o servidor)' -ForegroundColor White
+    Write-Host '     [4] So apagar as credenciais salvas' -ForegroundColor White
+    Write-Host '     [0] Cancelar' -ForegroundColor DarkGray
+    Write-Host ''
+    $opc = (Read-Host '  Opcao').Trim()
+    if ($opc -eq '0' -or -not $opc) { Write-Info 'Cancelado. Nada foi alterado.'; return [long]0 }
+    if ($opc -notin @('1','2','3','4')) { Write-Aviso 'Opcao invalida.'; return [long]0 }
+
+    $tudo = ($opc -eq '1')
+    $feito = [System.Collections.Generic.List[string]]::new()
+
+    # --- Parar de compartilhar -------------------------------------------
+    if (($tudo -or $opc -eq '2') -and $shares.Count -gt 0) {
+        Write-Host ''
+        Write-Etapa 'Parando de compartilhar as pastas'
+        Write-Info 'Lembrando: os arquivos NAO sao apagados, so deixam de aparecer na rede.'
+        $c = Read-Host '  Confirma? (S/N)'
+        if ($c -match '^[Ss]') {
+            foreach ($s in $shares) {
+                try {
+                    Remove-SmbShare -Name $s.Name -Force -ErrorAction Stop
+                    Write-Ok "Deixou de ser compartilhada: $($s.Name)  (pasta $($s.Path) intacta)"
+                    $feito.Add("compartilhamento '$($s.Name)' removido")
+                } catch {
+                    Write-Falha "Nao foi possivel remover '$($s.Name)': $($_.Exception.Message)"
+                }
+            }
+        } else { Write-Info 'Compartilhamentos mantidos.' }
+    }
+
+    # --- Desconectar unidades --------------------------------------------
+    if (($tudo -or $opc -eq '3') -and $mapeadas.Count -gt 0) {
+        Write-Host ''
+        Write-Etapa 'Desconectando as unidades de rede'
+        $c = Read-Host '  Confirma? (S/N)'
+        if ($c -match '^[Ss]') {
+            foreach ($m in $mapeadas) {
+                try {
+                    & net use $m.LocalName /delete /y 2>&1 | Out-Null
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Ok "Unidade $($m.LocalName) desconectada ($($m.RemoteName))."
+                        $feito.Add("unidade $($m.LocalName) desconectada")
+                    } else {
+                        Write-Aviso "Nao foi possivel desconectar $($m.LocalName) - pode estar em uso."
+                        Write-Info  'Feche o Explorer e os programas que usam essa unidade e tente de novo.'
+                    }
+                } catch { Write-Aviso "Erro em $($m.LocalName): $($_.Exception.Message)" }
+            }
+        } else { Write-Info 'Unidades mantidas.' }
+    }
+
+    # --- Credenciais ------------------------------------------------------
+    if (($tudo -or $opc -eq '4') -and $creds.Count -gt 0) {
+        Write-Host ''
+        Write-Etapa 'Apagando as credenciais de rede salvas'
+        Write-Info 'Depois disso o Windows volta a pedir usuario e senha ao acessar o servidor.'
+        $c = Read-Host '  Confirma? (S/N)'
+        if ($c -match '^[Ss]') {
+            foreach ($alvo in $creds) {
+                try {
+                    & cmdkey.exe /delete:$alvo 2>&1 | Out-Null
+                    Write-Ok "Credencial removida: $alvo"
+                    $feito.Add("credencial de $alvo apagada")
+                } catch { Write-Aviso "Nao foi possivel remover a credencial de $alvo." }
+            }
+        } else { Write-Info 'Credenciais mantidas.' }
+    }
+
+    # --- Daqui para baixo, so no modo TUDO -------------------------------
+    if ($tudo) {
+
+        # Conta de acesso
+        if ($contasRede.Count -gt 0) {
+            Write-Host ''
+            Write-Etapa 'Conta de acesso a rede'
+            foreach ($u in $contasRede) {
+                Write-Info "Conta: $($u.Name)"
+                Write-Info 'Se outros computadores ainda usam esta conta para acessar esta'
+                Write-Info 'maquina, eles vao perder o acesso.'
+                Write-Host ''
+                Write-Host '     [1] Desativar (mantem a conta, bloqueia o acesso - reversivel)' -ForegroundColor White
+                Write-Host '     [2] Remover a conta' -ForegroundColor White
+                Write-Host '     [3] Deixar como esta' -ForegroundColor DarkGray
+                $ac = (Read-Host '  Opcao [3]').Trim()
+                if ($ac -eq '1') {
+                    try { Disable-LocalUser -Name $u.Name -ErrorAction Stop
+                          Write-Ok "Conta '$($u.Name)' desativada."
+                          $feito.Add("conta '$($u.Name)' desativada") }
+                    catch { Write-Falha "Nao foi possivel desativar: $($_.Exception.Message)" }
+                } elseif ($ac -eq '2') {
+                    try {
+                        Remove-LocalUser -Name $u.Name -ErrorAction Stop
+                        Write-Ok "Conta '$($u.Name)' removida."
+                        Write-Info 'A pasta de perfil dela, se existir, continua em C:\Users.'
+                        $feito.Add("conta '$($u.Name)' removida")
+                        # tira tambem a chave que ocultava a conta do login
+                        try {
+                            $regLogin = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList'
+                            if (Test-Path $regLogin) { Remove-ItemProperty -Path $regLogin -Name $u.Name -ErrorAction SilentlyContinue }
+                        } catch { }
+                    } catch { Write-Falha "Nao foi possivel remover: $($_.Exception.Message)" }
+                } else { Write-Info 'Conta mantida.' }
+            }
+        }
+
+        # Compartilhamento sem senha -> volta ao padrao seguro
+        if ($semSenha) {
+            Write-Host ''
+            Write-Etapa 'Compartilhamento protegido por senha'
+            Write-Info 'Esta maquina esta com o acesso sem senha ligado. Religar a protecao'
+            Write-Info 'devolve o Windows ao padrao seguro.'
+            $c = Read-Host '  Religar a protecao por senha? (S/N) [S]'
+            if (-not $c -or $c -match '^[Ss]') {
+                try {
+                    Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'everyoneincludesanonymous' -Value 0 -Type DWord -Force
+                    Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa' -Name 'LimitBlankPasswordUse' -Value 1 -Type DWord -Force
+                    Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' -Name 'RestrictNullSessAccess' -Value 1 -Type DWord -Force
+                    Write-Ok 'Compartilhamento protegido por senha RELIGADO.'
+                    $feito.Add('protecao por senha religada')
+                } catch { Write-Aviso "Nao foi possivel religar: $($_.Exception.Message)" }
+            }
+        }
+
+        # Firewall
+        Write-Host ''
+        Write-Etapa 'Firewall'
+        Write-Info 'Fechar as regras de compartilhamento e descoberta deixa a maquina'
+        Write-Info 'invisivel na rede. Faz sentido em notebook que vai rodar fora do'
+        Write-Info 'escritorio, ou em maquina que nao compartilha mais nada.'
+        $c = Read-Host '  Fechar essas regras no firewall? (S/N)'
+        if ($c -match '^[Ss]') {
+            foreach ($g in @(@{ G = $script:GrupoFWCompartilhamento; N = 'Compartilhamento de arquivos' },
+                             @{ G = $script:GrupoFWDescoberta;       N = 'Descoberta de rede' })) {
+                try {
+                    $regras = @(Get-NetFirewallRule -Group $g.G -ErrorAction SilentlyContinue |
+                                Where-Object { $_.Enabled -eq 'True' })
+                    $n = 0
+                    foreach ($r in $regras) {
+                        try { Disable-NetFirewallRule -Name $r.Name -ErrorAction Stop; $n++ } catch { }
+                    }
+                    Write-Ok "$($g.N): $n regra(s) desabilitada(s)."
+                    if ($n -gt 0) { $feito.Add("firewall fechado para $($g.N)") }
+                } catch { Write-Aviso "$($g.N): $($_.Exception.Message)" }
+            }
+        } else { Write-Info 'Firewall mantido como esta.' }
+
+        # Perfil de rede
+        $privados = @($perfis | Where-Object { $_.NetworkCategory -eq 'Private' })
+        if ($privados.Count -gt 0) {
+            Write-Host ''
+            Write-Etapa 'Perfil da rede'
+            Write-Info 'Voltar para PUBLICO esconde a maquina das outras e e o mais seguro'
+            Write-Info 'para notebook que sai do escritorio (Wi-Fi de hotel, aeroporto).'
+            $c = Read-Host '  Mudar o perfil para Publico? (S/N)'
+            if ($c -match '^[Ss]') {
+                foreach ($p in $privados) {
+                    try {
+                        Set-NetConnectionProfile -InterfaceIndex $p.InterfaceIndex -NetworkCategory Public -ErrorAction Stop
+                        Write-Ok "Rede '$($p.Name)': Privada -> PUBLICA."
+                        $feito.Add("perfil de '$($p.Name)' para publico")
+                    } catch { Write-Falha "Nao foi possivel mudar '$($p.Name)': $($_.Exception.Message)" }
+                }
+            } else { Write-Info 'Perfil mantido.' }
+        }
+    }
+
+    # --- Resumo ------------------------------------------------------------
+    Write-Host ''
+    if ($feito.Count -eq 0) {
+        Write-Info 'Nada foi alterado.'
+    } else {
+        Write-Titulo 'RESUMO DO QUE FOI DESFEITO'
+        foreach ($f in $feito) { Write-Ok $f }
+        Write-Host ''
+        Write-Ok 'Reforcando: nenhum arquivo foi apagado. As pastas que deixaram de ser'
+        Write-Ok 'compartilhadas continuam no disco, com o conteudo intacto.'
+        Write-Host ''
+        Write-Info 'Para montar a rede de novo, use as opcoes de configurar servidor e'
+        Write-Info 'conectar a rede deste mesmo menu.'
+        Add-Alerta 'Configuracao de rede desfeita nesta maquina.'
+    }
+    return [long]0
+}
+
 function Remove-PastaAnyDesk {
     param(
         [ValidateSet('Completo', 'SomenteLogs')][string]$Modo = 'SomenteLogs',
@@ -11270,6 +11551,7 @@ if ($Ferramenta) {
             'servidor'      { Set-MaquinaServidor | Out-Null }
             'clienterede'   { Set-MaquinaClienteRede | Out-Null }
             'diagrede'      { Test-RedeCompartilhamento | Out-Null }
+            'sairrede'      { Remove-ConfiguracaoRede | Out-Null }
             'memoriaram'    { Test-MemoriaRAM | Out-Null }
             'reparoavancado' { Repair-SistemaAvancado | Out-Null }
             'bsod'          { Show-AnaliseBSOD | Out-Null }

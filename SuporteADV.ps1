@@ -126,6 +126,7 @@ $menu = @(
     @{ Cat='REDELOCAL';   Label='Configurar Servidor de Arquivos'; Tipo='v2';     Args=@{ Ferramenta='servidor' } }
     @{ Cat='REDELOCAL';   Label='Conectar a Rede/Servidor';        Tipo='v2';     Args=@{ Ferramenta='clienterede' } }
     @{ Cat='REDELOCAL';   Label='Diagnostico da Rede Local';       Tipo='v2';     Args=@{ Ferramenta='diagrede' } }
+    @{ Cat='REDELOCAL';   Label='Desfazer Rede no Computador';    Tipo='v2';     Args=@{ Ferramenta='sairrede' } }
 
     # --- CERTIFICADOS E JURIDICO ---
     @{ Cat='CERTIFICADOS';Label='Limpar Certificados Vencidos';  Tipo='v2';     Args=@{ Ferramenta='limparcerts' } }
