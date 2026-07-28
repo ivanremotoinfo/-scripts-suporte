@@ -74,6 +74,7 @@ $menu = @(
     @{ Cat='DIAGNOSTICO'; Label='Maiores Consumidores de RAM';   Tipo='v2';     Args=@{ Ferramenta='topprocessos' } }
     @{ Cat='DIAGNOSTICO'; Label='Listar Certificados Digitais';  Tipo='v2';     Args=@{ Ferramenta='certificados' } }
     @{ Cat='DIAGNOSTICO'; Label='Analisar Tela Azul (BSOD)';     Tipo='v2';     Args=@{ Ferramenta='bsod' } }
+    @{ Cat='DIAGNOSTICO'; Label='Pronto para a Audiencia?';      Tipo='v2';     Args=@{ Ferramenta='audiencia' } }
     @{ Cat='DIAGNOSTICO'; Label='Teste de Memoria RAM';          Tipo='v2';     Args=@{ Ferramenta='memoriaram' } }
     @{ Cat='DIAGNOSTICO'; Label='Relatorio para o Cliente';      Tipo='v2';     Args=@{ Ferramenta='atendimento' } }
 
@@ -123,6 +124,7 @@ $menu = @(
     @{ Cat='OTIMIZACAO';  Label='Memoria Virtual (pagefile)';    Tipo='v2';     Args=@{ Ferramenta='memoriavirtual' } }
 
     # --- REDE DO ESCRITORIO ---
+    @{ Cat='REDELOCAL';   Label='Preparar Maquina do Escritorio';  Tipo='v2';     Args=@{ Ferramenta='prepararpc' } }
     @{ Cat='REDELOCAL';   Label='Qual Rede Estou Usando';         Tipo='v2';     Args=@{ Ferramenta='qualrede' } }
     @{ Cat='REDELOCAL';   Label='Nao Conecta no Servidor';        Tipo='v2';     Args=@{ Ferramenta='semservidor' } }
     @{ Cat='REDELOCAL';   Label='Problemas de Conexao';           Tipo='v2';     Args=@{ Ferramenta='conexao' } }

@@ -10741,6 +10741,497 @@ function Repair-ProblemasConexao {
     return [long]0
 }
 
+function Initialize-MaquinaEscritorio {
+    <#
+      Roteiro de maquina nova. Nao acrescenta capacidade: encadeia, na ordem
+      certa, o que hoje sao oito opcoes espalhadas pelo menu, e marca o que ja
+      foi feito. O ganho e' nao esquecer passo - o erro classico e' entregar a
+      maquina e descobrir depois que faltou o certificado ou a unidade de rede.
+
+      Cada etapa pergunta antes e pode ser pulada: maquina de estagiario nao
+      precisa de certificado; maquina que nao usa PJe nao precisa de Java.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Percorreria o roteiro de preparacao de maquina nova.'; return [long]0 }
+
+    Write-Titulo 'PREPARAR MAQUINA PARA O ESCRITORIO'
+    Write-Info 'Roteiro para computador novo, formatado, ou que trocou de usuario.'
+    Write-Info 'Cada etapa pergunta antes - pule o que nao se aplica a esta maquina.'
+
+    if ($SemInteracao) { Write-Aviso 'Modo desatendido: o roteiro precisa de interacao.'; return [long]0 }
+
+    $feito  = [System.Collections.Generic.List[string]]::new()
+    $pulado = [System.Collections.Generic.List[string]]::new()
+
+    function Perguntar-Etapa {
+        param([string]$Titulo, [string]$Porque)
+        Write-Host ''
+        Write-Host ('  ' + ('-' * 66)) -ForegroundColor DarkCyan
+        Write-Host ("  $Titulo") -ForegroundColor Cyan
+        Write-Host ('  ' + ('-' * 66)) -ForegroundColor DarkCyan
+        if ($Porque) { Write-Info $Porque }
+        $r = Read-Host '  Fazer agora? (S/N) [S]'
+        return (-not $r -or $r -match '^[Ss]')
+    }
+
+    # --- 0. Retrato inicial ------------------------------------------------
+    Write-Etapa 'Situacao da maquina antes de comecar'
+    $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+    if ($cs) { Write-Info ("Modelo    : $($cs.Manufacturer) $($cs.Model)") }
+    if ($os) { Write-Info ("Sistema   : $($os.Caption) build $($os.BuildNumber)") }
+    Write-Info ("Nome      : $env:COMPUTERNAME")
+    if ($cs -and -not $cs.PartOfDomain) { Write-Info ("Grupo trab: $($cs.Workgroup)") }
+    foreach ($c in @(Get-ConexoesReais | Where-Object { $_.Vale })) {
+        Write-Info ("Rede      : $($c.IP)  faixa $(Get-FaixaRede -IP $c.IP -Prefixo $c.Prefixo)")
+    }
+
+    # --- 1. Nome da maquina ------------------------------------------------
+    if (Perguntar-Etapa 'ETAPA 1 de 8 - Nome do computador' `
+        'Nome claro (ex.: RECEPCAO, DR-CARLOS) facilita achar na rede depois.') {
+        Write-Info ("Nome atual: $env:COMPUTERNAME")
+        $novo = (Read-Host '  Nome novo (ENTER para manter)').Trim()
+        if ($novo -and $novo -ne $env:COMPUTERNAME) {
+            if ($novo -notmatch '^[A-Za-z0-9\-]{1,15}$') {
+                Write-Falha 'Nome invalido: ate 15 letras/numeros, sem espaco nem acento.'
+            } else {
+                try {
+                    Rename-Computer -NewName $novo -Force -ErrorAction Stop
+                    Write-Ok "Nome alterado para $novo. Vale apos reiniciar."
+                    $script:precisaReiniciar = $true
+                    $feito.Add("nome do computador -> $novo")
+                } catch { Write-Falha "Nao foi possivel renomear: $($_.Exception.Message)" }
+            }
+        } else { Write-Info 'Nome mantido.' }
+    } else { $pulado.Add('nome do computador') }
+
+    # --- 2. Visual C++ ------------------------------------------------------
+    if (Perguntar-Etapa 'ETAPA 2 de 8 - Redistribuiveis Visual C++' `
+        'Sistema juridico antigo nao abre sem eles. Melhor instalar antes do que descobrir depois.') {
+        Install-VisualCRedist | Out-Null
+        $feito.Add('redistribuiveis Visual C++')
+    } else { $pulado.Add('Visual C++') }
+
+    # --- 3. Java + PJe ------------------------------------------------------
+    if (Perguntar-Etapa 'ETAPA 3 de 8 - Java e ambiente PJe' `
+        'So faz sentido se este usuario vai peticionar ou assinar pelo PJe.') {
+        Set-AmbientePJe | Out-Null
+        $feito.Add('ambiente PJe e Java')
+    } else { $pulado.Add('Java e PJe') }
+
+    # --- 4. Certificado -----------------------------------------------------
+    if (Perguntar-Etapa 'ETAPA 4 de 8 - Certificado digital' `
+        'A1: importar do .pfx. A3: conectar o token e conferir se aparece.') {
+        Write-Host ''
+        Write-Host '     [1] Importar certificado A1 de um arquivo .pfx' -ForegroundColor White
+        Write-Host '     [2] So conferir o que ja esta instalado (token A3)' -ForegroundColor White
+        Write-Host '     [0] Pular' -ForegroundColor DarkGray
+        $op = (Read-Host '  Opcao').Trim()
+        if ($op -eq '1') {
+            $arq = (Read-Host '  Caminho do arquivo .pfx').Trim().Trim('"')
+            if ($arq -and (Test-Path -LiteralPath $arq)) {
+                $pw = Read-Host '  Senha do arquivo' -AsSecureString
+                try {
+                    Import-PfxCertificate -FilePath $arq -CertStoreLocation 'Cert:\CurrentUser\My' `
+                        -Password $pw -Exportable -ErrorAction Stop | Out-Null
+                    Write-Ok 'Certificado importado para a loja Pessoal do usuario.'
+                    Write-Info 'Importado como exportavel, para permitir backup futuro.'
+                    $feito.Add('certificado A1 importado')
+                } catch {
+                    Write-Falha "Nao foi possivel importar: $($_.Exception.Message)"
+                    Write-Info  'Senha errada, ou arquivo corrompido.'
+                }
+            } elseif ($arq) { Write-Falha 'Arquivo nao encontrado.' }
+            Show-CertificadosInstalados | Out-Null
+        } elseif ($op -eq '2') {
+            Show-CertificadosInstalados | Out-Null
+            $feito.Add('certificados conferidos')
+        } else { $pulado.Add('certificado digital') }
+    } else { $pulado.Add('certificado digital') }
+
+    # --- 5. Rede do escritorio ---------------------------------------------
+    if (Perguntar-Etapa 'ETAPA 5 de 8 - Rede e pasta compartilhada' `
+        'Coloca a maquina no grupo de trabalho e mapeia a unidade do servidor.') {
+        Set-MaquinaClienteRede | Out-Null
+        $feito.Add('rede e unidade do servidor')
+    } else { $pulado.Add('rede do escritorio') }
+
+    # --- 6. Impressora ------------------------------------------------------
+    if (Perguntar-Etapa 'ETAPA 6 de 8 - Impressora' `
+        'Conecta a impressora compartilhada de outra maquina da rede.') {
+        Write-Info 'Informe o caminho da impressora compartilhada.'
+        Write-Info 'Ex.: \\SERVIDOR\HP-Recepcao   (deixe em branco para pular)'
+        $imp = (Read-Host '  Impressora').Trim().Trim('"')
+        if ($imp -match '^\\\\[^\\]+\\.+') {
+            try {
+                Add-Printer -ConnectionName $imp -ErrorAction Stop
+                Write-Ok "Impressora conectada: $imp"
+                $feito.Add("impressora $imp")
+                $r = Read-Host '  Definir como impressora padrao? (S/N) [S]'
+                if (-not $r -or $r -match '^[Ss]') {
+                    try {
+                        $pr = Get-CimInstance Win32_Printer -Filter "Name='$($imp -replace '\\','\\\\')'" -ErrorAction SilentlyContinue
+                        if ($pr) { Invoke-CimMethod -InputObject $pr -MethodName SetDefaultPrinter | Out-Null; Write-Ok 'Definida como padrao.' }
+                    } catch { Write-Info 'Defina como padrao manualmente se necessario.' }
+                }
+            } catch {
+                Write-Falha "Nao foi possivel conectar: $($_.Exception.Message)"
+                Write-Info  'Confira se a impressora esta compartilhada e se o driver esta disponivel.'
+            }
+        } else { Write-Info 'Impressora nao configurada.'; $pulado.Add('impressora') }
+    } else { $pulado.Add('impressora') }
+
+    # --- 7. Ajustes de uso --------------------------------------------------
+    if (Perguntar-Etapa 'ETAPA 7 de 8 - Ajustes de uso do Windows' `
+        'Miniaturas ligadas, efeitos leves e plano de energia - o que o escritorio espera.') {
+        Set-EfeitosVisuais | Out-Null
+        Set-DesempenhoEnergia | Out-Null
+        $feito.Add('ajustes de exibicao e energia')
+    } else { $pulado.Add('ajustes de uso') }
+
+    # --- 8. Retrato final e proximos passos ---------------------------------
+    if (Perguntar-Etapa 'ETAPA 8 de 8 - Registrar como a maquina ficou' `
+        'Gera a ficha da rede para voce guardar na pasta deste cliente.') {
+        Export-FichaRede | Out-Null
+        $feito.Add('ficha da rede gerada')
+    } else { $pulado.Add('ficha da rede') }
+
+    # --- Resumo --------------------------------------------------------------
+    Write-Host ''
+    Write-Titulo 'MAQUINA PREPARADA'
+    if ($feito.Count -gt 0) {
+        Write-Dest 'Feito nesta passagem:'
+        foreach ($f in $feito) { Write-Ok $f }
+    }
+    if ($pulado.Count -gt 0) {
+        Write-Host ''
+        Write-Dest 'Pulado (confira se realmente nao se aplica):'
+        foreach ($p in $pulado) { Write-Info ("   - " + $p) }
+    }
+
+    Write-Host ''
+    Write-Dest 'Antes de entregar a maquina, confira a mao:'
+    Write-Info  '   - o usuario consegue abrir a pasta da rede e SALVAR um arquivo nela;'
+    Write-Info  '   - o certificado assina de verdade (peca para ele assinar um teste);'
+    Write-Info  '   - a impressora imprime uma pagina de teste;'
+    Write-Info  '   - se for usar audiencia por video, rode a opcao "Pronto para a Audiencia".'
+    if ($script:precisaReiniciar) {
+        Write-Host ''
+        Write-Aviso 'REINICIE a maquina para concluir - o nome so vale apos reiniciar.'
+    }
+    Add-Alerta 'Maquina preparada para o escritorio - conferir os itens manuais.'
+    return [long]0
+}
+
+function Test-CapturaEmUso {
+    <#
+      Descobre se algum programa esta SEGURANDO a camera ou o microfone agora.
+      O Windows registra o uso em ConsentStore: quando LastUsedTimeStop vale 0,
+      o aplicativo esta com o dispositivo aberto neste momento.
+      Camera presa pelo Teams em segundo plano e' a causa numero 1 de "a camera
+      nao funciona" cinco minutos antes da audiencia.
+    #>
+    param([ValidateSet('webcam','microphone')][string]$Dispositivo)
+
+    $emUso = [System.Collections.Generic.List[string]]::new()
+    foreach ($raiz in @("HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\$Dispositivo",
+                        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\$Dispositivo")) {
+        foreach ($grupo in @('', '\NonPackaged')) {
+            $p = "$raiz$grupo"
+            if (-not (Test-Path -LiteralPath $p)) { continue }
+            foreach ($k in @(Get-ChildItem -LiteralPath $p -ErrorAction SilentlyContinue)) {
+                $v = Get-ItemProperty -LiteralPath $k.PSPath -ErrorAction SilentlyContinue
+                if ($null -ne $v.LastUsedTimeStop -and $v.LastUsedTimeStop -eq 0) {
+                    $nome = $k.PSChildName -replace '#', '\'
+                    # nome amigavel: so o executavel
+                    if ($nome -match '([^\\]+\.exe)$') { $nome = $Matches[1] }
+                    if (-not $emUso.Contains($nome)) { [void]$emUso.Add($nome) }
+                }
+            }
+        }
+    }
+    return $emUso
+}
+
+function Test-QualidadeChamada {
+    <#
+      Mede o que realmente derruba videoconferencia: perda de pacote e JITTER
+      (variacao da latencia). Uma conexao de 30 ms com jitter alto trava a voz;
+      uma de 80 ms estavel funciona bem. Ping medio sozinho nao diz nada.
+    #>
+    param([string]$Alvo = '8.8.8.8', [int]$Amostras = 20)
+
+    $r = Test-Connection -ComputerName $Alvo -Count $Amostras -ErrorAction SilentlyContinue
+    if (-not $r) {
+        return [PSCustomObject]@{ Ok = $false; Perda = 100; Media = 0; Jitter = 0 }
+    }
+    $t = @($r | ForEach-Object { $_.ResponseTime })
+    $recebidos = $t.Count
+    $perda = [math]::Round((($Amostras - $recebidos) / $Amostras) * 100)
+    $media = ($t | Measure-Object -Average).Average
+    $jitter = 0
+    if ($recebidos -gt 1) {
+        $soma = ($t | ForEach-Object { [math]::Pow($_ - $media, 2) } | Measure-Object -Sum).Sum
+        $jitter = [math]::Sqrt($soma / $recebidos)
+    }
+    return [PSCustomObject]@{
+        Ok     = $true
+        Perda  = $perda
+        Media  = [math]::Round($media)
+        Jitter = [math]::Round($jitter, 1)
+    }
+}
+
+function Test-ProntoParaAudiencia {
+    <#
+      Verificacao pre-audiencia. Feita para rodar NA VESPERA ou minutos antes,
+      e devolver um veredicto - nao uma lista de dados para o operador
+      interpretar sob pressao.
+
+      As opcoes de reparar audio e webcam consertam DEPOIS que deu errado.
+      Esta existe para o problema aparecer enquanto ainda ha tempo.
+    #>
+    Write-Titulo 'PRONTO PARA A AUDIENCIA?'
+    Write-Info 'Verificacao de camera, microfone, som e qualidade da conexao.'
+    Write-Info 'Rode na vespera, ou pelo menos 15 minutos antes da audiencia.'
+
+    $bloqueia = [System.Collections.Generic.List[string]]::new()
+    $ressalva = [System.Collections.Generic.List[string]]::new()
+
+    # --- 1. CAMERA --------------------------------------------------------
+    Write-Etapa '1/6  Camera'
+    # A webcam costuma expor tambem o microfone dela: sem excluir o endpoint de
+    # audio, o mesmo aparelho aparece duas ou tres vezes na lista de cameras.
+    $cams = @(Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object {
+        $_.Class -notin @('AudioEndpoint','MEDIA') -and
+        $_.FriendlyName -notmatch '(?i)^microfone|^microphone' -and
+        (($_.Class -in @('Camera','Image')) -or
+         ($_.FriendlyName -match '(?i)(webcam|camera)' -and $_.FriendlyName -notmatch '(?i)(virtual|scanner|fax)')) } |
+        Sort-Object FriendlyName -Unique)
+    $camOk = @($cams | Where-Object { $_.Status -eq 'OK' })
+
+    if ($cams.Count -eq 0) {
+        Write-Falha 'Nenhuma camera encontrada nesta maquina.'
+        $bloqueia.Add('Sem camera: notebook com camera desativada na BIOS, ou webcam nao conectada')
+    } elseif ($camOk.Count -eq 0) {
+        foreach ($c in $cams) { Write-Falha "$($c.FriendlyName): $($c.Status)" }
+        $bloqueia.Add('Camera com defeito - use a opcao de reparar webcam')
+    } else {
+        foreach ($c in $camOk) { Write-Ok "$($c.FriendlyName): funcionando" }
+    }
+
+    # Permissao
+    try {
+        $pc = (Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam' -Name Value -ErrorAction SilentlyContinue).Value
+        $pn = (Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam\NonPackaged' -Name Value -ErrorAction SilentlyContinue).Value
+        if ($pc -eq 'Deny' -or $pn -eq 'Deny') {
+            Write-Falha 'Acesso a camera BLOQUEADO nas configuracoes de privacidade.'
+            $bloqueia.Add('Permissao de camera negada - use a opcao de reparar webcam')
+        } else { Write-Ok 'Permissao de camera: liberada.' }
+    } catch { }
+
+    # Em uso por outro programa
+    $camUso = @(Test-CapturaEmUso -Dispositivo 'webcam')
+    if ($camUso.Count -gt 0) {
+        Write-Falha ("CAMERA EM USO por: " + ($camUso -join ', '))
+        Write-Info  'Enquanto outro programa segurar a camera, o sistema da audiencia'
+        Write-Info  'nao consegue abrir. Feche esse programa ANTES de entrar.'
+        $bloqueia.Add("Fechar o programa que esta usando a camera: " + ($camUso -join ', '))
+    } else {
+        Write-Ok 'Camera livre - nenhum programa segurando.'
+    }
+
+    # --- 2. MICROFONE -----------------------------------------------------
+    Write-Etapa '2/6  Microfone'
+    $mics = @(Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
+              Where-Object { $_.PNPClass -eq 'AudioEndpoint' -and $_.Name -match '(?i)(microfone|microphone)' })
+    if ($mics.Count -eq 0) {
+        # segunda tentativa pelo registro de captura
+        $reg = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture'
+        $ativos = @(Get-ChildItem -LiteralPath $reg -ErrorAction SilentlyContinue | Where-Object {
+            (Get-ItemProperty -LiteralPath $_.PSPath -Name DeviceState -ErrorAction SilentlyContinue).DeviceState -eq 1 })
+        if ($ativos.Count -gt 0) { Write-Ok "$($ativos.Count) dispositivo(s) de captura ativo(s)." }
+        else {
+            Write-Falha 'Nenhum microfone ativo encontrado.'
+            $bloqueia.Add('Sem microfone - conferir se esta conectado e habilitado')
+        }
+    } else {
+        foreach ($m in $mics) { Write-Ok "$($m.Name): $($m.Status)" }
+    }
+
+    try {
+        $pm = (Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone' -Name Value -ErrorAction SilentlyContinue).Value
+        $pmn = (Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged' -Name Value -ErrorAction SilentlyContinue).Value
+        if ($pm -eq 'Deny' -or $pmn -eq 'Deny') {
+            Write-Falha 'Acesso ao microfone BLOQUEADO nas configuracoes de privacidade.'
+            $bloqueia.Add('Permissao de microfone negada - use a opcao de reparar audio')
+        } else { Write-Ok 'Permissao de microfone: liberada.' }
+    } catch { }
+
+    $micUso = @(Test-CapturaEmUso -Dispositivo 'microphone')
+    if ($micUso.Count -gt 0) {
+        Write-Aviso ("Microfone em uso por: " + ($micUso -join ', '))
+        Write-Info  'Se nao for o programa da audiencia, feche antes de entrar.'
+        $ressalva.Add("Microfone em uso por: " + ($micUso -join ', '))
+    } else { Write-Ok 'Microfone livre.' }
+
+    # --- 3. SOM (SAIDA) ---------------------------------------------------
+    Write-Etapa '3/6  Som (para ouvir o juiz)'
+    $reg = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render'
+    $saidas = @(Get-ChildItem -LiteralPath $reg -ErrorAction SilentlyContinue | Where-Object {
+        (Get-ItemProperty -LiteralPath $_.PSPath -Name DeviceState -ErrorAction SilentlyContinue).DeviceState -eq 1 })
+    if ($saidas.Count -eq 0) {
+        Write-Falha 'Nenhum dispositivo de som ativo.'
+        $bloqueia.Add('Sem saida de som - use a opcao de reparar audio')
+    } else {
+        Write-Ok "$($saidas.Count) dispositivo(s) de som ativo(s)."
+    }
+    $svc = Get-Service -Name 'AudioSrv' -ErrorAction SilentlyContinue
+    if ($svc -and $svc.Status -ne 'Running') {
+        Write-Falha 'Servico de audio do Windows parado.'
+        $bloqueia.Add('Servico de audio parado - use a opcao de reparar audio')
+    }
+
+    # Volume e mudo nao sao lidos de forma confiavel por script. Em vez de
+    # fingir que verificamos, oferecemos a conferencia visual de 10 segundos.
+    Write-Info 'Volume e "mudo" precisam de conferencia visual - o script nao le'
+    Write-Info 'isso de forma confiavel. A tela de som sera aberta no final.'
+
+    # --- 4. QUALIDADE DA CONEXAO ------------------------------------------
+    Write-Etapa '4/6  Qualidade da conexao (o que trava a voz)'
+    Write-Info 'Medindo 20 amostras... aguarde.'
+    $q = Test-QualidadeChamada -Alvo '8.8.8.8' -Amostras 20
+
+    if (-not $q.Ok) {
+        Write-Falha 'Sem resposta da internet.'
+        $bloqueia.Add('Sem internet - resolver antes da audiencia')
+    } else {
+        Write-Info ("Latencia media : " + $q.Media + " ms")
+        Write-Info ("Jitter         : " + $q.Jitter + " ms   (variacao da latencia)")
+        Write-Info ("Perda          : " + $q.Perda + "%")
+        Write-Host ''
+
+        if ($q.Perda -ge 5) {
+            Write-Falha "Perda de $($q.Perda)% dos pacotes - a chamada vai cortar."
+            $bloqueia.Add("Perda de pacotes em $($q.Perda)% - trocar cabo, ou sair do Wi-Fi para o cabo")
+        } elseif ($q.Perda -gt 0) {
+            Write-Aviso "Perda de $($q.Perda)% - pode haver cortes pontuais."
+            $ressalva.Add("Perda de $($q.Perda)% dos pacotes")
+        } else { Write-Ok 'Sem perda de pacotes.' }
+
+        if ($q.Jitter -gt 30) {
+            Write-Falha "Jitter de $($q.Jitter) ms - a voz vai picotar."
+            Write-Info  "Jitter alto e' pior que latencia alta para videoconferencia."
+            $bloqueia.Add("Jitter de $($q.Jitter) ms - preferir cabo, e tirar downloads/streaming da rede")
+        } elseif ($q.Jitter -gt 15) {
+            Write-Aviso "Jitter de $($q.Jitter) ms - conexao instavel, pode picotar."
+            $ressalva.Add("Jitter de $($q.Jitter) ms")
+        } else { Write-Ok 'Conexao estavel (jitter baixo).' }
+
+        if ($q.Media -gt 150) {
+            Write-Aviso "Latencia de $($q.Media) ms - vai haver atraso perceptivel na fala."
+            $ressalva.Add("Latencia alta ($($q.Media) ms)")
+        }
+    }
+
+    # --- 5. COMO ESTA CONECTADO -------------------------------------------
+    Write-Etapa '5/6  Tipo de conexao e energia'
+    $wifi = Get-InfoWiFi
+    if ($wifi['SSID']) {
+        Write-Info ("Wi-Fi: " + $wifi['SSID'] + $(if ($wifi['Sinal']) { "   sinal " + $wifi['Sinal'] } else { '' }))
+        if ($wifi['Sinal'] -match '(\d+)%') {
+            $pct = [int]$Matches[1]
+            if ($pct -lt 50) {
+                Write-Aviso "Sinal de $pct% - risco de queda no meio da audiencia."
+                Write-Info  'Aproxime-se do roteador, ou use cabo de rede.'
+                $ressalva.Add("Sinal Wi-Fi fraco ($pct%) - preferir cabo")
+            } else { Write-Ok "Sinal Wi-Fi bom ($pct%)." }
+        }
+        Write-Info 'Cabo de rede sempre e mais estavel que Wi-Fi para audiencia.'
+    } else {
+        Write-Ok 'Conexao por cabo - o mais estavel para videoconferencia.'
+    }
+
+    # Bateria: notebook no modo economia reduz desempenho de video
+    try {
+        $bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($bat) {
+            if ($bat.BatteryStatus -eq 1) {
+                Write-Aviso ("Notebook NA BATERIA (" + $bat.EstimatedChargeRemaining + "%).")
+                Write-Info  'Conecte na tomada: economia de energia derruba o desempenho do video.'
+                $ressalva.Add('Notebook na bateria - conectar na tomada')
+            } else { Write-Ok 'Notebook na tomada.' }
+        }
+    } catch { }
+
+    # --- 6. PROGRAMA DA AUDIENCIA ------------------------------------------
+    Write-Etapa '6/6  Programa de videoconferencia'
+    $apps = [System.Collections.Generic.List[string]]::new()
+    $caminhos = @{
+        'Microsoft Teams'       = @("$env:LOCALAPPDATA\Microsoft\Teams\current\Teams.exe",
+                                    "$env:ProgramFiles\WindowsApps")
+        'Zoom'                  = @("$env:APPDATA\Zoom\bin\Zoom.exe", "$env:ProgramFiles\Zoom\bin\Zoom.exe")
+        'Google Chrome'         = @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+                                    "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe")
+        'Microsoft Edge'        = @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe")
+    }
+    foreach ($nome in $caminhos.Keys) {
+        foreach ($c in $caminhos[$nome]) {
+            if (Test-Path -LiteralPath $c) { if (-not $apps.Contains($nome)) { [void]$apps.Add($nome) }; break }
+        }
+    }
+    # Teams novo (empacotado)
+    if (Get-AppxPackage -Name 'MSTeams' -ErrorAction SilentlyContinue) { if (-not $apps.Contains('Microsoft Teams')) { [void]$apps.Add('Microsoft Teams') } }
+
+    if ($apps.Count -gt 0) {
+        Write-Ok ("Instalado(s): " + ($apps -join ', '))
+        Write-Info 'Audiencia por navegador (Meet, PJe, Zoom web) funciona no Chrome e Edge.'
+    } else {
+        Write-Aviso 'Nenhum programa de videoconferencia identificado.'
+        $ressalva.Add('Confirmar por qual sistema sera a audiencia e se ele abre')
+    }
+
+    # --- VEREDICTO ----------------------------------------------------------
+    Write-Host ''
+    if ($bloqueia.Count -gt 0) {
+        Write-Host ('  ' + ('=' * 66)) -ForegroundColor Red
+        Write-Host '     NAO ENTRE ASSIM NA AUDIENCIA' -ForegroundColor Red
+        Write-Host ('  ' + ('=' * 66)) -ForegroundColor Red
+        Write-Host ''
+        Write-Dest 'Resolver antes de entrar:'
+        foreach ($b in $bloqueia) { Write-Falha $b }
+        Add-Alerta 'Maquina NAO esta pronta para audiencia.'
+    } elseif ($ressalva.Count -gt 0) {
+        Write-Host ('  ' + ('=' * 66)) -ForegroundColor Yellow
+        Write-Host '     PRONTO, COM RESSALVAS' -ForegroundColor Yellow
+        Write-Host ('  ' + ('=' * 66)) -ForegroundColor Yellow
+        Write-Host ''
+        Write-Info 'A audiencia deve funcionar, mas ajuste o que der:'
+        foreach ($r in $ressalva) { Write-Aviso $r }
+    } else {
+        Write-Host ('  ' + ('=' * 66)) -ForegroundColor Green
+        Write-Host '     PRONTO PARA A AUDIENCIA' -ForegroundColor Green
+        Write-Host ('  ' + ('=' * 66)) -ForegroundColor Green
+        Write-Host ''
+        Write-Ok 'Camera, microfone, som e conexao verificados.'
+    }
+
+    Write-Host ''
+    Write-Info 'Falta a conferencia que nenhum script faz: fale e veja se o'
+    Write-Info 'indicador do microfone se mexe, e ouca um som de teste.'
+
+    if (-not $SemInteracao -and -not $SomenteRelatorio) {
+        Write-Host ''
+        $c = Read-Host '  Abrir a tela de som para testar microfone e volume? (S/N) [S]'
+        if (-not $c -or $c -match '^[Ss]') {
+            try { Start-Process 'mmsys.cpl' -ErrorAction Stop; Write-Ok 'Tela de som aberta.' }
+            catch { try { Start-Process 'control.exe' -ArgumentList 'mmsys.cpl' -ErrorAction SilentlyContinue } catch { } }
+            Write-Info 'Na aba Gravacao, fale: a barra ao lado do microfone tem de se mexer.'
+            Write-Info 'Na aba Reproducao, botao Testar toca um som em cada caixa.'
+        }
+    }
+    return [long]0
+}
+
 function Backup-CertificadoA1 {
     <#
       Exporta o certificado A1 (o que fica guardado no computador) para um
@@ -13579,6 +14070,8 @@ if ($Ferramenta) {
             }
             'certificados'  { Show-CertificadosInstalados | Out-Null }
             'backupcert'    { Backup-CertificadoA1 | Out-Null }
+            'audiencia'     { Test-ProntoParaAudiencia | Out-Null }
+            'prepararpc'    { Initialize-MaquinaEscritorio | Out-Null }
             'dll'           { Repair-DLLFaltando | Out-Null }
             'atendimento'   { New-RelatorioAtendimento | Out-Null }
             'desfazer'      { Undo-UltimaManutencao | Out-Null }
@@ -13737,7 +14230,7 @@ if ($Ferramenta) {
     }
     Write-Host ''
     # Ferramentas somente-leitura nao deixam log salvo.
-    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede', 'qualrede', 'fichrede')) {
+    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede', 'qualrede', 'fichrede', 'audiencia')) {
         Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
     }
     Write-Host ('=' * 68) -ForegroundColor Green
@@ -13745,7 +14238,7 @@ if ($Ferramenta) {
     # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
     if ($chave -in @('diagnostico', 'bsod')) { Publicar-RelatorioTemp -RemoverPastaLog }
     # protecaovirus/consoles: so abriram telas; nao deixam pasta de log.
-    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede', 'qualrede', 'fichrede')) {
+    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede', 'qualrede', 'fichrede', 'audiencia')) {
         Remove-Item -LiteralPath (Join-Path $script:pastaExec 'manutencao.log') -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 200
         if ($script:pastaExec -and (Test-Path -LiteralPath $script:pastaExec)) {
