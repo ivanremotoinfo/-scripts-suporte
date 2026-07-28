@@ -1,7 +1,7 @@
 ﻿================================================================================
                     S U P O R T E A D V  -  M A N U A L
               Ferramentas de suporte técnico - suporte.adv.br
-                        Versão 2026.07.27  |  51 opções
+                        Versão 2026.07.27  |  54 opções
 ================================================================================
 
 
@@ -11,15 +11,16 @@ SUMÁRIO
   2. Como executar
   3. Regras que valem para tudo
   4. Guia rápido: qual opção usar para cada problema
-  5. As 51 opções, uma a uma
+  5. As 54 opções, uma a uma
        DIAGNÓSTICO ................ 1 a 7
        MANUTENÇÃO E LIMPEZA ....... 8 a 19
        SEGURANÇA E ANTIVÍRUS ...... 20 a 24
        REPAROS .................... 25 a 40
        OTIMIZAÇÃO ................. 41 a 44
-       CERTIFICADOS E JURÍDICO .... 45 a 47
-       PROGRAMAS .................. 48 e 49
-       ATALHOS ADMINISTRATIVOS .... 50 e 51
+       REDE DO ESCRITÓRIO ......... 45 a 47
+       CERTIFICADOS E JURÍDICO .... 48 a 50
+       PROGRAMAS .................. 51 e 52
+       ATALHOS ADMINISTRATIVOS .... 53 e 54
   6. A Manutenção Completa em detalhe (16 etapas)
   7. Uso por linha de comando
   8. Onde ficam os logs e como reverter
@@ -37,7 +38,7 @@ digital, token, Java, PJe).
 
 São apenas dois arquivos:
 
-  SuporteADV.ps1            o menu, com as 51 opções
+  SuporteADV.ps1            o menu, com as 54 opções
   ManutencaoCompleta.ps1    o motor, que faz todo o trabalho
 
 O menu baixa o motor uma vez e o mantém em cache local, atualizando só quando
@@ -127,8 +128,8 @@ MODO SIMULAÇÃO
   "Sem internet"                                28
   "Não abre site do tribunal / erro de          29
    certificado"
-  "Não imprime"                                 30, depois 49 se persistir
-  "Não consigo abrir a pasta %appdata%"         31 (reparar) ou 51 (só abrir)
+  "Não imprime"                                 30, depois 52 se persistir
+  "Não consigo abrir a pasta %appdata%"         31 (reparar) ou 54 (só abrir)
   "Ícones sumiram / área de trabalho travou"    32
   "PC desligou na tomada várias vezes"          33 (chkdsk) e 2 (SMART)
   "Apps da Microsoft Store não abrem"           34
@@ -136,8 +137,8 @@ MODO SIMULAÇÃO
                                                 assinatura digital), 4, 29
   "Sem microfone na audiência" (URGENTE)        39
   "Sem câmera na audiência" (URGENTE)           40
-  "PJe não assina / Java não carrega"           47, depois 46
-  "Token não aparece"                           50, depois 4
+  "PJe não assina / Java não carrega"           50, depois 49
+  "Token não aparece"                           53, depois 4
   "Suspeita de vírus"                           20
   "Preciso instalar programa e o antivírus      22 (e 23 depois, sempre)
    bloqueia"
@@ -146,10 +147,14 @@ MODO SIMULAÇÃO
   "PC demora para ligar"                        42
   "Mexi em algo e preciso voltar atrás"         19
   "Quero deixar um comprovante do serviço"      7
+  "Quero montar a rede do escritório"           45 (no PC que guarda os
+                                                arquivos), depois 46 nos demais
+  "A rede parou / sumiu a unidade de rede"      47 (diagnostica antes de mexer)
+  "Não acesso a pasta compartilhada"            47, depois 46
 
 
 ================================================================================
-5. AS 51 OPÇÕES, UMA A UMA
+5. AS 54 OPÇÕES, UMA A UMA
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -507,10 +512,88 @@ OTIMIZAÇÃO
     exigência de um sistema específico.
 
 --------------------------------------------------------------------------------
+REDE DO ESCRITÓRIO
+--------------------------------------------------------------------------------
+
+Estas três montam e mantêm a rede de compartilhamento de arquivos entre os
+computadores do escritório. A ideia: **uma** máquina guarda os documentos
+(servidor) e as demais acessam por uma unidade de rede fixa.
+
+Ordem de uso: primeiro a 45 na máquina que vai guardar os arquivos, depois a
+46 em cada computador do escritório. A 47 é para quando algo parar de
+funcionar.
+
+[45] CONFIGURAR SERVIDOR DE ARQUIVOS
+    Transforma esta máquina no servidor de arquivos do escritório, em 7 etapas:
+      1. mostra a situação atual (nome, grupo de trabalho, IP, SMB);
+      2. coloca a rede no perfil PRIVADO (perfil Público bloqueia tudo);
+      3. liga os serviços necessários e os deixa em automático;
+      4. libera o firewall SÓ no perfil Privado — em rede de hotel ou
+         aeroporto a máquina continua fechada;
+      5. ajusta o grupo de trabalho (todos os PCs precisam usar o mesmo);
+      6. cria a conta de acesso;
+      7. cria a pasta compartilhada.
+
+    PASTA PADRÃO: sugere `Compartilhado` no disco com mais espaço livre
+    (fora do C: quando existe outro disco, para não perder nada se o Windows
+    precisar ser reinstalado). ENTER aceita a sugestão; se quiser outra, é só
+    digitar o caminho. O nome que aparece na rede vem do nome da pasta.
+
+    ACESSO — duas opções:
+      Com usuário e senha (RECOMENDADO): cria uma conta dedicada, oculta da
+      tela de login, que serve só para a rede. A senha fica salva nos
+      computadores do escritório, então ninguém digita nada no dia a dia, mas
+      o acesso é identificado e pode ser revogado.
+      Sem senha: mais simples, porém qualquer dispositivo na rede — inclusive
+      visitante no Wi-Fi — lê os arquivos. Em escritório de advocacia isso
+      significa processo sob sigilo exposto. Pede confirmação dupla.
+
+    Ao final mostra o caminho pronto (\\NOME\Pasta), o IP alternativo e os
+    dados de acesso para configurar os outros computadores.
+
+    NÃO compartilha raiz de disco (C:\) nem pasta de sistema — recusa e
+    explica. NUNCA habilita SMB1 (protocolo do WannaCry); se encontrar
+    habilitado, avisa e ensina a desligar.
+
+    A máquina precisa ficar LIGADA para as outras acessarem. E lembre:
+    compartilhar pasta NÃO é backup — os arquivos seguem num disco só.
+
+[46] CONECTAR À REDE/SERVIDOR
+    Prepara um computador do escritório para usar o servidor, em 5 etapas:
+    perfil de rede privado, serviços, firewall, grupo de trabalho e a unidade
+    de rede.
+
+    Pede o caminho (\\SERVIDOR\Pasta), TESTA se o servidor responde na porta
+    445 antes de tentar, pede o usuário e senha criados no servidor e salva a
+    credencial no Gerenciador de Credenciais do Windows. A unidade fica com
+    letra fixa e RECONECTA SOZINHA toda vez que o computador liga.
+
+    Sugere uma letra livre (Z:, Y:...) e avisa se a escolhida já está em uso.
+    Ao terminar, abre a unidade no Explorer para conferir.
+
+[47] DIAGNÓSTICO DA REDE LOCAL
+    NÃO ALTERA NADA. Percorre, em 8 etapas, as causas que derrubam rede de
+    escritório, na ordem em que costumam acontecer:
+      1. identificação (nome, grupo de trabalho, IPs);
+      2. perfil da rede — Público é a causa nº 1 de "a máquina sumiu da rede";
+      3. serviços de compartilhamento parados;
+      4. firewall bloqueando no perfil privado;
+      5. SMB1 (inseguro) e SMB2/SMB3, e se o logon de convidado está liberado;
+      6. pastas compartilhadas nesta máquina, com as permissões — avisa se
+         alguma aponta para pasta que não existe mais, ou se está com acesso
+         total para Todos;
+      7. unidades de rede mapeadas e se estão conectadas;
+      8. teste de alcance de um servidor: ping, porta 445 e listagem das
+         pastas compartilhadas.
+
+    No fim lista o que precisa ser corrigido. Use esta antes de mexer em
+    qualquer coisa quando "a rede parou".
+
+--------------------------------------------------------------------------------
 CERTIFICADOS E JURÍDICO
 --------------------------------------------------------------------------------
 
-[45] LIMPAR CERTIFICADOS VENCIDOS
+[48] LIMPAR CERTIFICADOS VENCIDOS
     Organiza a loja Pessoal do usuário, separando em três categorias:
       A) ICP-Brasil e ICP-Portugal válidos — sempre MANTIDOS;
       B) ICP vencidos — você decide;
@@ -522,14 +605,14 @@ CERTIFICADOS E JURÍDICO
     lista em CSV e um arquivo .cer de cada certificado. Atenção: o .cer guarda
     apenas a parte pública — a chave privada NÃO é recuperável.
 
-[46] CONFIGURAR JAVA (JURÍDICO)
+[49] CONFIGURAR JAVA (JURÍDICO)
     Prepara o Java 8 para os sistemas jurídicos: localiza a instalação, faz
     backup do deployment.properties, ajusta o nível de segurança, remove os
     bloqueios (.locked) que travam o painel do Java, desativa o aviso de "Java
     desatualizado" que costuma travar o usuário, cadastra as URLs de exceção
     (Shodo, Shomei, PJe, PROJUDI dos estados, eProc) e limpa o cache do Java.
 
-[47] CONFIGURAR AMBIENTE PJE
+[50] CONFIGURAR AMBIENTE PJE
     Versão completa da anterior, aplicada a TODOS os perfis de usuário da
     máquina. Além do Java e das exceções, verifica os serviços Shodo e Shomei
     (necessários para assinatura) e tenta iniciá-los se estiverem parados, e
@@ -540,13 +623,13 @@ CERTIFICADOS E JURÍDICO
 PROGRAMAS
 --------------------------------------------------------------------------------
 
-[48] DESINSTALAR PROGRAMA
+[51] DESINSTALAR PROGRAMA
     Lista os programas instalados igual ao Painel de Controle — sem o lixo de
     componentes de sistema que aparece em outras listagens. Permite filtrar
     por nome, selecionar pelo número e desinstalar. As colunas se ajustam à
     largura da janela para os nomes aparecerem inteiros.
 
-[49] REMOVER IMPRESSORA
+[52] REMOVER IMPRESSORA
     Remoção completa de impressora e do driver: identifica os arquivos do
     driver no registro, remove a impressora, remove o driver (vários métodos),
     limpa a fila (perguntando antes, porque isso descarta documentos pendentes
@@ -559,7 +642,7 @@ PROGRAMAS
 ATALHOS ADMINISTRATIVOS
 --------------------------------------------------------------------------------
 
-[50] DISPOSITIVOS, SERVIÇOS E TOKEN
+[53] DISPOSITIVOS, SERVIÇOS E TOKEN
     Abre de uma vez: Gerenciador de Dispositivos, Serviços do Windows,
     Desinstalar um Programa (Painel de Controle) e o administrador de token de
     certificado (SafeNet, eToken, Gemalto e outros).
@@ -567,7 +650,7 @@ ATALHOS ADMINISTRATIVOS
     Se o app do token não abrir, ele procura pelo atalho no Menu Iniciar. Se
     ainda assim não achar, informe o nome exato do programa para ser incluído.
 
-[51] ABRIR PASTA %APPDATA%
+[54] ABRIR PASTA %APPDATA%
     Abre a pasta Roaming do usuário no Explorer (shell:AppData) e informa o
     caminho da pasta Local.
     NÃO ALTERA NADA.
