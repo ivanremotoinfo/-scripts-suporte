@@ -128,6 +128,10 @@ $menu = @(
     @{ Cat='REDELOCAL';   Label='Problemas de Conexao';           Tipo='v2';     Args=@{ Ferramenta='conexao' } }
     @{ Cat='REDELOCAL';   Label='Configurar Servidor de Arquivos'; Tipo='v2';     Args=@{ Ferramenta='servidor' } }
     @{ Cat='REDELOCAL';   Label='Conectar a Rede/Servidor';        Tipo='v2';     Args=@{ Ferramenta='clienterede' } }
+    @{ Cat='REDELOCAL';   Label='Blindar Servidor';               Tipo='v2';     Args=@{ Ferramenta='blindar' } }
+    @{ Cat='REDELOCAL';   Label='Backup da Pasta Compartilhada';  Tipo='v2';     Args=@{ Ferramenta='backup' } }
+    @{ Cat='REDELOCAL';   Label='Monitoramento do Servidor';      Tipo='v2';     Args=@{ Ferramenta='monitor' } }
+    @{ Cat='REDELOCAL';   Label='Ficha da Rede do Escritorio';    Tipo='v2';     Args=@{ Ferramenta='fichrede' } }
     @{ Cat='REDELOCAL';   Label='Diagnostico da Rede Local';       Tipo='v2';     Args=@{ Ferramenta='diagrede' } }
     @{ Cat='REDELOCAL';   Label='Desfazer Rede no Computador';    Tipo='v2';     Args=@{ Ferramenta='sairrede' } }
 

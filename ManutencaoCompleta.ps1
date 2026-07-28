@@ -8918,7 +8918,7 @@ function Repair-DLLFaltando {
         Write-Aviso 'Este arquivo nao esta na lista de pacotes conhecidos.'
         Write-Info  'Provavelmente pertence ao proprio programa que mostrou o erro.'
         Write-Info  'Caminho recomendado: reinstalar esse programa (nao baixar a DLL avulsa'
-        Write-Info  'de site de DLL - e' + [char]39 + ' fonte comum de malware).'
+        Write-Info  "de site de DLL - e' fonte comum de malware)."
         return [long]0
     }
 
@@ -10741,6 +10741,1003 @@ function Repair-ProblemasConexao {
     return [long]0
 }
 
+function Export-FichaRede {
+    <#
+      Ficha tecnica da rede do escritorio, para o Ivan guardar por cliente.
+      Somente leitura. Evita redescobrir a topologia a cada visita.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Geraria a ficha tecnica da rede deste escritorio.'; return [long]0 }
+
+    Write-Titulo 'FICHA DA REDE DO ESCRITORIO'
+    Write-Info 'Levantamento da rede para voce guardar e consultar nas proximas visitas.'
+
+    $L = [System.Collections.Generic.List[string]]::new()
+    $add = { param([string]$t) $L.Add($t) }
+
+    & $add ('=' * 78)
+    & $add '                    FICHA TECNICA DA REDE - SuporteADV'
+    & $add ('=' * 78)
+    & $add ''
+    & $add ("Levantado em : " + (Get-Date -Format 'dd/MM/yyyy HH:mm'))
+    & $add ("Maquina      : " + $env:COMPUTERNAME)
+    & $add ''
+
+    # --- Identificacao ---
+    Write-Etapa '1/6  Identificacao'
+    & $add ('-' * 78)
+    & $add 'ESTA MAQUINA'
+    & $add ('-' * 78)
+    $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+    & $add ("  Nome           : " + $env:COMPUTERNAME)
+    if ($cs) {
+        & $add ("  Fabricante     : $($cs.Manufacturer) $($cs.Model)")
+        & $add ("  Memoria        : " + [math]::Round($cs.TotalPhysicalMemory/1GB,1) + " GB")
+        if ($cs.PartOfDomain) { & $add ("  Dominio        : " + $cs.Domain) }
+        else { & $add ("  Grupo trabalho : " + $cs.Workgroup) }
+    }
+    if ($os) { & $add ("  Sistema        : $($os.Caption) build $($os.BuildNumber)") }
+    Write-Ok $env:COMPUTERNAME
+
+    # --- Rede ---
+    Write-Etapa '2/6  Conexao de rede'
+    & $add ''
+    & $add ('-' * 78)
+    & $add 'REDE'
+    & $add ('-' * 78)
+    foreach ($c in @(Get-ConexoesReais | Where-Object { $_.Vale })) {
+        $faixa = Get-FaixaRede -IP $c.IP -Prefixo $c.Prefixo
+        $tipo = 'cabo'
+        try {
+            $ad = Get-NetAdapter -InterfaceIndex $c.Indice -ErrorAction SilentlyContinue
+            if ($ad -and ($ad.MediaType -match '802.11' -or $ad.InterfaceDescription -match '(?i)(wi-?fi|wireless)')) { $tipo = 'Wi-Fi' }
+        } catch { }
+        & $add ("  Conexao        : $($c.Alias)  ($tipo)")
+        & $add ("  FAIXA DA REDE  : $faixa      <<< tem de ser igual em todas as maquinas")
+        & $add ("  GATEWAY        : $($c.Gateway)      <<< tem de ser igual em todas")
+        & $add ("  IP desta maq.  : $($c.IP)  (" + $(if ($c.Origem -eq 'Manual') { 'FIXO' } else { 'DHCP - risco de mudar' }) + ")")
+        & $add ("  DNS            : " + $(if ($c.DNS.Count) { $c.DNS -join ', ' } else { '-' }))
+        Write-Ok "$($c.Alias): $faixa via $($c.Gateway)"
+    }
+    $wifi = Get-InfoWiFi
+    if ($wifi['SSID']) {
+        & $add ("  Rede Wi-Fi     : " + $wifi['SSID'] + $(if ($wifi['Sinal']) { "   sinal " + $wifi['Sinal'] } else { '' }))
+    }
+
+    # --- Compartilhamentos ---
+    Write-Etapa '3/6  Pastas compartilhadas'
+    & $add ''
+    & $add ('-' * 78)
+    & $add 'PASTAS COMPARTILHADAS NESTA MAQUINA'
+    & $add ('-' * 78)
+    $shares = @(Get-SmbShare -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '\$$' })
+    if ($shares.Count -eq 0) {
+        & $add '  (nenhuma - esta maquina nao e servidor de arquivos)'
+        Write-Info 'Nenhuma'
+    } else {
+        foreach ($s in $shares) {
+            & $add ("  \\$env:COMPUTERNAME\$($s.Name)")
+            & $add ("     pasta real : " + $s.Path)
+            try {
+                foreach ($a in @(Get-SmbShareAccess -Name $s.Name -ErrorAction SilentlyContinue)) {
+                    & $add ("     acesso     : $($a.AccountName) = $($a.AccessRight)")
+                }
+            } catch { }
+            try {
+                $t = [long](Get-ChildItem -LiteralPath $s.Path -Recurse -File -Force -ErrorAction SilentlyContinue |
+                            Measure-Object -Property Length -Sum).Sum
+                & $add ("     tamanho    : " + (Format-Tamanho $t))
+            } catch { }
+            Write-Ok "\\$env:COMPUTERNAME\$($s.Name)"
+        }
+    }
+
+    # --- Unidades mapeadas ---
+    Write-Etapa '4/6  Unidades de rede'
+    & $add ''
+    & $add ('-' * 78)
+    & $add 'UNIDADES DE REDE MAPEADAS NESTA MAQUINA'
+    & $add ('-' * 78)
+    $map = @(Get-CimInstance Win32_NetworkConnection -ErrorAction SilentlyContinue)
+    if ($map.Count -eq 0) { & $add '  (nenhuma)'; Write-Info 'Nenhuma' }
+    else {
+        foreach ($m in $map) {
+            & $add ("  $($m.LocalName)  ->  $($m.RemoteName)   [$($m.ConnectionState)]")
+            Write-Ok "$($m.LocalName) -> $($m.RemoteName)"
+        }
+    }
+
+    # --- Quem esta na rede ---
+    Write-Etapa '5/6  Outros aparelhos na rede'
+    & $add ''
+    & $add ('-' * 78)
+    & $add 'APARELHOS VISTOS NA REDE'
+    & $add ('-' * 78)
+    & $add '  (tabela ARP - aparelhos que trocaram dados com esta maquina)'
+    $vistos = 0
+    try {
+        foreach ($n in @(Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                         Where-Object { $_.State -in @('Reachable','Stale') -and $_.IPAddress -notlike '169.254.*' -and
+                                        $_.IPAddress -notlike '224.*' -and $_.IPAddress -notlike '239.*' -and
+                                        $_.LinkLayerAddress -and $_.LinkLayerAddress -ne '00-00-00-00-00-00' })) {
+            $nome = ''
+            try { $nome = ([System.Net.Dns]::GetHostEntry($n.IPAddress)).HostName } catch { }
+            & $add ("  $($n.IPAddress.PadRight(16))  $($n.LinkLayerAddress)  $nome")
+            $vistos++
+        }
+    } catch { }
+    if ($vistos -eq 0) { & $add '  (nenhum registrado no momento)' }
+    Write-Ok "$vistos aparelho(s)"
+
+    # --- Backups ---
+    Write-Etapa '6/6  Backup e protecoes'
+    & $add ''
+    & $add ('-' * 78)
+    & $add 'BACKUP E PROTECOES'
+    & $add ('-' * 78)
+    $tb = @(Get-ScheduledTask -TaskPath '\SuporteADV\' -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'Backup*' })
+    if ($tb.Count -eq 0) {
+        & $add '  BACKUP: NAO CONFIGURADO NESTA MAQUINA   <<< risco'
+        Write-Falha 'Sem backup configurado'
+        Add-Alerta 'Servidor sem backup configurado.'
+    } else {
+        foreach ($t in $tb) {
+            $inf = Get-ScheduledTaskInfo -TaskName $t.TaskName -TaskPath $t.TaskPath -ErrorAction SilentlyContinue
+            & $add ("  BACKUP: $($t.TaskName)")
+            & $add ("     descricao : " + $t.Description)
+            if ($inf) {
+                & $add ("     ultima    : " + $(if ($inf.LastRunTime -and $inf.LastRunTime.Year -gt 1999) { $inf.LastRunTime.ToString('dd/MM/yyyy HH:mm') } else { 'nunca' }) +
+                        "   resultado: " + $(if ($inf.LastTaskResult -eq 0) { 'OK' } else { $inf.LastTaskResult }))
+            }
+            Write-Ok $t.TaskName
+        }
+    }
+    $ips = @(Get-ConexoesReais | Where-Object { $_.Vale -and $_.Origem -ne 'Manual' })
+    if ($ips.Count -gt 0 -and $shares.Count -gt 0) {
+        & $add '  ATENCAO: servidor com IP automatico - se mudar, as unidades quebram.'
+    }
+    try {
+        $smb1 = Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -ErrorAction SilentlyContinue
+        if ($smb1 -and $smb1.State -eq 'Enabled') { & $add '  ATENCAO: SMB1 habilitado - risco de seguranca conhecido.' }
+    } catch { }
+
+    & $add ''
+    & $add ('=' * 78)
+    & $add '  Rode esta ficha em CADA computador do escritorio e guarde junto.'
+    & $add '  A faixa da rede e o gateway precisam ser iguais em todos.'
+    & $add ('=' * 78)
+
+    # --- Salvar ---
+    $nome = 'RedeEscritorio_' + $env:COMPUTERNAME + '_' + (Get-Date -Format 'yyyy-MM-dd') + '.txt'
+    $destino = Join-Path ([Environment]::GetFolderPath('Desktop')) $nome
+    try {
+        [System.IO.File]::WriteAllLines($destino, $L.ToArray(), (New-Object System.Text.UTF8Encoding($true)))
+        Write-Host ''
+        Write-Ok "Ficha salva: $destino"
+        try { Start-Process 'notepad.exe' -ArgumentList $destino -ErrorAction SilentlyContinue } catch { }
+        Write-Info 'Guarde uma copia na sua pasta do cliente. Na proxima visita voce ja'
+        Write-Info 'chega sabendo a topologia, sem redescobrir tudo.'
+    } catch {
+        Write-Falha "Nao foi possivel salvar: $($_.Exception.Message)"
+        foreach ($l in $L) { Write-Host "     $l" -ForegroundColor Gray }
+    }
+    return [long]0
+}
+
+function Set-MonitoramentoRede {
+    <#
+      Verificacao agendada que registra quando algo sai do lugar. Nao envia
+      e-mail nem depende de servico externo: grava um historico local que o
+      Ivan le quando chega, e deixa um alerta visivel na Area de Trabalho
+      quando encontra problema.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Configuraria o monitoramento agendado do servidor.'; return [long]0 }
+
+    Write-Titulo 'MONITORAMENTO DO SERVIDOR'
+    Write-Info 'Verificacao automatica que registra quando algo sai do lugar, para voce'
+    Write-Info 'saber antes do cliente ligar.'
+
+    if ($SemInteracao) { Write-Aviso 'Modo desatendido: esta ferramenta precisa de interacao.'; return [long]0 }
+
+    $tarefa = Get-ScheduledTask -TaskName 'Monitor SuporteADV' -TaskPath '\SuporteADV\' -ErrorAction SilentlyContinue
+    if ($tarefa) {
+        $inf = Get-ScheduledTaskInfo -TaskName 'Monitor SuporteADV' -TaskPath '\SuporteADV\' -ErrorAction SilentlyContinue
+        Write-Etapa 'Monitoramento ja configurado'
+        Write-Ok ("Ultima verificacao: " + $(if ($inf -and $inf.LastRunTime -and $inf.LastRunTime.Year -gt 1999) { $inf.LastRunTime.ToString('dd/MM/yyyy HH:mm') } else { 'nunca' }))
+        $hist = 'C:\ProgramData\SuporteTI\Monitor\historico.txt'
+        if (Test-Path -LiteralPath $hist) {
+            Write-Host ''
+            Write-Dest 'Ultimos registros:'
+            Get-Content -LiteralPath $hist -Tail 15 -ErrorAction SilentlyContinue | ForEach-Object { Write-Info ("   " + $_) }
+        }
+        Write-Host ''
+        Write-Host '     [1] Verificar agora' -ForegroundColor White
+        Write-Host '     [2] Remover o monitoramento' -ForegroundColor White
+        Write-Host '     [0] Sair' -ForegroundColor DarkGray
+        $o = (Read-Host '  Opcao').Trim()
+        if ($o -eq '1') {
+            Start-ScheduledTask -TaskName 'Monitor SuporteADV' -TaskPath '\SuporteADV\' -ErrorAction SilentlyContinue
+            Write-Ok 'Verificacao iniciada. Veja o historico em instantes.'
+        } elseif ($o -eq '2') {
+            Unregister-ScheduledTask -TaskName 'Monitor SuporteADV' -TaskPath '\SuporteADV\' -Confirm:$false -ErrorAction SilentlyContinue
+            Write-Ok 'Monitoramento removido.'
+        }
+        return [long]0
+    }
+
+    Write-Host ''
+    Write-Info 'O que sera verificado a cada execucao:'
+    Write-Info '   - a maquina continua com o mesmo IP;'
+    Write-Info '   - o perfil da rede continua privado;'
+    Write-Info '   - os servicos de compartilhamento continuam rodando;'
+    Write-Info '   - as pastas compartilhadas continuam existindo;'
+    Write-Info '   - o espaco em disco;'
+    Write-Info '   - a saude do disco (SMART);'
+    Write-Info '   - se o backup rodou e deu certo.'
+    Write-Host ''
+    Write-Info 'Quando algo estiver errado, grava no historico e cria um arquivo de'
+    Write-Info 'alerta na Area de Trabalho, visivel para quem usa a maquina.'
+    Write-Host ''
+    $c = Read-Host '  Configurar o monitoramento? (S/N) [S]'
+    if ($c -and $c -notmatch '^[Ss]') { Write-Info 'Cancelado.'; return [long]0 }
+
+    $pasta = 'C:\ProgramData\SuporteTI\Monitor'
+    if (-not (Test-Path -LiteralPath $pasta)) { New-Item -ItemType Directory -Path $pasta -Force -ErrorAction SilentlyContinue | Out-Null }
+    $scriptPath = Join-Path $pasta 'monitor.ps1'
+
+    $script = @'
+# Monitor do servidor - gerado pelo SuporteADV (suporte.adv.br)
+# Registra o estado e alerta quando algo sai do lugar.
+$ErrorActionPreference = 'SilentlyContinue'
+$pasta   = 'C:\ProgramData\SuporteTI\Monitor'
+$hist    = Join-Path $pasta 'historico.txt'
+$estado  = Join-Path $pasta 'estado.xml'
+$agora   = Get-Date -Format 'dd/MM/yyyy HH:mm'
+$probs   = New-Object System.Collections.Generic.List[string]
+
+# IP e faixa
+$conf = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } | Select-Object -First 1
+$ipAtual = if ($conf) { (@($conf.IPv4Address)[0]).IPAddress } else { '' }
+$gwAtual = if ($conf) { (@($conf.IPv4DefaultGateway)[0]).NextHop } else { '' }
+if (-not $ipAtual) { $probs.Add('SEM CONEXAO DE REDE') }
+
+# Perfil
+foreach ($p in @(Get-NetConnectionProfile)) {
+    if ($p.NetworkCategory -eq 'Public') { $probs.Add("Perfil de rede PUBLICO em '$($p.Name)'") }
+}
+
+# Servicos
+foreach ($s in @('LanmanServer','LanmanWorkstation')) {
+    $sv = Get-Service -Name $s
+    if ($sv -and $sv.Status -ne 'Running') { $probs.Add("Servico $s parado") }
+}
+
+# Compartilhamentos
+$shares = @(Get-SmbShare | Where-Object { $_.Name -notmatch '\$$' })
+foreach ($sh in $shares) {
+    if (-not (Test-Path -LiteralPath $sh.Path)) { $probs.Add("Pasta compartilhada sumiu: $($sh.Path)") }
+}
+
+# Disco
+foreach ($v in @(Get-Volume | Where-Object { $_.DriveType -eq 'Fixed' -and $_.DriveLetter })) {
+    if ($v.Size -gt 0) {
+        $pct = [math]::Round(($v.SizeRemaining / $v.Size) * 100)
+        if ($pct -lt 10) { $probs.Add("Disco $($v.DriveLetter): com apenas $pct% livre") }
+    }
+}
+
+# SMART
+foreach ($d in @(Get-CimInstance -ClassName MSStorageDriver_FailurePredictStatus -Namespace root\wmi)) {
+    if ($d.PredictFailure) { $probs.Add('DISCO PREVENDO FALHA (SMART) - backup e troca urgentes') }
+}
+
+# Backup
+$tb = @(Get-ScheduledTask -TaskPath '\SuporteADV\' | Where-Object { $_.TaskName -like 'Backup*' })
+if ($shares.Count -gt 0 -and $tb.Count -eq 0) { $probs.Add('Servidor sem backup configurado') }
+foreach ($t in $tb) {
+    $i = Get-ScheduledTaskInfo -TaskName $t.TaskName -TaskPath $t.TaskPath
+    if ($i) {
+        if ($i.LastTaskResult -ne 0 -and $i.LastTaskResult -ne 267009) { $probs.Add("Backup '$($t.TaskName)' terminou com erro $($i.LastTaskResult)") }
+        if ($i.LastRunTime -and $i.LastRunTime.Year -gt 1999 -and ((Get-Date) - $i.LastRunTime).TotalDays -gt 3) {
+            $probs.Add("Backup '$($t.TaskName)' nao roda ha $([math]::Round(((Get-Date) - $i.LastRunTime).TotalDays)) dias")
+        }
+    }
+}
+
+# Comparar com a execucao anterior
+if (Test-Path -LiteralPath $estado) {
+    $ant = Import-Clixml -LiteralPath $estado
+    if ($ant.IP -and $ipAtual -and $ant.IP -ne $ipAtual) { $probs.Add("O IP MUDOU: era $($ant.IP), agora e $ipAtual - unidades de rede podem ter quebrado") }
+    if ($ant.GW -and $gwAtual -and $ant.GW -ne $gwAtual) { $probs.Add("A REDE MUDOU: gateway era $($ant.GW), agora e $gwAtual") }
+    foreach ($nm in @($ant.Shares)) {
+        if ($shares.Name -notcontains $nm) { $probs.Add("Compartilhamento '$nm' nao existe mais") }
+    }
+}
+@{ IP = $ipAtual; GW = $gwAtual; Shares = @($shares.Name); Quando = (Get-Date) } | Export-Clixml -LiteralPath $estado
+
+# Registrar
+if ($probs.Count -eq 0) {
+    Add-Content -LiteralPath $hist -Value "$agora  OK  ip=$ipAtual  compartilhamentos=$($shares.Count)"
+} else {
+    Add-Content -LiteralPath $hist -Value "$agora  PROBLEMA:"
+    foreach ($p in $probs) { Add-Content -LiteralPath $hist -Value "            - $p" }
+    # Alerta visivel para quem usa a maquina
+    $aviso = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'ATENCAO - AVISAR O SUPORTE.txt'
+    $txt = New-Object System.Collections.Generic.List[string]
+    $txt.Add('=============================================================')
+    $txt.Add('  AVISO DO SISTEMA DE MONITORAMENTO - suporte.adv.br')
+    $txt.Add('=============================================================')
+    $txt.Add('')
+    $txt.Add("Verificado em: $agora")
+    $txt.Add('')
+    $txt.Add('Foram encontrados os seguintes pontos de atencao:')
+    $txt.Add('')
+    foreach ($p in $probs) { $txt.Add("   - $p") }
+    $txt.Add('')
+    $txt.Add('Entre em contato com o suporte tecnico e mostre este arquivo.')
+    $txt.Add('')
+    [System.IO.File]::WriteAllLines($aviso, $txt.ToArray(), (New-Object System.Text.UTF8Encoding($true)))
+}
+
+# Nao deixar o historico crescer sem fim
+if (Test-Path -LiteralPath $hist) {
+    $linhas = @(Get-Content -LiteralPath $hist)
+    if ($linhas.Count -gt 2000) { $linhas | Select-Object -Last 1000 | Set-Content -LiteralPath $hist }
+}
+'@
+
+    try {
+        [System.IO.File]::WriteAllText($scriptPath, $script, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Ok "Rotina de monitoramento criada: $scriptPath"
+    } catch {
+        Write-Falha "Nao foi possivel criar: $($_.Exception.Message)"
+        return [long]0
+    }
+
+    try {
+        $acao = New-ScheduledTaskAction -Execute 'powershell.exe' `
+                  -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
+        # Ao ligar e a cada 4 horas: pega o problema logo depois que ele surge
+        $g1 = New-ScheduledTaskTrigger -AtStartup
+        $g2 = New-ScheduledTaskTrigger -Once -At (Get-Date).Date.AddHours(8) `
+                -RepetitionInterval (New-TimeSpan -Hours 4) -RepetitionDuration (New-TimeSpan -Days 3650)
+        $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+        $config = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances IgnoreNew
+
+        Register-ScheduledTask -TaskName 'Monitor SuporteADV' -TaskPath '\SuporteADV\' -Action $acao `
+            -Trigger $g1, $g2 -Principal $principal -Settings $config `
+            -Description 'Monitoramento do servidor - SuporteADV' -ErrorAction Stop | Out-Null
+        Write-Ok 'Agendado: ao ligar a maquina e a cada 4 horas.'
+    } catch {
+        Write-Falha "Nao foi possivel agendar: $($_.Exception.Message)"
+        return [long]0
+    }
+
+    Write-Etapa 'Executando a primeira verificacao...'
+    try {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
+        $hist = Join-Path $pasta 'historico.txt'
+        if (Test-Path -LiteralPath $hist) {
+            Write-Host ''
+            Write-Dest 'Resultado:'
+            Get-Content -LiteralPath $hist -Tail 12 -ErrorAction SilentlyContinue | ForEach-Object { Write-Info ("   " + $_) }
+        }
+    } catch { Write-Aviso "Primeira execucao: $($_.Exception.Message)" }
+
+    Write-Host ''
+    Write-Titulo 'MONITORAMENTO ATIVO'
+    Write-Info ("Historico : " + (Join-Path $pasta 'historico.txt'))
+    Write-Info 'Quando encontrar problema, alem de registrar, cria o arquivo'
+    Write-Info '"ATENCAO - AVISAR O SUPORTE.txt" na Area de Trabalho de todos.'
+    Write-Host ''
+    Write-Info 'Ao chegar no cliente, rode esta opcao para ver o historico - ele mostra'
+    Write-Info 'o que aconteceu entre as visitas.'
+    Add-Alerta 'Monitoramento do servidor ativado.'
+    return [long]0
+}
+
+function Set-BackupCompartilhado {
+    <#
+      Copia automatica da pasta compartilhada para outro destino.
+
+      Usa ROBOCOPY em modo espelho com historico de versoes por data: o
+      robocopy vem no Windows, e testado ha decadas e sobrevive a arquivo
+      aberto e caminho longo melhor que qualquer script proprio.
+
+      NAO e substituto de backup em nuvem nem de fita. E' a copia local que
+      salva o escritorio quando o disco do servidor morre - que e o cenario
+      real do dia a dia.
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Configuraria o backup automatico da pasta compartilhada.'; return [long]0 }
+
+    Write-Titulo 'BACKUP DA PASTA COMPARTILHADA'
+    Write-Info 'Compartilhar pasta NAO e backup: os arquivos estao num disco so.'
+    Write-Info 'Se aquele disco falhar, o escritorio perde os processos.'
+
+    if ($SemInteracao) { Write-Aviso 'Modo desatendido: esta ferramenta precisa de interacao.'; return [long]0 }
+
+    # --- Backups ja configurados -----------------------------------------
+    $tarefas = @(Get-ScheduledTask -TaskPath '\SuporteADV\' -ErrorAction SilentlyContinue |
+                 Where-Object { $_.TaskName -like 'Backup*' })
+    if ($tarefas.Count -gt 0) {
+        Write-Etapa 'Backups ja configurados nesta maquina'
+        foreach ($t in $tarefas) {
+            $inf = Get-ScheduledTaskInfo -TaskName $t.TaskName -TaskPath $t.TaskPath -ErrorAction SilentlyContinue
+            Write-Ok $t.TaskName
+            if ($inf) {
+                Write-Info ("   ultima execucao : " + $(if ($inf.LastRunTime -and $inf.LastRunTime.Year -gt 1999) { $inf.LastRunTime.ToString('dd/MM/yyyy HH:mm') } else { 'nunca' }))
+                Write-Info ("   resultado       : " + $(if ($inf.LastTaskResult -eq 0) { 'OK' } elseif ($inf.LastTaskResult -eq 267009) { 'em execucao' } else { "codigo $($inf.LastTaskResult)" }))
+                Write-Info ("   proxima         : " + $(if ($inf.NextRunTime) { $inf.NextRunTime.ToString('dd/MM/yyyy HH:mm') } else { '-' }))
+            }
+        }
+        Write-Host ''
+        Write-Host '     [1] Criar outro backup' -ForegroundColor White
+        Write-Host '     [2] Executar um backup agora' -ForegroundColor White
+        Write-Host '     [3] Remover um backup configurado' -ForegroundColor White
+        Write-Host '     [0] Sair' -ForegroundColor DarkGray
+        Write-Host ''
+        $op = (Read-Host '  Opcao').Trim()
+
+        if ($op -eq '2') {
+            $i = 1
+            foreach ($t in $tarefas) { Write-Host ("     [$i] $($t.TaskName)") -ForegroundColor White; $i++ }
+            $s = (Read-Host '  Numero').Trim()
+            if ($s -match '^\d+$' -and [int]$s -ge 1 -and [int]$s -le $tarefas.Count) {
+                $alvo = $tarefas[[int]$s - 1]
+                Start-ScheduledTask -TaskName $alvo.TaskName -TaskPath $alvo.TaskPath -ErrorAction SilentlyContinue
+                Write-Ok 'Backup iniciado. Ele roda em segundo plano.'
+                Write-Info 'Acompanhe pelo relatorio na pasta de destino.'
+            }
+            return [long]0
+        }
+        if ($op -eq '3') {
+            $i = 1
+            foreach ($t in $tarefas) { Write-Host ("     [$i] $($t.TaskName)") -ForegroundColor White; $i++ }
+            $s = (Read-Host '  Numero').Trim()
+            if ($s -match '^\d+$' -and [int]$s -ge 1 -and [int]$s -le $tarefas.Count) {
+                $alvo = $tarefas[[int]$s - 1]
+                Write-Aviso 'Isso remove o agendamento. Os arquivos ja copiados permanecem no destino.'
+                $c = Read-Host '  Confirma? (S/N)'
+                if ($c -match '^[Ss]') {
+                    Unregister-ScheduledTask -TaskName $alvo.TaskName -TaskPath $alvo.TaskPath -Confirm:$false -ErrorAction SilentlyContinue
+                    Write-Ok 'Agendamento removido.'
+                }
+            }
+            return [long]0
+        }
+        if ($op -ne '1') { return [long]0 }
+    }
+
+    # --- Origem ------------------------------------------------------------
+    Write-Etapa '1/4  O que sera copiado'
+    $shares = @(Get-SmbShare -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '\$$' })
+    $origem = ''
+    if ($shares.Count -gt 0) {
+        Write-Info 'Pastas compartilhadas nesta maquina:'
+        $i = 1
+        foreach ($s in $shares) { Write-Host ("     [$i] $($s.Path)   (compartilhada como '$($s.Name)')") -ForegroundColor White; $i++ }
+        Write-Host ''
+        $s = (Read-Host '  Numero, ou digite outro caminho').Trim().Trim('"')
+        if ($s -match '^\d+$' -and [int]$s -ge 1 -and [int]$s -le $shares.Count) { $origem = $shares[[int]$s - 1].Path }
+        elseif ($s) { $origem = $s }
+    } else {
+        Write-Info 'Nenhuma pasta compartilhada. Informe a pasta a proteger.'
+        $origem = (Read-Host '  Pasta de origem').Trim().Trim('"')
+    }
+    if (-not $origem) { Write-Info 'Cancelado.'; return [long]0 }
+    if (-not (Test-Path -LiteralPath $origem)) { Write-Falha "A pasta $origem nao existe."; return [long]0 }
+
+    $tam = 0
+    try {
+        Write-Info 'Medindo o tamanho da pasta...'
+        $tam = [long](Get-ChildItem -LiteralPath $origem -Recurse -File -Force -ErrorAction SilentlyContinue |
+                      Measure-Object -Property Length -Sum).Sum
+        Write-Ok ("Origem: $origem   (" + (Format-Tamanho $tam) + ")")
+    } catch { Write-Ok "Origem: $origem" }
+
+    # --- Destino -----------------------------------------------------------
+    Write-Etapa '2/4  Para onde copiar'
+    Write-Info 'O destino precisa ser OUTRO disco fisico, ou outra maquina.'
+    Write-Aviso 'Copiar para outra pasta do MESMO disco nao protege de nada:'
+    Write-Info  'se o disco morre, morrem as duas copias.'
+    Write-Host ''
+
+    $letraOrigem = ''
+    if ($origem -match '^([A-Za-z]):') { $letraOrigem = $Matches[1].ToUpper() }
+
+    $discos = @(Get-Volume -ErrorAction SilentlyContinue |
+                Where-Object { $_.DriveLetter -and $_.DriveType -in @('Fixed','Removable') -and
+                               $_.DriveLetter -ne $letraOrigem -and $_.SizeRemaining -gt $tam })
+    if ($discos.Count -gt 0) {
+        Write-Info 'Discos com espaco suficiente (fora o de origem):'
+        foreach ($d in $discos) {
+            $rot = if ($d.FileSystemLabel) { $d.FileSystemLabel } else { 'sem rotulo' }
+            $tipo = if ($d.DriveType -eq 'Removable') { 'USB/externo' } else { 'interno' }
+            Write-Host ("     $($d.DriveLetter):  $([math]::Round($d.SizeRemaining/1GB,1)) GB livres  ($rot, $tipo)") -ForegroundColor White
+        }
+    } else {
+        Write-Aviso 'Nenhum outro disco com espaco suficiente foi encontrado.'
+    }
+    Write-Host ''
+    Write-Info 'Informe a pasta de destino. Pode ser disco externo (E:\Backup) ou'
+    Write-Info 'outra maquina da rede (\\OUTROPC\Backup).'
+    $destino = (Read-Host '  Destino').Trim().Trim('"')
+    if (-not $destino) { Write-Info 'Cancelado.'; return [long]0 }
+
+    # Destino no mesmo disco = falsa sensacao de seguranca
+    if ($destino -match '^([A-Za-z]):' -and $Matches[1].ToUpper() -eq $letraOrigem) {
+        Write-Host ''
+        Write-Falha 'O destino esta NO MESMO DISCO da origem.'
+        Write-Info  'Isso protege contra apagar sem querer, mas NAO contra o disco falhar,'
+        Write-Info  'que e o risco principal. Use outro disco ou outra maquina.'
+        $c = Read-Host '  Continuar assim mesmo? (S/N)'
+        if ($c -notmatch '^[Ss]') { Write-Info 'Cancelado.'; return [long]0 }
+    }
+    # Nao deixar o destino dentro da origem (copia recursiva infinita)
+    if ($destino.TrimEnd('\').ToLower().StartsWith($origem.TrimEnd('\').ToLower() + '\')) {
+        Write-Falha 'O destino esta DENTRO da pasta de origem. Isso faria a copia se copiar.'
+        return [long]0
+    }
+
+    if (-not (Test-Path -LiteralPath $destino)) {
+        $c = Read-Host '  A pasta de destino nao existe. Criar? (S/N) [S]'
+        if (-not $c -or $c -match '^[Ss]') {
+            try { New-Item -ItemType Directory -Path $destino -Force -ErrorAction Stop | Out-Null; Write-Ok 'Pasta de destino criada.' }
+            catch { Write-Falha "Nao foi possivel criar: $($_.Exception.Message)"; return [long]0 }
+        } else { return [long]0 }
+    }
+
+    # --- Quando -------------------------------------------------------------
+    Write-Etapa '3/4  Quando executar'
+    Write-Host ''
+    Write-Host '     [1] Todo dia (recomendado para escritorio)' -ForegroundColor White
+    Write-Host '     [2] De segunda a sexta' -ForegroundColor White
+    Write-Host '     [3] Uma vez por semana' -ForegroundColor White
+    Write-Host '     [4] Somente quando eu mandar (sem agendamento)' -ForegroundColor White
+    Write-Host ''
+    $quando = (Read-Host '  Opcao [1]').Trim()
+    if (-not $quando) { $quando = '1' }
+
+    $hora = '12:30'
+    if ($quando -ne '4') {
+        Write-Host ''
+        Write-Info 'Escolha um horario em que o escritorio esteja parado, mas a maquina'
+        Write-Info 'LIGADA - horario de almoco costuma funcionar melhor que de madrugada,'
+        Write-Info 'porque de madrugada o servidor pode estar desligado.'
+        $h = (Read-Host "  Horario (HH:MM) [$hora]").Trim()
+        if ($h) {
+            if ($h -match '^([01]?\d|2[0-3]):([0-5]\d)$') { $hora = $h }
+            else { Write-Aviso "Horario invalido. Usando $hora." }
+        }
+    }
+
+    # --- Monta o script de backup -----------------------------------------
+    Write-Etapa '4/4  Criando o backup'
+
+    $pastaScript = 'C:\ProgramData\SuporteTI\Backup'
+    if (-not (Test-Path -LiteralPath $pastaScript)) {
+        New-Item -ItemType Directory -Path $pastaScript -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+    $idBackup = ($destino -replace '[^A-Za-z0-9]', '')
+    if ($idBackup.Length -gt 20) { $idBackup = $idBackup.Substring(0, 20) }
+    $scriptPath = Join-Path $pastaScript "backup_$idBackup.cmd"
+
+    # /MIR espelha (inclui apagar no destino o que sumiu da origem).
+    # /XF exclui o proprio relatorio: sem isso o /MIR tenta apaga-lo por ele
+    #     nao existir na origem - e apagaria o historico do backup.
+    # /R:2 /W:5 nao fica horas tentando um arquivo aberto pelo usuario.
+    # /Z retoma copia grande do ponto onde parou.
+    $nomeLog = '_relatorio_backup.txt'
+    $conteudo = @"
+@echo off
+rem Backup automatico gerado pelo SuporteADV - suporte.adv.br
+rem Origem : $origem
+rem Destino: $destino
+setlocal
+set LOG=$destino\$nomeLog
+echo. >> "%LOG%"
+echo ================================================== >> "%LOG%"
+echo Backup iniciado em %date% %time% >> "%LOG%"
+robocopy "$origem" "$destino" /MIR /XF "$nomeLog" /R:2 /W:5 /Z /NP /NDL /TEE /LOG+:"%LOG%"
+set CODIGO=%ERRORLEVEL%
+echo Codigo de retorno: %CODIGO% >> "%LOG%"
+if %CODIGO% LSS 8 (
+  echo RESULTADO: OK - backup concluido em %date% %time% >> "%LOG%"
+) else (
+  echo RESULTADO: FALHA - verificar o log acima >> "%LOG%"
+)
+echo ================================================== >> "%LOG%"
+endlocal
+exit /b 0
+"@
+    try {
+        [System.IO.File]::WriteAllText($scriptPath, $conteudo, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Ok "Rotina de backup criada: $scriptPath"
+    } catch {
+        Write-Falha "Nao foi possivel criar a rotina: $($_.Exception.Message)"
+        return [long]0
+    }
+
+    # --- Agendamento --------------------------------------------------------
+    if ($quando -ne '4') {
+        $nomeTarefa = "Backup $idBackup"
+        try {
+            Unregister-ScheduledTask -TaskName $nomeTarefa -TaskPath '\SuporteADV\' -Confirm:$false -ErrorAction SilentlyContinue
+
+            $acao = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"$scriptPath`""
+            $gatilho = switch ($quando) {
+                '2' { New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $hora }
+                '3' { New-ScheduledTaskTrigger -Weekly -DaysOfWeek Friday -At $hora }
+                default { New-ScheduledTaskTrigger -Daily -At $hora }
+            }
+            # SYSTEM roda sem ninguem logado; StartWhenAvailable recupera a
+            # execucao perdida quando a maquina estava desligada na hora.
+            $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+            $config = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopOnIdleEnd `
+                        -ExecutionTimeLimit (New-TimeSpan -Hours 6) -MultipleInstances IgnoreNew
+
+            Register-ScheduledTask -TaskName $nomeTarefa -TaskPath '\SuporteADV\' -Action $acao `
+                -Trigger $gatilho -Principal $principal -Settings $config `
+                -Description "Backup de $origem para $destino - SuporteADV" -ErrorAction Stop | Out-Null
+
+            $desc = switch ($quando) { '2' { 'de segunda a sexta' } '3' { 'toda sexta-feira' } default { 'todo dia' } }
+            Write-Ok "Agendado: $desc as $hora."
+            Write-Info 'Roda mesmo sem ninguem logado. Se a maquina estiver desligada na'
+            Write-Info 'hora marcada, ele executa assim que ela ligar.'
+        } catch {
+            Write-Falha "Nao foi possivel agendar: $($_.Exception.Message)"
+            Write-Info  "A rotina existe em $scriptPath e pode ser executada a mao."
+        }
+    }
+
+    # --- Primeira execucao ---------------------------------------------------
+    Write-Host ''
+    Write-Info 'A primeira copia leva mais tempo, porque copia tudo. As seguintes'
+    Write-Info 'copiam apenas o que mudou.'
+    $c = Read-Host '  Executar o primeiro backup agora? (S/N) [S]'
+    if (-not $c -or $c -match '^[Ss]') {
+        Write-Etapa 'Copiando... isso pode demorar.'
+        $inicio = Get-Date
+        & cmd.exe /c "`"$scriptPath`"" | Out-Null
+        $dur = [math]::Round(((Get-Date) - $inicio).TotalMinutes, 1)
+        $log = Join-Path $destino '_relatorio_backup.txt'
+        $ok = $false
+        if (Test-Path -LiteralPath $log) {
+            $ult = @(Get-Content -LiteralPath $log -Tail 12 -ErrorAction SilentlyContinue)
+            if (($ult -join ' ') -match 'RESULTADO: OK') { $ok = $true }
+        }
+        if ($ok) {
+            Write-Ok "Backup concluido em $dur minuto(s)."
+            try {
+                $tamDest = [long](Get-ChildItem -LiteralPath $destino -Recurse -File -Force -ErrorAction SilentlyContinue |
+                                  Measure-Object -Property Length -Sum).Sum
+                Write-Ok ("Destino agora tem " + (Format-Tamanho $tamDest) + ".")
+            } catch { }
+        } else {
+            Write-Aviso "Backup terminou em $dur minuto(s), mas com avisos."
+            Write-Info  "Confira o relatorio: $log"
+        }
+    }
+
+    Write-Host ''
+    Write-Titulo 'BACKUP CONFIGURADO'
+    Write-Info ("Origem  : " + $origem)
+    Write-Info ("Destino : " + $destino)
+    Write-Info ("Relatorio: " + (Join-Path $destino '_relatorio_backup.txt'))
+    Write-Host ''
+    Write-Aviso 'Limites deste backup - saiba o que ele NAO protege:'
+    Write-Info  '  - E um espelho: arquivo apagado na origem some do destino na proxima'
+    Write-Info  '    copia. Nao recupera algo apagado semana passada.'
+    Write-Info  '  - Se o destino for disco interno na mesma maquina, incendio, roubo ou'
+    Write-Info  '    ransomware levam os dois.'
+    Write-Info  '  - Para o escritorio ficar realmente coberto, some a isto uma copia'
+    Write-Info  '    FORA do local: nuvem, ou disco externo que sai do escritorio.'
+    Write-Host ''
+    Write-Info 'Teste de verdade: uma vez por mes, abra um arquivo direto do destino.'
+    Write-Info 'Backup que nunca foi restaurado nao e backup comprovado.'
+    Add-Alerta "Backup configurado: $origem -> $destino"
+    return [long]0
+}
+
+function Protect-Servidor {
+    <#
+      Ataca as causas ESTRUTURAIS que derrubam a rede do escritorio. As outras
+      ferramentas diagnosticam depois que o cliente ligou; esta existe para o
+      chamado nao acontecer.
+        1. IP fixo         - IP que muda quebra a unidade mapeada de todo mundo
+        2. Nao dormir      - servidor suspenso = "sumiu tudo de manha"
+        3. Placa de rede   - economia de energia derruba a conexao do nada
+        4. Perfil privado  - atualizacao do Windows devolve para Publico
+        5. Antivirus/lock  - lentidao e travamento com banco compartilhado
+    #>
+    if ($SomenteRelatorio) { Write-Simul 'Aplicaria as protecoes estruturais do servidor.'; return [long]0 }
+
+    Write-Titulo 'BLINDAR SERVIDOR'
+    Write-Info 'Rode na maquina que guarda os arquivos do escritorio.'
+    Write-Info 'Corrige as causas que fazem a rede cair sozinha depois de dias ou'
+    Write-Info 'semanas funcionando - o tipo de chamado que volta sempre.'
+
+    if ($SemInteracao) { Write-Aviso 'Modo desatendido: esta ferramenta precisa de confirmacao.'; return [long]0 }
+
+    $aplicado = [System.Collections.Generic.List[string]]::new()
+
+    # =====================================================================
+    # 1. IP FIXO
+    # =====================================================================
+    Write-Etapa '1/5  Endereco IP do servidor'
+    $conexoes = @(Get-ConexoesReais | Where-Object { $_.Vale })
+    if ($conexoes.Count -eq 0) {
+        Write-Falha 'Nenhuma conexao de rede valida. Pulando esta etapa.'
+    } else {
+        $c = $conexoes[0]
+        $faixa = Get-FaixaRede -IP $c.IP -Prefixo $c.Prefixo
+        Write-Info ("Conexao : " + $c.Alias)
+        Write-Info ("IP      : " + $c.IP + "/" + $c.Prefixo + "   (" + $(if ($c.Origem -eq 'Manual') { 'JA E FIXO' } else { 'automatico via DHCP' }) + ")")
+        Write-Info ("Gateway : " + $c.Gateway)
+        Write-Info ("DNS     : " + $(if ($c.DNS.Count) { $c.DNS -join ', ' } else { '-' }))
+
+        if ($c.Origem -eq 'Manual') {
+            Write-Ok 'O IP ja e fixo. Nada a fazer aqui.'
+        } else {
+            Write-Host ''
+            Write-Aviso 'O IP deste servidor e automatico. Se o roteador entregar outro'
+            Write-Info  'endereco, as unidades de rede de TODAS as maquinas quebram de uma vez.'
+            Write-Host ''
+            Write-Dest 'Duas formas de resolver:'
+            Write-Info  '  A) Reserva no roteador (o mais correto): o roteador sempre entrega'
+            Write-Info  '     o mesmo IP a esta maquina. Feito na interface do roteador.'
+            Write-Info  '  B) IP fixo aqui na maquina: rapido, mas exige um endereco FORA da'
+            Write-Info  '     faixa que o roteador distribui, senao ele pode entregar o mesmo'
+            Write-Info  '     numero a outro aparelho e dar conflito.'
+            Write-Host ''
+            Write-Aviso 'Se voce nao sabe qual faixa o roteador distribui, prefira a opcao A.'
+            Write-Host ''
+            $q = Read-Host '  Fixar o IP nesta maquina agora? (S/N)'
+
+            if ($q -match '^[Ss]') {
+                # Trocar IP derruba sessao remota.
+                $remoto = @(Get-Process -ErrorAction SilentlyContinue |
+                            Where-Object { $_.ProcessName -match '(?i)^(anydesk|teamviewer|rustdesk)' })
+                if ($remoto.Count -gt 0 -or ($env:SESSIONNAME -match '(?i)^RDP')) {
+                    Write-Host ''
+                    Write-Falha 'ACESSO REMOTO ATIVO. Trocar o IP DERRUBA a sua conexao.'
+                    Write-Info  'Se o IP novo for igual ao atual, a queda e de segundos e volta.'
+                    Write-Info  'Se for diferente, voce PERDE o acesso e alguem precisa estar no local.'
+                    $q2 = Read-Host '  Continuar? (S/N)'
+                    if ($q2 -notmatch '^[Ss]') { Write-Info 'Etapa cancelada.'; $q = 'N' }
+                }
+            }
+
+            if ($q -match '^[Ss]') {
+                Write-Host ''
+                Write-Info ("Sugestao: manter o IP atual (" + $c.IP + ") - e o que os clientes ja usam.")
+                Write-Info 'Ou informe outro, fora da faixa do DHCP (ex.: final .240 em diante).'
+                $novoIP = (Read-Host ("  IP [" + $c.IP + "]")).Trim()
+                if (-not $novoIP) { $novoIP = $c.IP }
+
+                if ($novoIP -notmatch '^\d{1,3}(\.\d{1,3}){3}$') {
+                    Write-Falha 'Endereco invalido. Etapa cancelada.'
+                } elseif ((Get-FaixaRede -IP $novoIP -Prefixo $c.Prefixo) -ne $faixa) {
+                    Write-Falha "O IP $novoIP nao pertence a faixa $faixa desta rede."
+                    Write-Info  'Usar um IP de outra faixa deixa a maquina sem comunicacao.'
+                } else {
+                    # Se for outro IP, conferir se ja esta em uso
+                    $livre = $true
+                    if ($novoIP -ne $c.IP) {
+                        Write-Info "Verificando se $novoIP esta livre..."
+                        if (Test-Connection -ComputerName $novoIP -Count 2 -Quiet -ErrorAction SilentlyContinue) {
+                            Write-Falha "$novoIP JA ESTA EM USO por outro aparelho. Escolha outro."
+                            $livre = $false
+                        } else { Write-Ok "$novoIP esta livre." }
+                    }
+
+                    if ($livre) {
+                        try {
+                            $dnsAtual = @($c.DNS)
+                            Write-Etapa 'Aplicando IP fixo...'
+                            Remove-NetIPAddress -InterfaceIndex $c.Indice -AddressFamily IPv4 -Confirm:$false -ErrorAction SilentlyContinue
+                            Remove-NetRoute -InterfaceIndex $c.Indice -DestinationPrefix '0.0.0.0/0' -Confirm:$false -ErrorAction SilentlyContinue
+                            New-NetIPAddress -InterfaceIndex $c.Indice -IPAddress $novoIP -PrefixLength $c.Prefixo `
+                                -DefaultGateway $c.Gateway -ErrorAction Stop | Out-Null
+                            if ($dnsAtual.Count -gt 0) {
+                                Set-DnsClientServerAddress -InterfaceIndex $c.Indice -ServerAddresses $dnsAtual -ErrorAction SilentlyContinue
+                            }
+                            Start-Sleep -Seconds 3
+                            $conf = @(Get-NetIPAddress -InterfaceIndex $c.Indice -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                                      Where-Object { $_.IPAddress -eq $novoIP })
+                            if ($conf.Count -gt 0) {
+                                Write-Ok "IP fixo aplicado: $novoIP/$($c.Prefixo)  gateway $($c.Gateway)"
+                                $aplicado.Add("IP fixo $novoIP")
+                                if (Test-Connection -ComputerName $c.Gateway -Count 2 -Quiet -ErrorAction SilentlyContinue) {
+                                    Write-Ok 'Roteador continua respondendo. Rede funcionando.'
+                                } else {
+                                    Write-Falha 'O roteador parou de responder apos a mudanca.'
+                                    Write-Info  ("Para voltar ao automatico: Set-NetIPInterface -InterfaceIndex $($c.Indice) -Dhcp Enabled")
+                                }
+                            } else {
+                                Write-Falha 'O IP nao foi aplicado como esperado.'
+                            }
+                        } catch {
+                            Write-Falha "Falha ao fixar o IP: $($_.Exception.Message)"
+                            Write-Info  'A configuracao anterior pode ter sido removida. Para voltar ao'
+                            Write-Info  ('automatico: Set-NetIPInterface -InterfaceIndex ' + $c.Indice + ' -Dhcp Enabled')
+                        }
+                    }
+                }
+            } else {
+                Write-Info 'IP mantido como esta. Recomendado fazer a reserva no roteador.'
+            }
+        }
+    }
+
+    # =====================================================================
+    # 2. NAO DORMIR
+    # =====================================================================
+    Write-Etapa '2/5  Impedir que o servidor durma'
+    Write-Info 'Servidor que suspende de madrugada = ninguem acessa nada de manha.'
+    Write-Host ''
+    $q = Read-Host '  Impedir suspensao, hibernacao e desligamento de disco? (S/N) [S]'
+    if (-not $q -or $q -match '^[Ss]') {
+        $okEnergia = $true
+        try {
+            # 0 = nunca. AC = na tomada, DC = na bateria.
+            & powercfg /change standby-timeout-ac 0 2>&1 | Out-Null
+            & powercfg /change hibernate-timeout-ac 0 2>&1 | Out-Null
+            & powercfg /change disk-timeout-ac 0 2>&1 | Out-Null
+            Write-Ok 'Suspensao, hibernacao e desligamento de disco: desativados (na tomada).'
+            # Monitor pode desligar - economiza e nao afeta a rede.
+            Write-Info 'A tela continua podendo desligar - isso nao atrapalha o servidor.'
+            $aplicado.Add('suspensao e hibernacao desativadas')
+        } catch { Write-Aviso "Energia: $($_.Exception.Message)"; $okEnergia = $false }
+
+        # Inicio rapido segura arquivos abertos e atrapalha servidor
+        try {
+            $reg = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power'
+            $hf = (Get-ItemProperty -Path $reg -Name HiberbootEnabled -ErrorAction SilentlyContinue).HiberbootEnabled
+            if ($hf -ne 0) {
+                Set-ItemProperty -Path $reg -Name HiberbootEnabled -Value 0 -Type DWord -Force
+                Write-Ok 'Inicializacao rapida desativada (ela mantem estado antigo apos desligar).'
+                $aplicado.Add('inicializacao rapida desativada')
+            } else { Write-Ok 'Inicializacao rapida ja estava desativada.' }
+        } catch { }
+    } else { Write-Info 'Configuracao de energia mantida.' }
+
+    # =====================================================================
+    # 3. PLACA DE REDE
+    # =====================================================================
+    Write-Etapa '3/5  Economia de energia da placa de rede'
+    Write-Info 'O Windows desliga a placa para economizar e a conexao cai sozinha.'
+    Write-Info 'E a causa mais dificil de diagnosticar, porque e intermitente.'
+
+    $placasComEconomia = [System.Collections.Generic.List[string]]::new()
+    try {
+        foreach ($d in @(Get-WmiObject MSPower_DeviceEnable -Namespace root\wmi -ErrorAction SilentlyContinue)) {
+            if ($d.Enable -and $d.InstanceName -match 'PCI\\VEN_') {
+                # confere se e placa de rede
+                $idc = ($d.InstanceName -split '\\')[1]
+                foreach ($a in @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue)) {
+                    if ($a.PnPDeviceID -and $idc -and $a.PnPDeviceID -match [regex]::Escape($idc)) {
+                        [void]$placasComEconomia.Add($a.Name)
+                    }
+                }
+            }
+        }
+    } catch { }
+
+    Write-Host ''
+    if ($placasComEconomia.Count -gt 0) {
+        Write-Aviso ("Placa(s) com economia de energia LIGADA: " + (($placasComEconomia | Select-Object -Unique) -join ', '))
+    } else {
+        Write-Info 'Nao foi possivel confirmar pelo WMI; a correcao sera aplicada assim mesmo.'
+    }
+    $q = Read-Host '  Desligar a economia de energia das placas de rede? (S/N) [S]'
+    if (-not $q -or $q -match '^[Ss]') {
+        $n = 0
+        foreach ($a in @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' })) {
+            # 1) WMI: "permitir que o computador desligue este dispositivo"
+            try {
+                foreach ($d in @(Get-WmiObject MSPower_DeviceEnable -Namespace root\wmi -ErrorAction SilentlyContinue)) {
+                    $idc = ($d.InstanceName -split '\\')[1]
+                    if ($a.PnPDeviceID -and $idc -and $a.PnPDeviceID -match [regex]::Escape($idc) -and $d.Enable) {
+                        $d.Enable = $false
+                        $d.Put() | Out-Null
+                        $n++
+                    }
+                }
+            } catch { }
+            # 2) Propriedades avancadas do driver que derrubam link
+            foreach ($prop in @('Energy Efficient Ethernet','Efficient Ethernet','Green Ethernet',
+                                'Power Saving Mode','Ultra Low Power Mode','Gigabit Lite')) {
+                try {
+                    $p = Get-NetAdapterAdvancedProperty -Name $a.Name -DisplayName $prop -ErrorAction SilentlyContinue
+                    if ($p) {
+                        Set-NetAdapterAdvancedProperty -Name $a.Name -DisplayName $prop -DisplayValue 'Disabled' -NoRestart -ErrorAction SilentlyContinue
+                        Write-Ok "$($a.Name): '$prop' desativado."
+                    }
+                } catch { }
+            }
+        }
+        if ($n -gt 0) {
+            Write-Ok "$n placa(s): 'permitir desligar para economizar energia' DESMARCADO."
+            $aplicado.Add('economia de energia da placa de rede desligada')
+        } else {
+            Write-Ok 'Economia de energia da placa: ja estava desativada ou nao aplicavel.'
+        }
+    } else { Write-Info 'Placa de rede mantida como esta.' }
+
+    # =====================================================================
+    # 4. PERFIL DE REDE
+    # =====================================================================
+    Write-Etapa '4/5  Perfil da rede'
+    $mudou = Set-PerfilRedePrivado
+    if ($mudou) { $aplicado.Add('perfil de rede para privado') }
+    Write-Info 'Atualizacao de recurso do Windows as vezes devolve o perfil para Publico'
+    Write-Info 'e a maquina some da rede sem ninguem ter mexido. Se isso acontecer,'
+    Write-Info 'rode esta ferramenta de novo - ou o diagnostico da rede local.'
+
+    # =====================================================================
+    # 5. ANTIVIRUS E BANCO DE DADOS COMPARTILHADO
+    # =====================================================================
+    Write-Etapa '5/5  Desempenho da pasta compartilhada'
+
+    $shares = @(Get-SmbShare -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '\$$' })
+    if ($shares.Count -eq 0) {
+        Write-Info 'Nenhuma pasta compartilhada nesta maquina - etapa dispensada.'
+    } else {
+        Write-Info 'Pastas compartilhadas encontradas:'
+        foreach ($s in $shares) { Write-Info ("   $($s.Name) -> $($s.Path)") }
+        Write-Host ''
+        Write-Info 'Duas coisas deixam o acesso lento e podem travar sistema juridico'
+        Write-Info 'que usa banco de dados compartilhado:'
+        Write-Info '  - o antivirus escaneia cada arquivo aberto pela rede;'
+        Write-Info '  - o cache do SMB (oplocks) segura registros do banco.'
+        Write-Host ''
+        Write-Aviso 'Excluir a pasta do antivirus reduz a protecao NAQUELA pasta.'
+        Write-Info  'Faz sentido quando o escritorio usa sistema com base compartilhada e'
+        Write-Info  'reclama de lentidao ou travamento. Nao faca por padrao.'
+        Write-Host ''
+        $q = Read-Host '  O escritorio usa sistema com banco de dados nessa pasta? (S/N)'
+        if ($q -match '^[Ss]') {
+            foreach ($s in $shares) {
+                try {
+                    Add-MpPreference -ExclusionPath $s.Path -ErrorAction Stop
+                    Write-Ok "Antivirus: $($s.Path) excluido da varredura em tempo real."
+                    $aplicado.Add("exclusao de antivirus em $($s.Path)")
+                } catch { Write-Aviso "Nao foi possivel excluir $($s.Path): $($_.Exception.Message)" }
+            }
+            try {
+                Set-SmbServerConfiguration -EnableLeasing $false -Force -ErrorAction Stop
+                Write-Ok 'Cache de arquivo (leasing) desativado no servidor.'
+                Write-Info 'Isso evita travamento de registro quando duas pessoas usam o'
+                Write-Info 'sistema ao mesmo tempo. O acesso a arquivo comum fica um pouco'
+                Write-Info 'mais lento, mas o banco para de travar.'
+                $aplicado.Add('leasing do SMB desativado')
+            } catch { Write-Aviso "Leasing: $($_.Exception.Message)" }
+        } else {
+            Write-Info 'Nada alterado. Se aparecer lentidao com o sistema juridico, volte aqui.'
+        }
+    }
+
+    # =====================================================================
+    Write-Host ''
+    if ($aplicado.Count -eq 0) {
+        Write-Titulo 'NADA FOI ALTERADO'
+        Write-Info 'Nenhuma protecao foi aplicada nesta execucao.'
+    } else {
+        Write-Titulo 'SERVIDOR BLINDADO'
+        foreach ($a in $aplicado) { Write-Ok $a }
+        Write-Host ''
+        Write-Info 'O que isso evita: unidade de rede quebrando quando o IP muda, servidor'
+        Write-Info 'inacessivel de manha, queda aleatoria de conexao e lentidao no sistema.'
+        Write-Host ''
+        Write-Aviso 'Ainda falta o que nenhuma configuracao resolve: BACKUP.'
+        Write-Info  'Os arquivos continuam num disco so. Use a opcao de backup do menu.'
+        Add-Alerta 'Servidor blindado - conferir se ha backup configurado.'
+    }
+    return [long]0
+}
+
 function Repair-AcessoAoServidor {
     <#
       "Esse computador parou de acessar o servidor."
@@ -10952,7 +11949,7 @@ function Repair-AcessoAoServidor {
                 } elseif ($txt -match '(?i)(1219|conflito|conflict|multiple connections)') {
                     Write-Falha 'CONFLITO DE CREDENCIAL (erro 1219).'
                     Write-Info  'O Windows ja tem uma conexao aberta com esse servidor usando outro'
-                    Write-Info  'usuario. E' + [char]39 + ' a causa classica de "parou do nada" depois que a'
+                    Write-Info  "usuario. E' a causa classica de 'parou do nada' depois que a"
                     Write-Info  'senha foi trocada no servidor.'
                 }
                 $ondeQuebrou = 'credencial'
@@ -12367,6 +13364,10 @@ if ($Ferramenta) {
             'qualrede'      { Show-QualRede | Out-Null }
             'conexao'       { Repair-ProblemasConexao | Out-Null }
             'semservidor'   { Repair-AcessoAoServidor | Out-Null }
+            'blindar'       { Protect-Servidor | Out-Null }
+            'backup'        { Set-BackupCompartilhado | Out-Null }
+            'fichrede'      { Export-FichaRede | Out-Null }
+            'monitor'       { Set-MonitoramentoRede | Out-Null }
             'memoriaram'    { Test-MemoriaRAM | Out-Null }
             'reparoavancado' { Repair-SistemaAvancado | Out-Null }
             'bsod'          { Show-AnaliseBSOD | Out-Null }
@@ -12493,7 +13494,7 @@ if ($Ferramenta) {
     }
     Write-Host ''
     # Ferramentas somente-leitura nao deixam log salvo.
-    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede', 'qualrede')) {
+    if ($chave -notin @('diagnostico', 'bsod', 'protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede', 'qualrede', 'fichrede')) {
         Write-Host ("  Log desta operacao: $($script:pastaExec)") -ForegroundColor Gray
     }
     Write-Host ('=' * 68) -ForegroundColor Green
@@ -12501,7 +13502,7 @@ if ($Ferramenta) {
     # Diagnostico: abre o TXT temporario e nao deixa nada salvo.
     if ($chave -in @('diagnostico', 'bsod')) { Publicar-RelatorioTemp -RemoverPastaLog }
     # protecaovirus/consoles: so abriram telas; nao deixam pasta de log.
-    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede', 'qualrede')) {
+    elseif ($chave -in @('protecaovirus', 'consoles', 'abrirappdata', 'memoriavirtual', 'certificados', 'dll', 'memoriaram', 'atendimento', 'diagrede', 'qualrede', 'fichrede')) {
         Remove-Item -LiteralPath (Join-Path $script:pastaExec 'manutencao.log') -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 200
         if ($script:pastaExec -and (Test-Path -LiteralPath $script:pastaExec)) {
