@@ -13324,6 +13324,800 @@ function Invoke-OtimizacaoDiscos {
     return [long]0
 }
 
+# =========================================================================
+# PADRONIZAR NAVEGADORES E BARRA DE TAREFAS
+# =========================================================================
+# Todo escritorio tem a mesma cena: o usuario abre o navegador e fica
+# procurando o sistema no historico, ou usa um favorito velho que aponta
+# para o endereco antigo. Aqui os tres navegadores passam a abrir sempre nas
+# mesmas abas, e os tres ficam fixados na barra de tarefas.
+#
+# Feito por POLITICA (Policies no registro / policies.json), nao mexendo no
+# perfil do usuario. Motivo: as paginas iniciais do Chrome e do Edge ficam
+# nas "Secure Preferences", protegidas por hash - editar o arquivo a mao faz
+# o navegador detectar adulteracao e reverter na proxima abertura. Politica
+# e' o caminho suportado e e' o unico que gruda.
+
+$script:UrlsInicioEscritorio = @(
+    'https://suporteadv.suporte.adv.br/',
+    'https://www.suporte.adv.br/sistemas'
+)
+
+function Get-CaminhoNavegador {
+    <#
+      Caminho do executavel pelo App Paths - registro oficial, vale para
+      instalacao por maquina e por usuario. So depois disso chuta pastas.
+    #>
+    param([string]$Exe)
+
+    foreach ($raiz in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths',
+                        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths',
+                        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths')) {
+        $chave = Join-Path $raiz $Exe
+        $valor = (Get-ItemProperty -LiteralPath $chave -Name '(default)' -ErrorAction SilentlyContinue).'(default)'
+        if ($valor) {
+            $valor = $valor.Trim('"')
+            if (Test-Path -LiteralPath $valor) { return $valor }
+        }
+    }
+
+    $palpites = switch ($Exe) {
+        'chrome.exe'  { @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+                          "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+                          "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe") }
+        'msedge.exe'  { @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
+                          "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe") }
+        'firefox.exe' { @("$env:ProgramFiles\Mozilla Firefox\firefox.exe",
+                          "${env:ProgramFiles(x86)}\Mozilla Firefox\firefox.exe",
+                          "$env:LOCALAPPDATA\Mozilla Firefox\firefox.exe") }
+        default       { @() }
+    }
+    foreach ($p in $palpites) { if ($p -and (Test-Path -LiteralPath $p)) { return $p } }
+    return $null
+}
+
+function Set-AbasIniciaisChromium {
+    <#
+      Chrome e Edge compartilham o mesmo motor de politicas: RestoreOnStartup=4
+      significa "abrir esta lista de paginas", e RestoreOnStartupURLs guarda a
+      lista numerada 1, 2, 3.
+
+      Travar   -> HKLM\...\Policies\<navegador>            (usuario nao muda)
+      Sugerir  -> HKLM\...\Policies\<navegador>\Recommended (vira o padrao,
+                  e quem ja tinha configurado a mao continua com o dele)
+    #>
+    param(
+        [string]$Nome,
+        [string]$ChavePolitica,
+        [string]$UrlNovaGuia,
+        [switch]$Travar
+    )
+
+    $alvo = if ($Travar) { $ChavePolitica } else { Join-Path $ChavePolitica 'Recommended' }
+    $urls = @($UrlNovaGuia) + $script:UrlsInicioEscritorio
+
+    try {
+        # Se ja houver configuracao ali (politica de dominio, por exemplo), ela
+        # vai para o log ANTES de ser substituida - senao some sem deixar
+        # rastro e ninguem sabe mais o que estava valendo.
+        $subUrls = Join-Path $alvo 'RestoreOnStartupURLs'
+        if (Test-Path -LiteralPath $subUrls) {
+            $velhas = @()
+            $pp = Get-ItemProperty -LiteralPath $subUrls -ErrorAction SilentlyContinue
+            if ($pp) {
+                # Nao usar $nome aqui: colide com o parametro $Nome (o
+                # PowerShell nao diferencia maiusculas) e o rotulo do navegador
+                # vira lixo nas mensagens.
+                foreach ($prop in ($pp.PSObject.Properties | Where-Object { $_.Name -match '^\d+$' } | Sort-Object { [int]$_.Name })) {
+                    $velhas += [string]$prop.Value
+                }
+            }
+            $iguais = ((@($velhas) -join '|') -eq (($urls) -join '|'))
+            if ($velhas.Count -gt 0 -and -not $iguais) {
+                Write-Aviso "$Nome ja tinha paginas iniciais configuradas - serao substituidas:"
+                foreach ($v in $velhas) { Write-Info ("   (antes) $v") }
+            }
+        }
+
+        if (-not (Test-Path -LiteralPath $alvo)) {
+            New-Item -Path $alvo -Force -ErrorAction Stop | Out-Null
+        }
+        Set-ItemProperty -LiteralPath $alvo -Name 'RestoreOnStartup' -Value 4 -Type DWord -ErrorAction Stop
+
+        # Recria a lista: se sobrasse endereco antigo com numero maior, ele
+        # continuaria abrindo junto.
+        if (Test-Path -LiteralPath $subUrls) {
+            Remove-Item -LiteralPath $subUrls -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        New-Item -Path $subUrls -Force -ErrorAction Stop | Out-Null
+
+        $i = 0
+        foreach ($u in $urls) {
+            $i++
+            Set-ItemProperty -LiteralPath $subUrls -Name ([string]$i) -Value $u -Type String -ErrorAction Stop
+        }
+
+        Write-Ok ("$Nome configurado para abrir $i aba(s) ao iniciar.")
+        foreach ($u in $urls) { Write-Info ("   - $u") }
+
+        # Politica obrigatoria ganha da recomendada: se existir uma, o que
+        # acabamos de gravar em Recommended nao aparece e parece que falhou.
+        if (-not $Travar) {
+            $mand = (Get-ItemProperty -LiteralPath $ChavePolitica -Name 'RestoreOnStartup' -ErrorAction SilentlyContinue).RestoreOnStartup
+            if ($null -ne $mand) {
+                Write-Aviso "$Nome ja tem politica OBRIGATORIA de pagina inicial - ela ganha da sugerida."
+                Add-Alerta "$Nome tem politica obrigatoria de pagina inicial (talvez de dominio). A configuracao sugerida nao vai aparecer."
+            }
+        }
+        return $true
+    } catch {
+        Write-Falha "Nao foi possivel configurar $Nome - $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Get-PastasFirefox {
+    <# Todas as instalacoes do Firefox na maquina (pode haver 32 e 64 bits). #>
+    $lista = New-Object System.Collections.Generic.List[string]
+
+    $exe = Get-CaminhoNavegador 'firefox.exe'
+    if ($exe) { $lista.Add([System.IO.Path]::GetDirectoryName($exe)) }
+
+    foreach ($raiz in @('HKLM:\SOFTWARE\Mozilla\Mozilla Firefox',
+                        'HKLM:\SOFTWARE\WOW6432Node\Mozilla\Mozilla Firefox')) {
+        foreach ($ver in @(Get-ChildItem -LiteralPath $raiz -ErrorAction SilentlyContinue)) {
+            $pe = (Get-ItemProperty -LiteralPath (Join-Path $ver.PSPath 'Main') -Name 'PathToExe' -ErrorAction SilentlyContinue).PathToExe
+            if ($pe -and (Test-Path -LiteralPath $pe)) {
+                $dir = [System.IO.Path]::GetDirectoryName($pe)
+                if ($lista -notcontains $dir) { $lista.Add($dir) }
+            }
+        }
+    }
+    return $lista
+}
+
+function Set-AbasIniciaisFirefox {
+    <#
+      O Firefox nao le as politicas do Chrome. Usa policies.json dentro da
+      pasta de instalacao, em "distribution".
+
+      A pagina inicial dele aceita varios enderecos separados por "|", e cada
+      um abre numa aba - e' assim que se consegue "nova guia + dois sites".
+      about:newtab entra como primeira, atendendo a mesma ordem dos outros.
+
+      Se ja existir um policies.json, ele e' LIDO E MESCLADO: outra politica
+      que ja esteja ali (bloqueio de telemetria, extensao obrigatoria) fica.
+      O original vai para .bak antes de qualquer alteracao.
+    #>
+    param([switch]$Travar)
+
+    $status  = if ($Travar) { 'locked' } else { 'default' }
+    $inicial = (@('about:newtab') + $script:UrlsInicioEscritorio) -join '|'
+    $pastas  = @(Get-PastasFirefox)
+
+    if ($pastas.Count -eq 0) {
+        # Nao esta instalado agora: deixa a politica no registro, que o Firefox
+        # le assim que for instalado. Melhor do que nao configurar nada.
+        try {
+            $kFF = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'
+            if (-not (Test-Path -LiteralPath $kFF)) { New-Item -Path $kFF -Force -ErrorAction Stop | Out-Null }
+            $prefsReg = [ordered]@{
+                'browser.startup.page'     = [ordered]@{ Value = 1;        Status = $status }
+                'browser.startup.homepage' = [ordered]@{ Value = $inicial; Status = $status }
+            }
+            Set-ItemProperty -LiteralPath $kFF -Name 'Preferences' `
+                -Value ($prefsReg | ConvertTo-Json -Depth 6 -Compress) -Type String -ErrorAction Stop
+            Write-Info 'Firefox nao esta instalado - politica deixada no registro para quando for.'
+            return $true
+        } catch {
+            Write-Aviso "Firefox nao instalado e nao foi possivel deixar a politica: $($_.Exception.Message)"
+            return $false
+        }
+    }
+
+    $algum = $false
+    foreach ($pasta in $pastas) {
+        $dist = Join-Path $pasta 'distribution'
+        $arq  = Join-Path $dist 'policies.json'
+        $obj  = $null
+
+        if (Test-Path -LiteralPath $arq) {
+            try {
+                $obj = Get-Content -LiteralPath $arq -Raw -ErrorAction Stop | ConvertFrom-Json
+            } catch {
+                Write-Aviso 'policies.json existente esta invalido - vai ser refeito (copia salva em .bak).'
+            }
+            $bak = '{0}.bak_{1}' -f $arq, (Get-Date -Format 'yyyyMMdd_HHmmss')
+            Copy-Item -LiteralPath $arq -Destination $bak -Force -ErrorAction SilentlyContinue
+        }
+
+        try {
+            if (-not (Test-Path -LiteralPath $dist)) {
+                New-Item -ItemType Directory -Path $dist -Force -ErrorAction Stop | Out-Null
+            }
+
+            $politicas = [ordered]@{}
+            if ($obj -and $obj.policies) {
+                foreach ($p in $obj.policies.PSObject.Properties) { $politicas[$p.Name] = $p.Value }
+            }
+            $prefs = [ordered]@{}
+            if ($politicas.Contains('Preferences') -and $politicas['Preferences']) {
+                foreach ($p in $politicas['Preferences'].PSObject.Properties) { $prefs[$p.Name] = $p.Value }
+            }
+            $prefs['browser.startup.page']     = [ordered]@{ Value = 1;        Status = $status }
+            $prefs['browser.startup.homepage'] = [ordered]@{ Value = $inicial; Status = $status }
+            $politicas['Preferences'] = $prefs
+
+            $json = ([ordered]@{ policies = $politicas } | ConvertTo-Json -Depth 12)
+            # Sem BOM: o Firefox le o arquivo como UTF-8 puro.
+            [System.IO.File]::WriteAllText($arq, $json, (New-Object System.Text.UTF8Encoding($false)))
+
+            Write-Ok ("Firefox configurado em: $pasta")
+            $algum = $true
+        } catch {
+            Write-Falha "Nao foi possivel gravar o policies.json em $pasta - $($_.Exception.Message)"
+        }
+    }
+
+    if ($algum) {
+        Write-Info '   - about:newtab (nova guia)'
+        foreach ($u in $script:UrlsInicioEscritorio) { Write-Info ("   - $u") }
+    }
+    return $algum
+}
+
+function Get-PastaFixadosBarra {
+    return (Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar')
+}
+
+function Get-FixadosNaBarra {
+    <# Lista dos atalhos fixados hoje, com o executavel de cada um. #>
+    $pasta = Get-PastaFixadosBarra
+    $lista = New-Object System.Collections.Generic.List[object]
+    if (-not (Test-Path -LiteralPath $pasta)) { return $lista }
+    try {
+        $ws = New-Object -ComObject WScript.Shell
+        foreach ($lnk in @(Get-ChildItem -LiteralPath $pasta -Filter '*.lnk' -ErrorAction SilentlyContinue | Sort-Object Name)) {
+            $alvo = ''
+            try { $alvo = [string]$ws.CreateShortcut($lnk.FullName).TargetPath } catch { }
+            $lista.Add([pscustomobject]@{ Lnk = $lnk.FullName; Nome = $lnk.BaseName; Alvo = $alvo })
+        }
+    } catch { }
+    return $lista
+}
+
+function Add-BarraTarefasPeloVerbo {
+    <#
+      Tentativa barata: invocar o comando "Fixar na barra de tarefas" do
+      proprio Windows. Ele foi tirado da lista de verbos dos .exe no Windows 10
+      1703, mas o manipulador seguia registrado no CommandStore e dava para
+      chamar por uma chave temporaria. Nas atualizacoes recentes do Windows 10
+      e 11 nem isso funciona mais: o verbo e' aceito e ignorado, sem erro.
+      Continua sendo a primeira tentativa porque, quando funciona, resolve sem
+      reiniciar o Explorer. Quando nao funciona, caimos no metodo de layout.
+    #>
+    param([string]$Caminho)
+
+    if (-not $Caminho -or -not (Test-Path -LiteralPath $Caminho)) { return $false }
+
+    $handler = (Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\Windows.taskbarpin' `
+                -Name 'ExplorerCommandHandler' -ErrorAction SilentlyContinue).ExplorerCommandHandler
+    if (-not $handler) { return $false }
+
+    $sub = 'SOFTWARE\Classes\*\shell\SuporteADVFixar'
+    try {
+        $k = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($sub)
+        $k.SetValue('ExplorerCommandHandler', $handler, [Microsoft.Win32.RegistryValueKind]::String)
+        $k.Close()
+
+        $shell = New-Object -ComObject Shell.Application
+        $item  = $shell.Namespace([System.IO.Path]::GetDirectoryName($Caminho)).ParseName([System.IO.Path]::GetFileName($Caminho))
+        try { $item.InvokeVerb('SuporteADVFixar') } catch { }
+        Start-Sleep -Milliseconds 900
+    } catch {
+        return $false
+    } finally {
+        try { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($sub, $false) } catch { }
+        try {
+            $pai = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('SOFTWARE\Classes\*\shell', $true)
+            if ($pai -and $pai.SubKeyCount -eq 0 -and $pai.ValueCount -eq 0) {
+                $pai.Close()
+                [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKey('SOFTWARE\Classes\*\shell', $false)
+            } elseif ($pai) { $pai.Close() }
+        } catch { }
+    }
+
+    return (@(Get-FixadosNaBarra | Where-Object { $_.Alvo -eq $Caminho }).Count -gt 0)
+}
+
+function Get-AtalhoDeOrigem {
+    <#
+      Para montar o layout da barra e' preciso apontar um .lnk de ORIGEM para
+      cada programa - de preferencia o do menu Iniciar.
+
+      Nao serve apontar para o .lnk que ja esta na pasta dos fixados: o Windows
+      copia cada atalho do layout para dentro dessa mesma pasta, e o nome
+      colide com o que ja esta la - resultado, a barra fica com "Chrome" e
+      "Chrome (2)", tudo duplicado. Quem nao tem atalho no menu Iniciar ganha
+      uma copia em C:\ProgramData\SuporteTI\atalhos.
+    #>
+    param([string]$Alvo, [string]$LnkFixado, [string]$Nome, [hashtable]$IndiceIniciar)
+
+    if ($Alvo -and $IndiceIniciar -and $IndiceIniciar.ContainsKey($Alvo.ToLower())) {
+        return $IndiceIniciar[$Alvo.ToLower()]
+    }
+
+    $pastaAt = 'C:\ProgramData\SuporteTI\atalhos'
+    if (-not (Test-Path -LiteralPath $pastaAt)) {
+        New-Item -ItemType Directory -Path $pastaAt -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+    $destino = Join-Path $pastaAt (($Nome -replace '[\\/:*?"<>|]', '_') + '.lnk')
+
+    if ($LnkFixado -and (Test-Path -LiteralPath $LnkFixado)) {
+        try { Copy-Item -LiteralPath $LnkFixado -Destination $destino -Force -ErrorAction Stop; return $destino } catch { }
+    }
+    if ($Alvo -and (Test-Path -LiteralPath $Alvo)) {
+        try {
+            $ws = New-Object -ComObject WScript.Shell
+            $at = $ws.CreateShortcut($destino)
+            $at.TargetPath       = $Alvo
+            $at.WorkingDirectory = [System.IO.Path]::GetDirectoryName($Alvo)
+            $at.Save()
+            return $destino
+        } catch { }
+    }
+    return $null
+}
+
+function Get-IndiceAtalhosIniciar {
+    <# executavel (minusculo) -> caminho do .lnk no menu Iniciar #>
+    $idx = @{}
+    try {
+        $ws = New-Object -ComObject WScript.Shell
+        foreach ($raiz in @("$env:ProgramData\Microsoft\Windows\Start Menu\Programs",
+                            "$env:APPDATA\Microsoft\Windows\Start Menu\Programs")) {
+            foreach ($lnk in @(Get-ChildItem -LiteralPath $raiz -Filter '*.lnk' -Recurse -ErrorAction SilentlyContinue)) {
+                try {
+                    $t = [string]$ws.CreateShortcut($lnk.FullName).TargetPath
+                    if ($t) {
+                        $ch = $t.ToLower()
+                        if (-not $idx.ContainsKey($ch)) { $idx[$ch] = $lnk.FullName }
+                    }
+                } catch { }
+            }
+        }
+    } catch { }
+    return $idx
+}
+
+function Restart-ExplorerEEsperar {
+    Stop-Process -Name 'explorer' -Force -ErrorAction SilentlyContinue
+    $fim = (Get-Date).AddSeconds(12)
+    while ((Get-Date) -lt $fim) {
+        Start-Sleep -Milliseconds 700
+        if (Get-Process -Name 'explorer' -ErrorAction SilentlyContinue) { break }
+    }
+    if (-not (Get-Process -Name 'explorer' -ErrorAction SilentlyContinue)) {
+        # AutoRestartShell desligado: sobe na mao, senao o usuario fica sem barra
+        try { Start-Process 'explorer.exe' -ErrorAction Stop } catch { }
+    }
+    Start-Sleep -Seconds 5
+}
+
+function Set-BarraTarefasPorLayout {
+    <#
+      Metodo suportado pela Microsoft (LayoutModification.xml), que e' o unico
+      que ainda funciona: monta a lista completa da barra e manda o Windows
+      reconstruir.
+
+      Dois cuidados que fazem toda a diferenca:
+
+      - a lista e' montada com O QUE JA ESTA FIXADO + os navegadores. O layout
+        substitui a barra inteira; sem isso, o usuario perderia os icones dele;
+      - o XML e' APAGADO depois de aplicar. Se ficasse, a barra voltaria a essa
+        lista a cada logon e todo icone que o usuario fixasse depois sumiria no
+        dia seguinte - reclamacao certa no escritorio.
+
+      Antes de mexer, a pasta de fixados e a chave Taskband vao para a pasta de
+      log desta execucao. Se a barra vier menor do que era, desfaz sozinho.
+    #>
+    param([string[]]$Executaveis)
+
+    $pastaPin = Get-PastaFixadosBarra
+    $antes    = @(Get-FixadosNaBarra)
+    $alvosAntes = @($antes | ForEach-Object { $_.Alvo } | Where-Object { $_ })
+
+    # --- backup ----------------------------------------------------------
+    $pastaBkp = Join-Path $script:pastaExec 'barra_tarefas'
+    $regBkp   = Join-Path $pastaBkp 'Taskband.reg'
+    try {
+        New-Item -ItemType Directory -Path $pastaBkp -Force -ErrorAction Stop | Out-Null
+        foreach ($a in $antes) {
+            Copy-Item -LiteralPath $a.Lnk -Destination (Join-Path $pastaBkp ([System.IO.Path]::GetFileName($a.Lnk))) -Force -ErrorAction SilentlyContinue
+        }
+        & reg.exe export 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband' $regBkp /y 2>&1 | Out-Null
+        Write-Info ("Copia de seguranca da barra: $pastaBkp")
+    } catch {
+        Write-Falha "Nao consegui guardar a copia de seguranca da barra - nada foi alterado."
+        return [long]0
+    }
+
+    # --- monta a lista ----------------------------------------------------
+    $indice = Get-IndiceAtalhosIniciar
+    $origens = New-Object System.Collections.Generic.List[string]
+
+    foreach ($a in $antes) {
+        $o = Get-AtalhoDeOrigem -Alvo $a.Alvo -LnkFixado $a.Lnk -Nome $a.Nome -IndiceIniciar $indice
+        if ($o) { $origens.Add($o) } else { Write-Aviso ("Nao achei atalho de origem para '$($a.Nome)' - ele sai da barra.") }
+    }
+    foreach ($exe in $Executaveis) {
+        if ($alvosAntes -contains $exe) { continue }
+        $nome = [System.IO.Path]::GetFileNameWithoutExtension($exe)
+        $o = Get-AtalhoDeOrigem -Alvo $exe -LnkFixado $null -Nome $nome -IndiceIniciar $indice
+        if ($o) { $origens.Add($o) } else { Write-Aviso ("Nao consegui criar atalho para $exe") }
+    }
+
+    $modelo = @'
+<?xml version="1.0" encoding="utf-8"?>
+<LayoutModificationTemplate
+    xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification"
+    xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout"
+    xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout"
+    xmlns:taskbar="http://schemas.microsoft.com/Start/2014/TaskbarLayout"
+    Version="1">
+  <CustomTaskbarLayoutCollection PinListPlacement="Replace">
+    <defaultlayout:TaskbarLayout>
+      <taskbar:TaskbarPinList>
+__ITENS__
+      </taskbar:TaskbarPinList>
+    </defaultlayout:TaskbarLayout>
+  </CustomTaskbarLayoutCollection>
+</LayoutModificationTemplate>
+'@
+    $itens = ($origens | ForEach-Object {
+        '        <taskbar:DesktopApp DesktopApplicationLinkPath="' + ($_ -replace '&', '&amp;') + '" />'
+    }) -join "`r`n"
+    $xml = $modelo.Replace('__ITENS__', $itens)
+
+    # XML torto deixaria a barra vazia: confere antes de gravar.
+    try { [xml]$xml | Out-Null } catch {
+        Write-Falha "O layout gerado ficou invalido - nada foi alterado. $($_.Exception.Message)"
+        return [long]0
+    }
+
+    $pastaShell = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Shell'
+    $arqXml     = Join-Path $pastaShell 'LayoutModification.xml'
+    $xmlAntigo  = $null
+    try {
+        if (-not (Test-Path -LiteralPath $pastaShell)) { New-Item -ItemType Directory -Path $pastaShell -Force -ErrorAction Stop | Out-Null }
+        if (Test-Path -LiteralPath $arqXml) {
+            $xmlAntigo = Join-Path $pastaBkp 'LayoutModification.xml'
+            Copy-Item -LiteralPath $arqXml -Destination $xmlAntigo -Force -ErrorAction SilentlyContinue
+        }
+        [System.IO.File]::WriteAllText($arqXml, $xml, (New-Object System.Text.UTF8Encoding($false)))
+    } catch {
+        Write-Falha "Nao foi possivel gravar o layout da barra - $($_.Exception.Message)"
+        return [long]0
+    }
+
+    # --- aplica -----------------------------------------------------------
+    Write-Info ("Reconstruindo a barra com $($origens.Count) icone(s). O Explorer reinicia agora...")
+
+    # A pasta dos fixados precisa ser esvaziada antes: o Windows COPIA para ela
+    # cada atalho do layout, e se o arquivo de mesmo nome ainda estiver la ele
+    # cria "Chrome (2)" ao lado de "Chrome" - a barra fica com tudo em dobro.
+    # A copia de seguranca ja foi feita logo acima.
+    foreach ($f in @(Get-ChildItem -LiteralPath $pastaPin -Filter '*.lnk' -ErrorAction SilentlyContinue)) {
+        Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue
+    }
+
+    Remove-Item -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband' -Recurse -Force -ErrorAction SilentlyContinue
+    Restart-ExplorerEEsperar
+
+    # O Windows monta a barra alguns segundos DEPOIS de o Explorer subir.
+    # Conferir na hora dava "nao entrou" para uma coisa que entrava logo em
+    # seguida: espera ate os navegadores aparecerem, com limite.
+    $limite = (Get-Date).AddSeconds(30)
+    while ((Get-Date) -lt $limite) {
+        $pres = @(Get-FixadosNaBarra | ForEach-Object { $_.Alvo })
+        if (@($Executaveis | Where-Object { $pres -notcontains $_ }).Count -eq 0) { break }
+        Start-Sleep -Seconds 2
+    }
+
+    # --- confere ----------------------------------------------------------
+    $depois = @(Get-FixadosNaBarra)
+    $alvosDepois = @($depois | ForEach-Object { $_.Alvo } | Where-Object { $_ })
+    $perdidos = @($alvosAntes | Where-Object { $alvosDepois -notcontains $_ })
+    $novos    = @($Executaveis | Where-Object { $alvosDepois -contains $_ })
+
+    # O XML sai de cena: ele so servia para esta reconstrucao. Ficando la, a
+    # barra voltaria a esta lista a cada logon.
+    Remove-Item -LiteralPath $arqXml -Force -ErrorAction SilentlyContinue
+    if ($xmlAntigo -and (Test-Path -LiteralPath $xmlAntigo)) {
+        Copy-Item -LiteralPath $xmlAntigo -Destination $arqXml -Force -ErrorAction SilentlyContinue
+        Write-Info 'O LayoutModification.xml que ja existia foi recolocado.'
+    }
+
+    if ($perdidos.Count -gt 0) {
+        Write-Falha ("A barra perdeu $($perdidos.Count) icone(s) - desfazendo.")
+        foreach ($p in $perdidos) { Write-Info ("   perdido: $p") }
+        Restore-BarraTarefas -PastaBackup $pastaBkp
+        return [long]0
+    }
+
+    foreach ($n in $novos) { Write-Ok ("Fixado na barra: $n") }
+    if ($novos.Count -eq 0) { Write-Aviso 'A barra foi reconstruida mas os navegadores nao entraram.' }
+    return [long]$novos.Count
+}
+
+function Restore-BarraTarefas {
+    <# Volta a barra ao que era, usando a copia guardada antes da alteracao. #>
+    param([string]$PastaBackup)
+
+    $pastaPin = Get-PastaFixadosBarra
+    try {
+        Remove-Item -LiteralPath (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Shell\LayoutModification.xml') -Force -ErrorAction SilentlyContinue
+        if (-not (Test-Path -LiteralPath $pastaPin)) { New-Item -ItemType Directory -Path $pastaPin -Force | Out-Null }
+        foreach ($f in @(Get-ChildItem -LiteralPath $pastaPin -Filter '*.lnk' -ErrorAction SilentlyContinue)) {
+            Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue
+        }
+        # Um a um, com LiteralPath: "pasta\*.lnk" com -LiteralPath nao expande
+        # o curinga e o restore silenciosamente nao copia nada.
+        foreach ($f in @(Get-ChildItem -Path $PastaBackup -Filter '*.lnk' -ErrorAction SilentlyContinue)) {
+            Copy-Item -LiteralPath $f.FullName -Destination (Join-Path $pastaPin $f.Name) -Force -ErrorAction SilentlyContinue
+        }
+        Remove-Item -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband' -Recurse -Force -ErrorAction SilentlyContinue
+        $reg = Join-Path $PastaBackup 'Taskband.reg'
+        if (Test-Path -LiteralPath $reg) { & reg.exe import $reg 2>&1 | Out-Null }
+        Restart-ExplorerEEsperar
+        $q = @(Get-FixadosNaBarra).Count
+        Write-Ok "Barra restaurada como estava ($q icone(s))."
+    } catch {
+        Write-Falha "Falhou ao restaurar a barra - $($_.Exception.Message)"
+        Write-Info  ("Os atalhos originais estao em: $PastaBackup")
+        Add-Alerta  ("Barra de tarefas pode ter ficado incompleta. Atalhos originais em $PastaBackup")
+    }
+}
+
+function Remove-AbasIniciaisPadrao {
+    <#
+      Desfaz so o que esta ferramenta gravou: RestoreOnStartup e a lista de
+      enderecos, nas duas variantes (obrigatoria e recomendada). Nao apaga a
+      chave Policies inteira - se a maquina estiver num dominio, ali pode
+      haver politica de outra pessoa.
+    #>
+    $qtd = 0
+
+    foreach ($nav in @(
+        @{ Nome = 'Google Chrome';  Chave = 'HKLM:\SOFTWARE\Policies\Google\Chrome' },
+        @{ Nome = 'Microsoft Edge'; Chave = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' }
+    )) {
+        foreach ($alvo in @($nav.Chave, (Join-Path $nav.Chave 'Recommended'))) {
+            if (-not (Test-Path -LiteralPath $alvo)) { continue }
+            try {
+                if ($null -ne (Get-ItemProperty -LiteralPath $alvo -Name 'RestoreOnStartup' -ErrorAction SilentlyContinue).RestoreOnStartup) {
+                    Remove-ItemProperty -LiteralPath $alvo -Name 'RestoreOnStartup' -Force -ErrorAction SilentlyContinue
+                    $qtd++
+                }
+                $subUrls = Join-Path $alvo 'RestoreOnStartupURLs'
+                if (Test-Path -LiteralPath $subUrls) {
+                    Remove-Item -LiteralPath $subUrls -Recurse -Force -ErrorAction SilentlyContinue
+                    $qtd++
+                }
+                Write-Ok ("$($nav.Nome): configuracao de paginas iniciais removida.")
+            } catch {
+                Write-Aviso "Nao foi possivel limpar $($nav.Nome) - $($_.Exception.Message)"
+            }
+        }
+    }
+
+    # Firefox: tira so as duas preferencias; o resto do policies.json fica.
+    foreach ($pasta in @(Get-PastasFirefox)) {
+        $arq = Join-Path (Join-Path $pasta 'distribution') 'policies.json'
+        if (-not (Test-Path -LiteralPath $arq)) { continue }
+        try {
+            $obj = Get-Content -LiteralPath $arq -Raw -ErrorAction Stop | ConvertFrom-Json
+            if (-not ($obj -and $obj.policies -and $obj.policies.Preferences)) { continue }
+
+            $politicas = [ordered]@{}
+            foreach ($p in $obj.policies.PSObject.Properties) { $politicas[$p.Name] = $p.Value }
+            $prefs = [ordered]@{}
+            foreach ($p in $politicas['Preferences'].PSObject.Properties) {
+                if ($p.Name -notin @('browser.startup.page', 'browser.startup.homepage')) { $prefs[$p.Name] = $p.Value }
+            }
+            if ($prefs.Count -eq 0) { $politicas.Remove('Preferences') } else { $politicas['Preferences'] = $prefs }
+
+            if ($politicas.Count -eq 0) {
+                Remove-Item -LiteralPath $arq -Force -ErrorAction Stop
+                Write-Ok ("Firefox: policies.json removido (nao restou politica nenhuma) - $pasta")
+            } else {
+                $json = ([ordered]@{ policies = $politicas } | ConvertTo-Json -Depth 12)
+                [System.IO.File]::WriteAllText($arq, $json, (New-Object System.Text.UTF8Encoding($false)))
+                Write-Ok ("Firefox: paginas iniciais removidas, demais politicas mantidas - $pasta")
+            }
+            $qtd++
+        } catch {
+            Write-Aviso "Nao foi possivel limpar o policies.json em $pasta - $($_.Exception.Message)"
+        }
+    }
+
+    $kFF = 'HKLM:\SOFTWARE\Policies\Mozilla\Firefox'
+    if ((Test-Path -LiteralPath $kFF) -and
+        $null -ne (Get-ItemProperty -LiteralPath $kFF -Name 'Preferences' -ErrorAction SilentlyContinue).Preferences) {
+        Remove-ItemProperty -LiteralPath $kFF -Name 'Preferences' -Force -ErrorAction SilentlyContinue
+        $qtd++
+    }
+
+    if ($qtd -eq 0) { Write-Info 'Nao havia configuracao de paginas iniciais para remover.' }
+    return [long]$qtd
+}
+
+function Set-PadraoNavegadores {
+    <#
+      Faz os tres navegadores abrirem sempre nas mesmas abas e fixa os tres na
+      barra de tarefas. Nao instala navegador nenhum: configura o que existe.
+    #>
+    if ($SomenteRelatorio) {
+        Write-Simul 'Configuraria Chrome, Edge e Firefox para abrir nova guia + suporteadv + sistemas, e fixaria os tres na barra.'
+        return [long]0
+    }
+
+    Write-Titulo 'PADRONIZAR NAVEGADORES E BARRA DE TAREFAS'
+    Write-Info 'Ao abrir, os tres navegadores passam a mostrar sempre:'
+    Write-Info '   1. Nova guia'
+    foreach ($u in $script:UrlsInicioEscritorio) { Write-Info ("   {0}. {1}" -f ($script:UrlsInicioEscritorio.IndexOf($u) + 2), $u) }
+
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isAdmin) {
+        Write-Falha 'Esta ferramenta precisa de Administrador (grava politica de maquina).'
+        Write-Info  'Feche e abra o menu como Administrador.'
+        return [long]0
+    }
+
+    # --- quem esta instalado ---------------------------------------------
+    $navs = @(
+        @{ Nome = 'Google Chrome';  Exe = 'chrome.exe';  Chave = 'HKLM:\SOFTWARE\Policies\Google\Chrome';   NovaGuia = 'chrome://newtab' },
+        @{ Nome = 'Microsoft Edge'; Exe = 'msedge.exe';  Chave = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge';  NovaGuia = 'edge://newtab' },
+        @{ Nome = 'Mozilla Firefox';Exe = 'firefox.exe'; Chave = $null;                                     NovaGuia = 'about:newtab' }
+    )
+    foreach ($n in $navs) { $n.Caminho = Get-CaminhoNavegador $n.Exe }
+
+    Write-Host ''
+    Write-Etapa 'Navegadores encontrados nesta maquina'
+    foreach ($n in $navs) {
+        if ($n.Caminho) { Write-Ok ("$($n.Nome): $($n.Caminho)") }
+        else            { Write-Info ("$($n.Nome): nao instalado") }
+    }
+
+    if ($SemInteracao) { Write-Aviso 'Modo desatendido: esta ferramenta pergunta antes de alterar.'; return [long]0 }
+
+    Write-Host ''
+    Write-Host '     [1] Aplicar tudo (abas iniciais + fixar na barra)' -ForegroundColor White
+    Write-Host '     [2] So as abas iniciais' -ForegroundColor White
+    Write-Host '     [3] So fixar na barra de tarefas' -ForegroundColor White
+    Write-Host '     [4] Desfazer as abas iniciais' -ForegroundColor White
+    Write-Host '     [0] Cancelar' -ForegroundColor DarkGray
+    $op = (Read-Host '  Opcao [1]').Trim()
+    if (-not $op) { $op = '1' }
+    if ($op -eq '0') { Write-Info 'Cancelado - nada foi alterado.'; return [long]0 }
+    if ($op -notin @('1', '2', '3', '4')) { Write-Aviso 'Opcao invalida - nada foi alterado.'; return [long]0 }
+
+    if ($op -eq '4') {
+        Write-Host ''
+        Write-Etapa 'Removendo a configuracao de paginas iniciais'
+        $r = Remove-AbasIniciaisPadrao
+        Write-Host ''
+        Write-Info 'Os icones fixados na barra continuam. Para tirar: botao direito no icone >'
+        Write-Info 'Desafixar da barra de tarefas.'
+        Write-Info 'Feche e abra os navegadores para valer.'
+        return $r
+    }
+
+    $qtd = 0
+
+    # --- 1. abas iniciais -------------------------------------------------
+    if ($op -in @('1', '2')) {
+        Write-Host ''
+        Write-Info 'Travado: o usuario nao consegue mudar a pagina inicial (aparece'
+        Write-Info '"Gerenciado pela sua organizacao" nas configuracoes do navegador).'
+        Write-Info 'Sugerido: vira o padrao, mas quem ja tinha configurado a mao'
+        Write-Info 'continua com o dele, e qualquer um pode trocar depois.'
+        $rt = (Read-Host '  Travar a configuracao? (S/N) [S]').Trim()
+        $travar = (-not $rt -or $rt -match '^[Ss]')
+
+        Write-Host ''
+        Write-Etapa ('Gravando as abas iniciais ({0})' -f $(if ($travar) { 'travado' } else { 'sugerido' }))
+
+        foreach ($n in ($navs | Where-Object { $_.Chave })) {
+            if (Set-AbasIniciaisChromium -Nome $n.Nome -ChavePolitica $n.Chave -UrlNovaGuia $n.NovaGuia -Travar:$travar) { $qtd++ }
+        }
+        if (Set-AbasIniciaisFirefox -Travar:$travar) { $qtd++ }
+
+        Write-Host ''
+        Write-Info 'Vale na PROXIMA abertura de cada navegador. Se estiver aberto agora,'
+        Write-Info 'feche todas as janelas dele (inclusive as em segundo plano) e abra de novo.'
+    }
+
+    # --- 2. barra de tarefas ---------------------------------------------
+    if ($op -in @('1', '3')) {
+        Write-Host ''
+        Write-Etapa 'Fixando os navegadores na barra de tarefas'
+
+        # A barra e' por usuario. Se o menu foi elevado com OUTRA conta de
+        # administrador, os icones iriam para a barra dela, e nao para a do
+        # usuario que esta na maquina - erro que so aparece dias depois.
+        $interativo = ''
+        try { $interativo = [string](Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName } catch { }
+        $atual = "$env:USERDOMAIN\$env:USERNAME"
+        if ($interativo -and ($interativo -ne $atual)) {
+            Write-Aviso 'A janela esta rodando como uma conta diferente da que esta usando o Windows:'
+            Write-Info  ("   usando o Windows : $interativo")
+            Write-Info  ("   rodando o menu   : $atual")
+            Write-Info  'Os icones seriam fixados na barra da conta errada.'
+            $rr = (Read-Host '  Fixar assim mesmo? (S/N) [N]').Trim()
+            if ($rr -notmatch '^[Ss]') {
+                Write-Info 'Pulado. Rode o menu na sessao do proprio usuario para fixar.'
+                Add-Alerta 'Icones nao fixados: o menu rodou com conta diferente da do usuario da maquina.'
+                Write-Host ''
+                Write-Ok ("$qtd item(ns) configurado(s).")
+                return [long]$qtd
+            }
+        }
+
+        $instalados = @($navs | Where-Object { $_.Caminho } | ForEach-Object { $_.Caminho })
+        foreach ($n in ($navs | Where-Object { -not $_.Caminho })) {
+            Write-Info ("$($n.Nome) nao esta instalado - nada a fixar.")
+        }
+
+        $jaFixados = @(Get-FixadosNaBarra | ForEach-Object { $_.Alvo })
+        $faltando  = @($instalados | Where-Object { $jaFixados -notcontains $_ })
+
+        foreach ($n in ($navs | Where-Object { $_.Caminho -and ($jaFixados -contains $_.Caminho) })) {
+            Write-Info ("$($n.Nome) ja estava fixado.")
+        }
+
+        if ($faltando.Count -eq 0) {
+            if ($instalados.Count -gt 0) { Write-Ok 'Todos os navegadores instalados ja estao na barra.' }
+        } else {
+            # 1a tentativa: o comando do proprio Windows, que nao mexe em mais
+            # nada. Se funcionar, acabou aqui.
+            $restam = New-Object System.Collections.Generic.List[string]
+            foreach ($exe in $faltando) {
+                if (Add-BarraTarefasPeloVerbo -Caminho $exe) {
+                    Write-Ok ("Fixado na barra: $exe")
+                    $qtd++
+                } else { $restam.Add($exe) }
+            }
+
+            if ($restam.Count -gt 0) {
+                Write-Host ''
+                Write-Aviso 'Este Windows nao aceita mais fixar icone por comando (a Microsoft'
+                Write-Info  'bloqueou isso nas atualizacoes recentes do 10 e do 11).'
+                Write-Info  'Resta o caminho oficial: reconstruir a barra a partir de um layout.'
+                Write-Info  'O que isso significa na pratica:'
+                Write-Info  "   - a barra e' reconstruida com os icones de hoje MAIS os navegadores;"
+                Write-Info  '   - o Explorer reinicia (a barra pisca e as janelas de pastas fecham);'
+                Write-Info  '   - programas abertos nao sao fechados;'
+                Write-Info  '   - a barra atual e guardada antes, e volta sozinha se algo der errado.'
+                Write-Host ''
+                $rl = (Read-Host '  Reconstruir a barra agora? (S/N) [S]').Trim()
+                if (-not $rl -or $rl -match '^[Ss]') {
+                    $qtd += (Set-BarraTarefasPorLayout -Executaveis $restam)
+                } else {
+                    Write-Info 'Pulado. Para fixar a mao: abra o Iniciar, digite o nome do navegador,'
+                    Write-Info 'clique com o botao direito no resultado e escolha "Fixar na barra de tarefas".'
+                    Add-Alerta ('Navegadores nao fixados na barra: ' + (($restam | ForEach-Object { [System.IO.Path]::GetFileNameWithoutExtension($_) }) -join ', '))
+                }
+            }
+        }
+    }
+
+    Write-Host ''
+    Write-Ok ("$qtd item(ns) configurado(s).")
+    Write-Info 'Para conferir: abra o navegador e veja se as tres abas vieram juntas.'
+    return [long]$qtd
+}
 function Set-EfeitosVisuais {
     <#
       Correcao da v1: VisualFXSetting=2 ('melhor desempenho') tambem desliga
@@ -13972,6 +14766,7 @@ if ($Ferramenta) {
             'inicializacao' { Invoke-EtapaInicializacao | Out-Null }
             'appdata'       { Repair-AcessoAppData | Out-Null }
             'efeitos'       { Set-EfeitosVisuais | Out-Null; Set-DesempenhoEnergia | Out-Null }
+            'padraonav'     { Set-PadraoNavegadores | Out-Null }
             'rede'          { Invoke-ManutencaoRede | Out-Null }
             'horario'       { Sync-HorarioSistema }
             'defender'      { Update-Defender | Out-Null }

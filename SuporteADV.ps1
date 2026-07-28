@@ -17,7 +17,7 @@ $scriptV2 = 'ManutencaoCompleta.ps1'   # motor com ~40 ferramentas
 
 # Versao = data da ultima alteracao publicada. Aparece no cabecalho e no
 # relatorio, para saber qual versao o cliente rodou quando ele relatar algo.
-$versaoMenu = '2026.07.27'
+$versaoMenu = '2026.07.28'
 
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator
@@ -122,6 +122,7 @@ $menu = @(
     @{ Cat='OTIMIZACAO';  Label='Gerenciar Inicializacao';       Tipo='v2';     Args=@{ Ferramenta='inicializacao' } }
     @{ Cat='OTIMIZACAO';  Label='Efeitos Visuais + Energia';     Tipo='v2';     Args=@{ Ferramenta='efeitos' } }
     @{ Cat='OTIMIZACAO';  Label='Memoria Virtual (pagefile)';    Tipo='v2';     Args=@{ Ferramenta='memoriavirtual' } }
+    @{ Cat='OTIMIZACAO';  Label='Padronizar Navegadores e Barra'; Tipo='v2';    Args=@{ Ferramenta='padraonav' } }
 
     # --- REDE DO ESCRITORIO ---
     @{ Cat='REDELOCAL';   Label='Preparar Maquina do Escritorio';  Tipo='v2';     Args=@{ Ferramenta='prepararpc' } }
