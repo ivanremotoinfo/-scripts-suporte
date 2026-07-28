@@ -1,7 +1,7 @@
 ﻿================================================================================
                     S U P O R T E A D V  -  M A N U A L
               Ferramentas de suporte técnico - suporte.adv.br
-                        Versão 2026.07.27  |  54 opções
+                        Versão 2026.07.27  |  55 opções
 ================================================================================
 
 
@@ -11,16 +11,16 @@ SUMÁRIO
   2. Como executar
   3. Regras que valem para tudo
   4. Guia rápido: qual opção usar para cada problema
-  5. As 54 opções, uma a uma
+  5. As 55 opções, uma a uma
        DIAGNÓSTICO ................ 1 a 7
        MANUTENÇÃO E LIMPEZA ....... 8 a 19
        SEGURANÇA E ANTIVÍRUS ...... 20 a 24
        REPAROS .................... 25 a 40
        OTIMIZAÇÃO ................. 41 a 44
-       REDE DO ESCRITÓRIO ......... 45 a 47
-       CERTIFICADOS E JURÍDICO .... 48 a 50
-       PROGRAMAS .................. 51 e 52
-       ATALHOS ADMINISTRATIVOS .... 53 e 54
+       REDE DO ESCRITÓRIO ......... 45 a 48
+       CERTIFICADOS E JURÍDICO .... 49 a 51
+       PROGRAMAS .................. 52 e 53
+       ATALHOS ADMINISTRATIVOS .... 54 e 55
   6. A Manutenção Completa em detalhe (16 etapas)
   7. Uso por linha de comando
   8. Onde ficam os logs e como reverter
@@ -38,7 +38,7 @@ digital, token, Java, PJe).
 
 São apenas dois arquivos:
 
-  SuporteADV.ps1            o menu, com as 54 opções
+  SuporteADV.ps1            o menu, com as 55 opções
   ManutencaoCompleta.ps1    o motor, que faz todo o trabalho
 
 O menu baixa o motor uma vez e o mantém em cache local, atualizando só quando
@@ -128,8 +128,8 @@ MODO SIMULAÇÃO
   "Sem internet"                                28
   "Não abre site do tribunal / erro de          29
    certificado"
-  "Não imprime"                                 30, depois 52 se persistir
-  "Não consigo abrir a pasta %appdata%"         31 (reparar) ou 54 (só abrir)
+  "Não imprime"                                 30, depois 53 se persistir
+  "Não consigo abrir a pasta %appdata%"         31 (reparar) ou 55 (só abrir)
   "Ícones sumiram / área de trabalho travou"    32
   "PC desligou na tomada várias vezes"          33 (chkdsk) e 2 (SMART)
   "Apps da Microsoft Store não abrem"           34
@@ -137,8 +137,8 @@ MODO SIMULAÇÃO
                                                 assinatura digital), 4, 29
   "Sem microfone na audiência" (URGENTE)        39
   "Sem câmera na audiência" (URGENTE)           40
-  "PJe não assina / Java não carrega"           50, depois 49
-  "Token não aparece"                           53, depois 4
+  "PJe não assina / Java não carrega"           51, depois 50
+  "Token não aparece"                           54, depois 4
   "Suspeita de vírus"                           20
   "Preciso instalar programa e o antivírus      22 (e 23 depois, sempre)
    bloqueia"
@@ -151,10 +151,11 @@ MODO SIMULAÇÃO
                                                 arquivos), depois 46 nos demais
   "A rede parou / sumiu a unidade de rede"      47 (diagnostica antes de mexer)
   "Não acesso a pasta compartilhada"            47, depois 46
+  "PC vai sair do escritório / foi vendido"     48 (desfaz a rede nele)
 
 
 ================================================================================
-5. AS 54 OPÇÕES, UMA A UMA
+5. AS 55 OPÇÕES, UMA A UMA
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -589,11 +590,45 @@ funcionar.
     No fim lista o que precisa ser corrigido. Use esta antes de mexer em
     qualquer coisa quando "a rede parou".
 
+[48] DESFAZER REDE NO COMPUTADOR
+    O contrário das opções 45 e 46: tira a máquina da rede de compartilhamento.
+    Use quando o computador sai do escritório, é vendido, ou quando a rede
+    precisa ser refeita do zero.
+
+    NENHUM ARQUIVO É APAGADO. Parar de compartilhar remove só o "atalho" que a
+    rede enxerga — a pasta e todo o conteúdo continuam no disco, intactos. A
+    ferramenta repete isso no início e no resumo final.
+
+    Primeiro mostra tudo que existe na máquina (pastas compartilhadas,
+    unidades mapeadas, credenciais de rede salvas, contas de acesso, perfil de
+    rede). Depois você escolhe o que desfazer:
+      [1] Tudo — tira a máquina da rede por completo
+      [2] Só parar de compartilhar as pastas (deixa de ser servidor)
+      [3] Só desconectar as unidades de rede (deixa de acessar o servidor)
+      [4] Só apagar as credenciais salvas
+
+    No modo completo ele ainda trata, cada um com sua confirmação:
+      - a conta de acesso criada pela opção 45 — desativar (reversível) ou
+        remover;
+      - religar o compartilhamento protegido por senha, se estiver desligado;
+      - fechar as regras de firewall, deixando a máquina invisível na rede;
+      - voltar o perfil da rede para Público, recomendado em notebook que vai
+        rodar fora do escritório.
+
+    Os compartilhamentos administrativos do Windows (C$, ADMIN$, IPC$) NÃO são
+    tocados: são padrão do sistema e removê-los quebra administração remota.
+
+    Sobre as credenciais: o cofre do Windows guarda de tudo — token de
+    desenvolvedor, conta Microsoft, licença de aplicativo. Esta ferramenta só
+    lista e remove credenciais do tipo usado por compartilhamento de rede
+    ("Senha do domínio"), com o alvo validado como nome de máquina ou IP.
+    Credencial de site e de aplicativo nunca entra na lista.
+
 --------------------------------------------------------------------------------
 CERTIFICADOS E JURÍDICO
 --------------------------------------------------------------------------------
 
-[48] LIMPAR CERTIFICADOS VENCIDOS
+[49] LIMPAR CERTIFICADOS VENCIDOS
     Organiza a loja Pessoal do usuário, separando em três categorias:
       A) ICP-Brasil e ICP-Portugal válidos — sempre MANTIDOS;
       B) ICP vencidos — você decide;
@@ -605,14 +640,14 @@ CERTIFICADOS E JURÍDICO
     lista em CSV e um arquivo .cer de cada certificado. Atenção: o .cer guarda
     apenas a parte pública — a chave privada NÃO é recuperável.
 
-[49] CONFIGURAR JAVA (JURÍDICO)
+[50] CONFIGURAR JAVA (JURÍDICO)
     Prepara o Java 8 para os sistemas jurídicos: localiza a instalação, faz
     backup do deployment.properties, ajusta o nível de segurança, remove os
     bloqueios (.locked) que travam o painel do Java, desativa o aviso de "Java
     desatualizado" que costuma travar o usuário, cadastra as URLs de exceção
     (Shodo, Shomei, PJe, PROJUDI dos estados, eProc) e limpa o cache do Java.
 
-[50] CONFIGURAR AMBIENTE PJE
+[51] CONFIGURAR AMBIENTE PJE
     Versão completa da anterior, aplicada a TODOS os perfis de usuário da
     máquina. Além do Java e das exceções, verifica os serviços Shodo e Shomei
     (necessários para assinatura) e tenta iniciá-los se estiverem parados, e
@@ -623,13 +658,13 @@ CERTIFICADOS E JURÍDICO
 PROGRAMAS
 --------------------------------------------------------------------------------
 
-[51] DESINSTALAR PROGRAMA
+[52] DESINSTALAR PROGRAMA
     Lista os programas instalados igual ao Painel de Controle — sem o lixo de
     componentes de sistema que aparece em outras listagens. Permite filtrar
     por nome, selecionar pelo número e desinstalar. As colunas se ajustam à
     largura da janela para os nomes aparecerem inteiros.
 
-[52] REMOVER IMPRESSORA
+[53] REMOVER IMPRESSORA
     Remoção completa de impressora e do driver: identifica os arquivos do
     driver no registro, remove a impressora, remove o driver (vários métodos),
     limpa a fila (perguntando antes, porque isso descarta documentos pendentes
@@ -642,7 +677,7 @@ PROGRAMAS
 ATALHOS ADMINISTRATIVOS
 --------------------------------------------------------------------------------
 
-[53] DISPOSITIVOS, SERVIÇOS E TOKEN
+[54] DISPOSITIVOS, SERVIÇOS E TOKEN
     Abre de uma vez: Gerenciador de Dispositivos, Serviços do Windows,
     Desinstalar um Programa (Painel de Controle) e o administrador de token de
     certificado (SafeNet, eToken, Gemalto e outros).
@@ -650,7 +685,7 @@ ATALHOS ADMINISTRATIVOS
     Se o app do token não abrir, ele procura pelo atalho no Menu Iniciar. Se
     ainda assim não achar, informe o nome exato do programa para ser incluído.
 
-[54] ABRIR PASTA %APPDATA%
+[55] ABRIR PASTA %APPDATA%
     Abre a pasta Roaming do usuário no Explorer (shell:AppData) e informa o
     caminho da pasta Local.
     NÃO ALTERA NADA.
