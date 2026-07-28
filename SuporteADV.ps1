@@ -116,6 +116,7 @@ $menu = @(
     @{ Cat='REPAROS';     Label='Permissoes do PowerShell';      Tipo='v2';     Args=@{ Ferramenta='permissoesps' } }
     @{ Cat='REPAROS';     Label='Reparar Audio e Microfone';     Tipo='v2';     Args=@{ Ferramenta='audio' } }
     @{ Cat='REPAROS';     Label='Reparar Webcam';                Tipo='v2';     Args=@{ Ferramenta='webcam' } }
+    @{ Cat='REPAROS';     Label='Teclado MIDI / Controlador';    Tipo='v2';     Args=@{ Ferramenta='midi' } }
 
     # --- OTIMIZACAO ---
     @{ Cat='OTIMIZACAO';  Label='Otimizar Disco (SSD/HDD)';      Tipo='v2';     Args=@{ Ferramenta='otimizar' } }

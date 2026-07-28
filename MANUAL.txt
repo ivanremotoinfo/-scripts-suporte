@@ -1,7 +1,7 @@
 ﻿================================================================================
                     S U P O R T E A D V  -  M A N U A L
               Ferramentas de suporte técnico - suporte.adv.br
-                        Versão 2026.07.28  |  66 opções
+                        Versão 2026.07.28  |  67 opções
 ================================================================================
 
 
@@ -11,16 +11,16 @@ SUMÁRIO
   2. Como executar
   3. Regras que valem para tudo
   4. Guia rápido: qual opção usar para cada problema
-  5. As 66 opções, uma a uma
+  5. As 67 opções, uma a uma
        DIAGNÓSTICO ................ 1 a 8
        MANUTENÇÃO E LIMPEZA ....... 9 a 20
        SEGURANÇA E ANTIVÍRUS ...... 21 a 25
-       REPAROS .................... 26 a 41
-       OTIMIZAÇÃO ................. 42 a 46
-       REDE DO ESCRITÓRIO ......... 47 a 58
-       CERTIFICADOS E JURÍDICO .... 59 a 62
-       PROGRAMAS .................. 63 e 64
-       ATALHOS ADMINISTRATIVOS .... 65 e 66
+       REPAROS .................... 26 a 42
+       OTIMIZAÇÃO ................. 43 a 47
+       REDE DO ESCRITÓRIO ......... 48 a 59
+       CERTIFICADOS E JURÍDICO .... 60 a 63
+       PROGRAMAS .................. 64 e 65
+       ATALHOS ADMINISTRATIVOS .... 66 e 67
   6. A Manutenção Completa em detalhe (16 etapas)
   7. Uso por linha de comando
   8. Onde ficam os logs e como reverter
@@ -38,7 +38,7 @@ digital, token, Java, PJe).
 
 São apenas dois arquivos:
 
-  SuporteADV.ps1            o menu, com as 66 opções
+  SuporteADV.ps1            o menu, com as 67 opções
   ManutencaoCompleta.ps1    o motor, que faz todo o trabalho
 
 O menu baixa o motor uma vez e o mantém em cache local, atualizando só quando
@@ -101,7 +101,7 @@ O QUE NÃO DÁ PARA FAZER POR SCRIPT, ABRE A TELA DO WINDOWS
 
 FALHAS FICAM REGISTRADAS
   Quando uma ferramenta dá erro, além de mostrar na tela, o problema é
-  gravado em C:\ProgramData\SuporteTI\falhas.txt. A ficha da rede (opção 56)
+  gravado em C:\ProgramData\SuporteTI\falhas.txt. A ficha da rede (opção 57)
   mostra as últimas. Serve para você descobrir na visita o que quebrou entre
   os atendimentos — o cliente raramente comenta.
 
@@ -131,10 +131,10 @@ MODO SIMULAÇÃO
   "Tela azul voltou depois do reparo"           7 (testar RAM) e 2 (SMART)
   "Windows dando erro estranho, travando"       26
   "Rodei o SFC e ele não conseguiu reparar"     28
-  "Sem internet"                                29 e 50
+  "Sem internet"                                29 e 51
   "Não abre site do tribunal (certificado)"     30
-  "Não imprime"                                 31 depois 64 se persistir
-  "Não consigo abrir a pasta %appdata%"         32 (reparar) ou 66 (só abrir)
+  "Não imprime"                                 31 depois 65 se persistir
+  "Não consigo abrir a pasta %appdata%"         32 (reparar) ou 67 (só abrir)
   "Ícones sumiram / área de trabalho travou"    33
   "PC desligou na tomada várias vezes"          34 (chkdsk) e 2 (SMART)
   "Apps da Microsoft Store não abrem"           35
@@ -142,40 +142,42 @@ MODO SIMULAÇÃO
                                                 assinatura), e 4
   "Tenho audiência hoje / amanhã"               6 rode na véspera, não na hora
   "Sem microfone na audiência" (URGENTE)        40
+  "Teclado musical parou de funcionar"          42 entrada, saída e as vagas
+                                                de MIDI
   "Sem câmera na audiência" (URGENTE)           41 e 6 (diz quem segura a
                                                 câmera)
-  "PJe não assina / Java não carrega"           62 depois 61
-  "Token não aparece"                           65 depois 4
+  "PJe não assina / Java não carrega"           63 depois 62
+  "Token não aparece"                           66 depois 4
   "Suspeita de vírus"                           21
   "Antivírus bloqueia uma instalação"           23 e 24 depois, SEMPRE
-  "Erro de memória virtual baixa"               45
+  "Erro de memória virtual baixa"               46
   "Não aparece miniatura das fotos"             16
-  "PC demora para ligar"                        43
+  "PC demora para ligar"                        44
   "Mexi em algo e preciso voltar atrás"         20
   "Quero deixar um comprovante do serviço"      8
-  "Comprei um computador novo"                  47 roteiro completo, 8 etapas
-  "Cada um abre um navegador diferente"         46 abas iguais e ícones na
+  "Comprei um computador novo"                  48 roteiro completo, 8 etapas
+  "Cada um abre um navegador diferente"         47 abas iguais e ícones na
                                                 barra
-  "Este PC parou de acessar o servidor"         49 segue a cadeia e diz onde
+  "Este PC parou de acessar o servidor"         50 segue a cadeia e diz onde
                                                 quebrou
-  "As máquinas não se enxergam"                 48 em CADA PC, e compare a
+  "As máquinas não se enxergam"                 49 em CADA PC, e compare a
                                                 faixa e o gateway
-  "Não acesso a pasta compartilhada"            49 depois 52
-  "Internet lenta / não abre nada"              50
-  "Quero montar a rede do escritório"           51 no PC dos arquivos, depois
-                                                52 nos demais
-  "A rede toda parou de funcionar"              57
-  "PC vai sair do escritório / foi vendido"     58
-  "Rede cai sozinha / servidor some"            53 blinda contra as causas
-  "E se o disco do servidor morrer?"            54 e 55 (monitorar)
-  "Cheguei no cliente e não lembro da rede"     56 gere já na 1a visita
-  "Vou reinstalar o Windows / trocar o HD"      59 ANTES de formatar
+  "Não acesso a pasta compartilhada"            50 depois 53
+  "Internet lenta / não abre nada"              51
+  "Quero montar a rede do escritório"           52 no PC dos arquivos, depois
+                                                53 nos demais
+  "A rede toda parou de funcionar"              58
+  "PC vai sair do escritório / foi vendido"     59
+  "Rede cai sozinha / servidor some"            54 blinda contra as causas
+  "E se o disco do servidor morrer?"            55 e 56 (monitorar)
+  "Cheguei no cliente e não lembro da rede"     57 gere já na 1a visita
+  "Vou reinstalar o Windows / trocar o HD"      60 ANTES de formatar
   "Perdi o certificado ao formatar"             sem backup prévio não há
                                                 recuperação, só comprar outro
 
 
 ================================================================================
-5. AS 66 OPÇÕES, UMA A UMA
+5. AS 67 OPÇÕES, UMA A UMA
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -530,12 +532,65 @@ REPAROS
 OTIMIZAÇÃO
 --------------------------------------------------------------------------------
 
-[42] OTIMIZAR DISCO (SSD/HDD)
+[42] TECLADO MIDI / CONTROLADOR
+    Teclado musical controlador USB que não aciona o programa de timbre (VMPK,
+    DAW, o que for). Diagnóstico por camada, não por sintoma: a pergunta que
+    resolve o caso é UMA — o teclado está chegando no Windows? Se está, o
+    problema é do programa e não adianta mexer em driver. Se não está, é
+    cabo/porta/driver e não adianta mexer no programa.
+
+    Sete etapas:
+      1. as portas MIDI que o Windows oferece aos programas — a mesma lista
+         que o programa vê, lida pela mesma API (winmm);
+      2. o dispositivo no Gerenciador, com o código do problema traduzido, MAIS
+         as dez vagas de MIDI (abaixo);
+      3. a porta está livre ou já tem programa segurando — porta MIDI no
+         Windows é EXCLUSIVA, só um programa por vez, e uma instância travada
+         do próprio programa impede a nova de abrir;
+      4. TESTE AO VIVO: abre a porta e pede para você tocar. Mostra a nota, a
+         força e o CANAL de cada tecla. É o que separa hardware de software;
+      5. a outra metade — saída de som. O VMPK não gera áudio: manda MIDI para
+         uma saída (em geral o Microsoft GS Wavetable Synth) e o sintetizador
+         é que toca. Aqui a ferramenta TOCA um dó-mi-sol-dó e pergunta se você
+         ouviu, além de conferir os serviços de áudio e as saídas ativas;
+      6. a configuração salva do VMPK, lida do registro;
+      7. correções, cada uma perguntando antes.
+
+    AS DEZ VAGAS DE MIDI — a causa que quase ninguém descobre. O Windows tem,
+    até hoje, dez vagas de driver MIDI no registro (midi, midi1 ... midi9 em
+    Drivers32). Cada porta de cada aparelho que já foi conectado ocupa uma vaga
+    e NÃO DEVOLVE quando o aparelho é desconectado. Teclado com duas portas
+    (teclas + controles) come duas. Quando as dez enchem, o teclado seguinte
+    não inicia: aparece com "Código 10 — não pode iniciar" e nenhuma porta
+    chega aos programas. Não existe aviso falando de limite — o teclado
+    simplesmente não funciona. A ferramenta conta as vagas, lista os aparelhos
+    fantasmas que ainda ocupam lugar, e oferece liberar: apaga midi1..midi9
+    (o valor "midi", do próprio Windows, fica), guarda um .reg antes, remove o
+    registro dos aparelhos que não existem mais e reinicia o dispositivo. Isso
+    não desinstala driver nenhum — as vagas são refeitas quando cada aparelho
+    for conectado de novo.
+
+    DUAS ARMADILHAS DO VMPK, que explicam a maioria dos "parou do nada":
+      - ele lê a lista de portas UMA VEZ, ao abrir. Teclado conectado depois
+        não aparece. Conecte SEMPRE antes de abrir o programa;
+      - se ele for aberto sem o teclado, a entrada escolhida se PERDE: fica
+        "entrada MIDI habilitada" com porta em branco. O programa abre normal,
+        as teclas não fazem nada e não há mensagem de erro nenhuma. A
+        ferramenta detecta exatamente esse estado e avisa.
+
+    Outras correções oferecidas: impedir o Windows de desligar as portas USB
+    para economizar energia (o teclado para de responder depois de um tempo
+    parado), desabilitar e reabilitar o dispositivo com problema, e limpar as
+    conexões salvas do VMPK para ele perguntar de novo — com cópia .reg antes.
+
+    Para som que não sai por outro motivo, a opção 40 (Reparar Áudio e
+    Microfone) cobre o resto da cadeia.
+[43] OTIMIZAR DISCO (SSD/HDD)
     Identifica o tipo de disco e aplica o tratamento certo: TRIM em SSD,
     desfragmentação em HD. Pergunta quais discos além do C: devem entrar.
     Nunca desfragmenta SSD (isso só gastaria a vida do disco).
 
-[43] GERENCIAR INICIALIZAÇÃO
+[44] GERENCIAR INICIALIZAÇÃO
     Lista os programas que sobem com o Windows, marca como MANTIDO os que são
     protegidos (antivírus, áudio, agentes essenciais) e pede confirmação S/N
     antes de desativar os demais.
@@ -543,7 +598,7 @@ OTIMIZAÇÃO
     Para reverter: Gerenciador de Tarefas > Inicializar, ou o RESTAURAR.cmd
     gravado na pasta de log.
 
-[44] EFEITOS VISUAIS + ENERGIA
+[45] EFEITOS VISUAIS + ENERGIA
     Desliga animações e efeitos que pesam, MANTENDO o ClearType (texto continua
     legível), e ativa o plano de energia de Alto Desempenho.
     Também GARANTE AS MINIATURAS LIGADAS: força a exibição de miniaturas e
@@ -554,7 +609,7 @@ OTIMIZAÇÃO
     Observação: esta opção muda a aparência do Windows sem perguntar. Se o
     cliente for sensível a isso, avise antes.
 
-[45] MEMÓRIA VIRTUAL (PAGEFILE)
+[46] MEMÓRIA VIRTUAL (PAGEFILE)
     Mostra a memória RAM instalada, como está o arquivo de paginação
     (automático ou tamanho fixo), quanto dele está em uso, o pico histórico e
     o espaço livre em disco. Avisa quando o pico passa de 90% do tamanho — o
@@ -564,7 +619,7 @@ OTIMIZAÇÃO
     casos. Só mexa com motivo: erro de memória virtual baixa, disco cheio ou
     exigência de um sistema específico.
 
-[46] PADRONIZAR NAVEGADORES E BARRA DE TAREFAS
+[47] PADRONIZAR NAVEGADORES E BARRA DE TAREFAS
     Faz o Chrome, o Edge e o Firefox abrirem sempre nas mesmas três abas, e
     fixa os três na barra de tarefas. Não instala navegador nenhum: configura
     o que já existe na máquina.
@@ -620,16 +675,16 @@ computadores do escritório. A ideia: **uma** máquina guarda os documentos
 (servidor) e as demais acessam por uma unidade de rede fixa.
 
 Dividem-se em famílias:
-  47      — PREPARAÇÃO (máquina nova entrando na rede)
-  48 a 50 — SOLUÇÃO DE PROBLEMAS (rede que parou de funcionar)
-  51 a 52 — MONTAGEM (criar a rede)
-  53 a 55 — PREVENÇÃO (evitar que o problema aconteça)
-  56 a 58 — FICHA, DIAGNÓSTICO GERAL e DESFAZER
+  48      — PREPARAÇÃO (máquina nova entrando na rede)
+  49 a 51 — SOLUÇÃO DE PROBLEMAS (rede que parou de funcionar)
+  52 a 53 — MONTAGEM (criar a rede)
+  54 a 56 — PREVENÇÃO (evitar que o problema aconteça)
+  57 a 59 — FICHA, DIAGNÓSTICO GERAL e DESFAZER
 
-Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
-52 em cada computador. Para resolver problema: comece pela 49.
+Para montar: primeiro a 52 na máquina que vai guardar os arquivos, depois a
+53 em cada computador. Para resolver problema: comece pela 50.
 
-[47] PREPARAR MÁQUINA DO ESCRITÓRIO
+[48] PREPARAR MÁQUINA DO ESCRITÓRIO
     Roteiro para computador novo, formatado, ou que trocou de usuário. Não
     acrescenta capacidade: encadeia na ordem certa o que hoje são oito opções
     espalhadas pelo menu. O ganho é não esquecer passo — o erro clássico é
@@ -655,7 +710,7 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
     salvar um arquivo na pasta da rede, assinar um documento de teste,
     imprimir uma página, e rodar a verificação de audiência se for o caso.
 
-[48] QUAL REDE ESTOU USANDO
+[49] QUAL REDE ESTOU USANDO
     NÃO ALTERA NADA. É o cartão de identidade da rede desta máquina, feito
     para ser rodado em CADA computador e comparado.
 
@@ -682,7 +737,7 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
     Use quando o cliente disser que as máquinas não se veem: rode nas duas e
     compare as duas linhas destacadas.
 
-[49] NÃO CONECTA NO SERVIDOR
+[50] NÃO CONECTA NO SERVIDOR
     Para o chamado mais comum: "esse computador parou de acessar o servidor".
 
     Percorre a cadeia inteira na ordem em que ela quebra e PARA no primeiro
@@ -707,7 +762,7 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
       [4] Limpar cache de nomes (DNS e NetBIOS) — resolve quando o servidor
           trocou de IP e o nome ainda aponta para o antigo.
 
-[50] PROBLEMAS DE CONEXÃO
+[51] PROBLEMAS DE CONEXÃO
     Diagnóstico da conexão em camadas, de baixo para cima, para o problema
     aparecer na camada certa em vez de virar "a internet caiu":
       1. placa de rede — cabo desconectado, Wi-Fi fora, placa desativada;
@@ -730,7 +785,7 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
     TeamViewer ou RDP ativos, avisa em vermelho antes — reiniciar a placa
     derruba o seu atendimento.
 
-[51] CONFIGURAR SERVIDOR DE ARQUIVOS
+[52] CONFIGURAR SERVIDOR DE ARQUIVOS
     Transforma esta máquina no servidor de arquivos do escritório, em 7 etapas:
       1. mostra a situação atual (nome, grupo de trabalho, IP, SMB);
       2. coloca a rede no perfil PRIVADO (perfil Público bloqueia tudo);
@@ -765,7 +820,7 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
     A máquina precisa ficar LIGADA para as outras acessarem. E lembre:
     compartilhar pasta NÃO é backup — os arquivos seguem num disco só.
 
-[52] CONECTAR À REDE/SERVIDOR
+[53] CONECTAR À REDE/SERVIDOR
     Prepara um computador do escritório para usar o servidor, em 5 etapas:
     perfil de rede privado, serviços, firewall, grupo de trabalho e a unidade
     de rede.
@@ -778,9 +833,9 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
     Sugere uma letra livre (Z:, Y:...) e avisa se a escolhida já está em uso.
     Ao terminar, abre a unidade no Explorer para conferir.
 
-[53] BLINDAR SERVIDOR
+[54] BLINDAR SERVIDOR
     Rode UMA VEZ na máquina que guarda os arquivos, logo depois de montar a
-    rede. Enquanto as opções 48 a 50 diagnosticam depois que o cliente ligou,
+    rede. Enquanto as opções 49 a 51 diagnosticam depois que o cliente ligou,
     esta existe para o chamado não acontecer.
 
     Corrige as cinco causas estruturais de "a rede funcionava e parou sozinha":
@@ -809,7 +864,7 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
     Trocar o IP derruba conexão remota: avisa em vermelho antes se houver
     AnyDesk, TeamViewer ou RDP ativos.
 
-[54] BACKUP DA PASTA COMPARTILHADA
+[55] BACKUP DA PASTA COMPARTILHADA
     Compartilhar pasta NÃO é backup — os arquivos seguem num disco só. Esta
     opção cria a cópia automática que salva o escritório quando aquele disco
     falhar.
@@ -839,7 +894,7 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
     E o lembrete que vale ouro: uma vez por mês, abra um arquivo direto do
     destino. Backup que nunca foi restaurado não é backup comprovado.
 
-[55] MONITORAMENTO DO SERVIDOR
+[56] MONITORAMENTO DO SERVIDOR
     Verificação automática que roda ao ligar a máquina e a cada 4 horas, para
     você saber do problema antes do cliente ligar.
 
@@ -860,7 +915,7 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
     aconteceu entre as suas visitas. Também permite verificar na hora ou
     remover o monitoramento.
 
-[56] FICHA DA REDE DO ESCRITÓRIO
+[57] FICHA DA REDE DO ESCRITÓRIO
     NÃO ALTERA NADA. Gera a ficha técnica da rede daquele escritório para você
     guardar na pasta do cliente e não redescobrir a topologia a cada visita.
 
@@ -875,7 +930,7 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
     Rode em cada computador do escritório na primeira visita e guarde tudo
     junto: fica sendo a documentação daquele cliente.
 
-[57] DIAGNÓSTICO DA REDE LOCAL
+[58] DIAGNÓSTICO DA REDE LOCAL
     NÃO ALTERA NADA. Percorre, em 8 etapas, as causas que derrubam rede de
     escritório, na ordem em que costumam acontecer:
       1. identificação (nome, grupo de trabalho, IPs);
@@ -893,8 +948,8 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
     No fim lista o que precisa ser corrigido. Use esta antes de mexer em
     qualquer coisa quando "a rede parou".
 
-[58] DESFAZER REDE NO COMPUTADOR
-    O contrário das opções 51 e 52: tira a máquina da rede de compartilhamento.
+[59] DESFAZER REDE NO COMPUTADOR
+    O contrário das opções 52 e 53: tira a máquina da rede de compartilhamento.
     Use quando o computador sai do escritório, é vendido, ou quando a rede
     precisa ser refeita do zero.
 
@@ -911,7 +966,7 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
       [4] Só apagar as credenciais salvas
 
     No modo completo ele ainda trata, cada um com sua confirmação:
-      - a conta de acesso criada pela opção 51 — desativar (reversível) ou
+      - a conta de acesso criada pela opção 52 — desativar (reversível) ou
         remover;
       - religar o compartilhamento protegido por senha, se estiver desligado;
       - fechar as regras de firewall, deixando a máquina invisível na rede;
@@ -931,7 +986,7 @@ Para montar: primeiro a 51 na máquina que vai guardar os arquivos, depois a
 CERTIFICADOS E JURÍDICO
 --------------------------------------------------------------------------------
 
-[59] BACKUP DO CERTIFICADO A1
+[60] BACKUP DO CERTIFICADO A1
     Exporta o certificado A1 para um arquivo `.pfx` — a única forma de
     reinstalá-lo depois.
 
@@ -967,7 +1022,7 @@ CERTIFICADOS E JURÍDICO
     Teste de verdade: reinstalar o `.pfx` numa máquina de teste comprova que a
     cópia presta.
 
-[60] LIMPAR CERTIFICADOS VENCIDOS
+[61] LIMPAR CERTIFICADOS VENCIDOS
     Organiza a loja Pessoal do usuário, separando em três categorias:
       A) ICP-Brasil e ICP-Portugal válidos — sempre MANTIDOS;
       B) ICP vencidos — você decide;
@@ -979,14 +1034,14 @@ CERTIFICADOS E JURÍDICO
     lista em CSV e um arquivo .cer de cada certificado. Atenção: o .cer guarda
     apenas a parte pública — a chave privada NÃO é recuperável.
 
-[61] CONFIGURAR JAVA (JURÍDICO)
+[62] CONFIGURAR JAVA (JURÍDICO)
     Prepara o Java 8 para os sistemas jurídicos: localiza a instalação, faz
     backup do deployment.properties, ajusta o nível de segurança, remove os
     bloqueios (.locked) que travam o painel do Java, desativa o aviso de "Java
     desatualizado" que costuma travar o usuário, cadastra as URLs de exceção
     (Shodo, Shomei, PJe, PROJUDI dos estados, eProc) e limpa o cache do Java.
 
-[62] CONFIGURAR AMBIENTE PJE
+[63] CONFIGURAR AMBIENTE PJE
     Versão completa da anterior, aplicada a TODOS os perfis de usuário da
     máquina. Além do Java e das exceções, verifica os serviços Shodo e Shomei
     (necessários para assinatura) e tenta iniciá-los se estiverem parados, e
@@ -997,13 +1052,13 @@ CERTIFICADOS E JURÍDICO
 PROGRAMAS
 --------------------------------------------------------------------------------
 
-[63] DESINSTALAR PROGRAMA
+[64] DESINSTALAR PROGRAMA
     Lista os programas instalados igual ao Painel de Controle — sem o lixo de
     componentes de sistema que aparece em outras listagens. Permite filtrar
     por nome, selecionar pelo número e desinstalar. As colunas se ajustam à
     largura da janela para os nomes aparecerem inteiros.
 
-[64] REMOVER IMPRESSORA
+[65] REMOVER IMPRESSORA
     Remoção completa de impressora e do driver: identifica os arquivos do
     driver no registro, remove a impressora, remove o driver (vários métodos),
     limpa a fila (perguntando antes, porque isso descarta documentos pendentes
@@ -1016,7 +1071,7 @@ PROGRAMAS
 ATALHOS ADMINISTRATIVOS
 --------------------------------------------------------------------------------
 
-[65] DISPOSITIVOS, SERVIÇOS E TOKEN
+[66] DISPOSITIVOS, SERVIÇOS E TOKEN
     Abre de uma vez: Gerenciador de Dispositivos, Serviços do Windows,
     Desinstalar um Programa (Painel de Controle) e o administrador de token de
     certificado (SafeNet, eToken, Gemalto e outros).
@@ -1024,7 +1079,7 @@ ATALHOS ADMINISTRATIVOS
     Se o app do token não abrir, ele procura pelo atalho no Menu Iniciar. Se
     ainda assim não achar, informe o nome exato do programa para ser incluído.
 
-[66] ABRIR PASTA %APPDATA%
+[67] ABRIR PASTA %APPDATA%
     Abre a pasta Roaming do usuário no Explorer (shell:AppData) e informa o
     caminho da pasta Local.
     NÃO ALTERA NADA.

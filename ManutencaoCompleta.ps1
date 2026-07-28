@@ -13325,6 +13325,924 @@ function Invoke-OtimizacaoDiscos {
 }
 
 # =========================================================================
+# TECLADO MIDI (CONTROLADOR USB) NAO FUNCIONA
+# =========================================================================
+# O diagnostico aqui nao e' por sintoma: e' por camada. A pergunta que
+# resolve o caso e' UMA - o teclado esta chegando no Windows?
+#
+# Se chegar, o problema e' configuracao do programa (VMPK, DAW, o que for) e
+# nao adianta mexer em driver. Se nao chegar, e' cabo/porta/driver e nao
+# adianta mexer no programa. Por isso a ferramenta ABRE a porta MIDI e LE o
+# que o teclado manda: da para ver a nota, a forca e o canal na tela.
+#
+# Duas coisas que quase ninguem sabe e explicam a maioria dos chamados:
+#   1. porta MIDI no Windows e' EXCLUSIVA - so um programa por vez. Uma
+#      instancia travada do proprio programa segura a porta e a nova nao abre;
+#   2. programas como o VMPK leem a lista de portas UMA VEZ, ao abrir. Teclado
+#      conectado depois nao aparece, e teclado que mudou de porta USB pode
+#      trocar de nome - a conexao salva aponta para um nome que nao existe
+#      mais. E' a causa classica do "parou de funcionar do nada".
+
+function Initialize-ApiMIDI {
+    <# Carrega o acesso a winmm.dll, que e' a mesma API que os programas usam. #>
+    if ('MidiSuporteADV' -as [type]) { return $true }
+    try {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+
+public static class MidiSuporteADV
+{
+    public delegate void MidiInProc(IntPtr h, uint msg, IntPtr inst, IntPtr p1, IntPtr p2);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct MIDIINCAPS {
+        public ushort wMid; public ushort wPid; public uint vDriverVersion;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string szPname;
+        public uint dwSupport;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct MIDIOUTCAPS {
+        public ushort wMid; public ushort wPid; public uint vDriverVersion;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string szPname;
+        public ushort wTechnology; public ushort wVoices; public ushort wNotes;
+        public ushort wChannelMask; public uint dwSupport;
+    }
+
+    [DllImport("winmm.dll")] public static extern uint midiInGetNumDevs();
+    [DllImport("winmm.dll")] public static extern uint midiOutGetNumDevs();
+    [DllImport("winmm.dll", EntryPoint = "midiInGetDevCapsW", CharSet = CharSet.Unicode)]
+    public static extern uint midiInGetDevCaps(UIntPtr id, ref MIDIINCAPS caps, uint cb);
+    [DllImport("winmm.dll", EntryPoint = "midiOutGetDevCapsW", CharSet = CharSet.Unicode)]
+    public static extern uint midiOutGetDevCaps(UIntPtr id, ref MIDIOUTCAPS caps, uint cb);
+    [DllImport("winmm.dll")] public static extern uint midiOutOpen(out IntPtr h, uint id, IntPtr cb, IntPtr inst, uint flags);
+    [DllImport("winmm.dll")] public static extern uint midiOutShortMsg(IntPtr h, uint msg);
+    [DllImport("winmm.dll")] public static extern uint midiOutReset(IntPtr h);
+    [DllImport("winmm.dll")] public static extern uint midiOutClose(IntPtr h);
+    [DllImport("winmm.dll")] public static extern uint midiInOpen(out IntPtr h, uint id, MidiInProc cb, IntPtr inst, uint flags);
+    [DllImport("winmm.dll")] public static extern uint midiInStart(IntPtr h);
+    [DllImport("winmm.dll")] public static extern uint midiInStop(IntPtr h);
+    [DllImport("winmm.dll")] public static extern uint midiInReset(IntPtr h);
+    [DllImport("winmm.dll")] public static extern uint midiInClose(IntPtr h);
+
+    // A referencia do delegate precisa ficar viva num campo estatico. Se ficar
+    // so na pilha, o coletor de lixo recolhe e o Windows passa a chamar um
+    // endereco morto - o processo cai no meio do teste.
+    private static MidiInProc _cb;
+    private static IntPtr _h = IntPtr.Zero;
+    private static List<string> _msgs = new List<string>();
+    private static object _trava = new object();
+    public static int Total = 0;
+
+    public static string NomeEntrada(int id) {
+        MIDIINCAPS c = new MIDIINCAPS();
+        uint r = midiInGetDevCaps((UIntPtr)id, ref c, (uint)Marshal.SizeOf(typeof(MIDIINCAPS)));
+        return (r == 0) ? c.szPname : "";
+    }
+    public static string NomeSaida(int id) {
+        MIDIOUTCAPS c = new MIDIOUTCAPS();
+        uint r = midiOutGetDevCaps((UIntPtr)id, ref c, (uint)Marshal.SizeOf(typeof(MIDIOUTCAPS)));
+        return (r == 0) ? c.szPname : "";
+    }
+
+    // Abre e fecha na hora: e' exatamente o que o programa faz. O codigo de
+    // erro diz se a porta esta livre ou ja tomada por outro.
+    public static uint TestarPorta(int id) {
+        IntPtr h;
+        uint r = midiInOpen(out h, (uint)id, null, IntPtr.Zero, 0);
+        if (r == 0) { midiInClose(h); }
+        return r;
+    }
+
+    private static string Nota(int n) {
+        string[] nomes = { "Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si" };
+        return nomes[n % 12] + (n / 12 - 1).ToString();
+    }
+
+    private static void Receber(IntPtr h, uint msg, IntPtr inst, IntPtr p1, IntPtr p2) {
+        if (msg != 0x3C3) { return; }   // MIM_DATA
+        int dw = (int)(p1.ToInt64() & 0xFFFFFF);
+        int status = dw & 0xFF, d1 = (dw >> 8) & 0xFF, d2 = (dw >> 16) & 0xFF;
+        int canal = (status & 0x0F) + 1, tipo = status & 0xF0;
+        string t;
+        if (tipo == 0x90 && d2 > 0)                     t = "tecla PRESSIONADA  " + Nota(d1) + " (nota " + d1 + ")  forca " + d2;
+        else if (tipo == 0x80 || (tipo == 0x90 && d2 == 0)) t = "tecla SOLTA        " + Nota(d1) + " (nota " + d1 + ")";
+        else if (tipo == 0xB0)                          t = "controle " + d1 + " = " + d2 + " (botao, knob ou pedal)";
+        else if (tipo == 0xE0)                          t = "roda de afinacao (pitch bend)";
+        else if (tipo == 0xD0)                          t = "pressao (aftertouch)";
+        else if (tipo == 0xC0)                          t = "troca de timbre (program change " + d1 + ")";
+        else                                            t = "mensagem 0x" + status.ToString("X2");
+        lock (_trava) { Total++; if (_msgs.Count < 30) { _msgs.Add(t + "  |  canal " + canal); } }
+    }
+
+    public static uint Abrir(int id) {
+        lock (_trava) { _msgs.Clear(); Total = 0; }
+        _cb = new MidiInProc(Receber);
+        uint r = midiInOpen(out _h, (uint)id, _cb, IntPtr.Zero, 0x00030000);  // CALLBACK_FUNCTION
+        if (r != 0) { _h = IntPtr.Zero; _cb = null; return r; }
+        return midiInStart(_h);
+    }
+    public static void Fechar() {
+        if (_h != IntPtr.Zero) {
+            midiInStop(_h); midiInReset(_h); midiInClose(_h); _h = IntPtr.Zero;
+        }
+        _cb = null;
+    }
+    public static string[] Mensagens() { lock (_trava) { return _msgs.ToArray(); } }
+
+    // Toca um arpejo pela saida MIDI escolhida. E' o mesmo caminho que o
+    // programa usa para soar: porta MIDI de saida -> sintetizador -> placa de
+    // som. Se sair som daqui, a cadeia de audio inteira esta boa.
+    public static uint Tocar(int id) {
+        IntPtr h;
+        uint r = midiOutOpen(out h, (uint)id, IntPtr.Zero, IntPtr.Zero, 0);
+        if (r != 0) { return r; }
+        midiOutShortMsg(h, 0x0000C0);                 // timbre 0 = piano, canal 1
+        int[] notas = { 60, 64, 67, 72 };             // do - mi - sol - do
+        foreach (int n in notas) {
+            midiOutShortMsg(h, (uint)(0x90 | (n << 8) | (110 << 16)));
+            System.Threading.Thread.Sleep(420);
+            midiOutShortMsg(h, (uint)(0x80 | (n << 8)));
+        }
+        System.Threading.Thread.Sleep(300);
+        midiOutReset(h); midiOutClose(h);
+        return 0;
+    }
+}
+'@ -ErrorAction Stop
+        return $true
+    } catch {
+        Write-Falha "Nao foi possivel carregar a API de MIDI do Windows: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Get-ErroMIDI {
+    <# Traducao dos codigos do winmm que interessam no diagnostico. #>
+    param([uint32]$Codigo)
+    switch ($Codigo) {
+        0  { 'porta livre' }
+        1  { 'erro generico do driver' }
+        2  { 'porta nao existe mais (o dispositivo saiu)' }
+        4  { 'PORTA OCUPADA por outro programa' }
+        5  { 'identificador invalido' }
+        6  { 'sem driver instalado' }
+        7  { 'sem memoria' }
+        11 { 'parametro invalido' }
+        default { "codigo $Codigo" }
+    }
+}
+
+function Get-ProgramasDeAudio {
+    <#
+      Candidatos a estar segurando a porta. Nao da para perguntar ao Windows
+      "quem abriu esta porta MIDI" - a API nao conta. Entao listamos os
+      programas de audio/MIDI que estao rodando, que na pratica resolve: em
+      99% dos casos e' uma instancia travada do proprio programa.
+    #>
+    $conhecidos = @(
+        'vmpk', 'reaper', 'ableton', 'live', 'flstudio', 'fl64', 'cubase', 'nuendo',
+        'studioone', 'protools', 'cakewalk', 'sonar', 'bandlab', 'musescore', 'sibelius',
+        'finale', 'guitarpro', 'kontakt', 'serum', 'omnisphere', 'midiox', 'midi-ox',
+        'loopmidi', 'loopbe', 'rtpmidi', 'synthfont', 'coolsoft', 'virtualmidi',
+        'audacity', 'garageband', 'mixcraft', 'waveform', 'tracktion', 'lmms',
+        'pianoteq', 'sforzando', 'vst', 'daw', 'midi'
+    )
+    $achados = New-Object System.Collections.Generic.List[object]
+    foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) {
+        $nome = $p.ProcessName.ToLower()
+        foreach ($c in $conhecidos) {
+            if ($nome -like "*$c*") {
+                $achados.Add([pscustomobject]@{ Nome = $p.ProcessName; Id = $p.Id; Titulo = $p.MainWindowTitle })
+                break
+            }
+        }
+    }
+    return $achados
+}
+
+$script:Drivers32MIDI = @(
+    'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Drivers32',
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion\Drivers32'
+)
+
+function Get-SlotsMIDI {
+    <#
+      O Windows tem, ate hoje, DEZ vagas para driver MIDI legado no registro:
+      os valores midi, midi1 ... midi9 em Drivers32. Cada porta de cada
+      aparelho que ja foi conectado ocupa uma vaga - E NAO DEVOLVE quando o
+      aparelho e' desconectado.
+
+      Quando as dez enchem, o proximo teclado plugado nao consegue iniciar e
+      aparece no Gerenciador com "Codigo 10 - nao pode iniciar". Nao ha
+      mensagem falando de limite: o teclado simplesmente nao funciona, e o
+      programa nao mostra porta nenhuma para escolher.
+
+      Teclado com duas portas (teclado + controles) come DUAS vagas, entao o
+      limite chega mais rapido do que parece.
+    #>
+    $ocupadas = New-Object System.Collections.Generic.List[object]
+    foreach ($raiz in $script:Drivers32MIDI) {
+        if (-not (Test-Path -LiteralPath $raiz)) { continue }
+        $item = Get-Item -LiteralPath $raiz -ErrorAction SilentlyContinue
+        if (-not $item) { continue }
+        foreach ($nome in @($item.Property)) {
+            if ($nome -notmatch '^midi(\d?)$') { continue }
+            $valor = (Get-ItemProperty -LiteralPath $raiz -Name $nome -ErrorAction SilentlyContinue).$nome
+            $ocupadas.Add([pscustomobject]@{ Raiz = $raiz; Nome = $nome; Valor = [string]$valor })
+        }
+    }
+    return $ocupadas
+}
+
+function Get-PortasMIDIFantasma {
+    <# Portas MIDI registradas de aparelhos que nao estao mais conectados. #>
+    $lista = New-Object System.Collections.Generic.List[object]
+    try {
+        foreach ($d in @(Get-PnpDevice -Class 'SoftwareDevice' -ErrorAction Stop)) {
+            if ($d.InstanceId -notlike 'SWD\MMDEVAPI\MIDI*') { continue }
+            if ($d.Present) { continue }
+            $lista.Add($d)
+        }
+        foreach ($d in @(Get-PnpDevice -Class 'MEDIA' -ErrorAction Stop)) {
+            if ($d.Present) { continue }
+            if ($d.InstanceId -notlike 'USB\*') { continue }
+            $lista.Add($d)
+        }
+    } catch { }
+    return $lista
+}
+
+function Clear-VagasMIDI {
+    <#
+      Libera as vagas apagando os valores midi1..midi9 do Drivers32, nas duas
+      visoes do registro (64 e 32 bits). O valor "midi" (sem numero) fica: e' o
+      do proprio Windows.
+
+      Isso nao desinstala driver nenhum. As vagas sao reconstruidas na proxima
+      vez que cada aparelho for conectado - so os aparelhos que existem de
+      verdade voltam a ocupar lugar. Uma copia .reg vai para a pasta de log
+      antes de qualquer alteracao.
+    #>
+    $apagados = 0
+    foreach ($raiz in $script:Drivers32MIDI) {
+        if (-not (Test-Path -LiteralPath $raiz)) { continue }
+        $marca = if ($raiz -match 'WOW6432Node') { '32bits' } else { '64bits' }
+        $bkp = Join-Path $script:pastaExec "Drivers32_$marca.reg"
+        $caminhoReg = ($raiz -replace '^HKLM:\\', 'HKLM\')
+        & reg.exe export $caminhoReg $bkp /y 2>&1 | Out-Null
+        if (Test-Path -LiteralPath $bkp) { Write-Info ("Copia de seguranca: $bkp") }
+        else {
+            Write-Falha "Nao consegui guardar a copia de $raiz - nada foi alterado ali."
+            continue
+        }
+
+        $item = Get-Item -LiteralPath $raiz -ErrorAction SilentlyContinue
+        foreach ($nome in @($item.Property)) {
+            if ($nome -notmatch '^midi\d$') { continue }   # so os numerados
+            $valor = (Get-ItemProperty -LiteralPath $raiz -Name $nome -ErrorAction SilentlyContinue).$nome
+            try {
+                Remove-ItemProperty -LiteralPath $raiz -Name $nome -Force -ErrorAction Stop
+                Write-Ok "Vaga liberada: $nome (era $valor)"
+                $apagados++
+            } catch {
+                Write-Aviso "Nao consegui apagar $nome - $($_.Exception.Message)"
+            }
+        }
+    }
+    return $apagados
+}
+
+function Test-CadeiaDeAudio {
+    <#
+      A metade que falta do problema: o teclado pode estar chegando e mesmo
+      assim nao sair som. O VMPK nao gera audio sozinho - ele manda MIDI para
+      uma SAIDA (normalmente o Microsoft GS Wavetable Synth), e o sintetizador
+      e' que toca na placa de som. Cada elo dessa corrente pode quebrar.
+    #>
+    $problemas = 0
+
+    foreach ($svc in @('Audiosrv', 'AudioEndpointBuilder')) {
+        $s = Get-Service -Name $svc -ErrorAction SilentlyContinue
+        if (-not $s) { continue }
+        if ($s.Status -ne 'Running') {
+            Write-Falha "Servico de audio '$svc' esta $($s.Status) - sem ele nao sai som nenhum."
+            $problemas++
+        } else { Write-Ok "Servico de audio '$svc' rodando." }
+    }
+
+    # Sintetizador do Windows: se a entrada some do Drivers32, o programa fica
+    # sem para onde mandar o MIDI e nao sai som.
+    $d32 = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Drivers32'
+    $mm  = (Get-ItemProperty -LiteralPath $d32 -Name 'midimapper' -ErrorAction SilentlyContinue).midimapper
+    if ($mm) { Write-Ok "Mapeador MIDI do Windows: $mm" }
+    else {
+        Write-Aviso 'Mapeador MIDI (midimapper) ausente no Drivers32.'
+        $problemas++
+    }
+
+    # Saidas de audio ativas. Padrao apontando para HDMI/monitor sem som e'
+    # causa comum de "parou de tocar do nada" depois de mexer em cabo/monitor.
+    try {
+        $raiz = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render'
+        $ativas = New-Object System.Collections.Generic.List[string]
+        foreach ($k in @(Get-ChildItem -LiteralPath $raiz -ErrorAction SilentlyContinue)) {
+            $estado = (Get-ItemProperty -LiteralPath $k.PSPath -Name 'DeviceState' -ErrorAction SilentlyContinue).DeviceState
+            if ($estado -ne 1) { continue }   # 1 = ativo
+            $props = Join-Path $k.PSPath 'Properties'
+            $nome = (Get-ItemProperty -LiteralPath $props -Name '{a45c254e-df1c-4efd-8020-67d146a850e0},2' -ErrorAction SilentlyContinue).'{a45c254e-df1c-4efd-8020-67d146a850e0},2'
+            if ($nome) { $ativas.Add([string]$nome) }
+        }
+        if ($ativas.Count -eq 0) {
+            Write-Falha 'Nenhuma saida de audio ATIVA no Windows.'
+            $problemas++
+        } else {
+            Write-Info 'Saidas de audio ativas:'
+            foreach ($a in $ativas) { Write-Dest ("   $a") }
+            $soHdmi = -not (@($ativas | Where-Object { $_ -notmatch '(?i)hdmi|display|monitor|tv' }).Count -gt 0)
+            if ($soHdmi) {
+                Write-Aviso 'So ha saida por HDMI/monitor. Se o monitor nao tem caixa, nao sai som.'
+                $problemas++
+            }
+        }
+    } catch { }
+
+    return $problemas
+}
+
+function Show-ConfiguracaoVMPK {
+    <#
+      O VMPK guarda as configuracoes no registro (Qt/QSettings). O que
+      interessa sao as conexoes salvas - entrada E saida: se apontarem para um
+      nome de porta que nao existe mais, o programa abre normal e simplesmente
+      nao recebe nem emite nada, sem mensagem de erro nenhuma.
+
+      Nao adivinhamos o nome dos valores: lemos tudo o que estiver la e
+      comparamos com as portas reais.
+    #>
+    param([string[]]$PortasReais)
+
+    # O VMPK grava em HKCU\Software\vmpk.sourceforge.net\VMPK (nome da
+    # organizacao no Qt). Versoes antigas usaram so "VMPK".
+    $raizes = @('HKCU:\Software\vmpk.sourceforge.net', 'HKCU:\Software\VMPK', 'HKCU:\Software\vmpk')
+    $achou = $false
+    $suspeitas = New-Object System.Collections.Generic.List[string]
+
+    foreach ($raiz in $raizes) {
+        if (-not (Test-Path -LiteralPath $raiz)) { continue }
+        $achou = $true
+        $chaves = @($raiz) + @(Get-ChildItem -LiteralPath $raiz -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $_.PSPath })
+        foreach ($ch in $chaves) {
+            $item = Get-Item -LiteralPath $ch -ErrorAction SilentlyContinue
+            if (-not $item) { continue }
+            foreach ($nome in @($item.Property)) {
+                if ($nome -notmatch '(?i)in|out|port|driver|connect|midi|thru|channel|omni') { continue }
+                $valor = (Get-ItemProperty -LiteralPath $ch -Name $nome -ErrorAction SilentlyContinue).$nome
+                if ($null -eq $valor) { continue }
+                $curto = ($ch -replace '^.*\\Software\\', '')
+                Write-Info ("   $curto\$nome = $valor")
+                # Qualquer valor que pareca ser "nome de porta salva" - entrada
+                # ou saida - vai para conferencia contra as portas reais.
+                if ($nome -match '(?i)(connection|port|device)' -and $valor -is [string] -and $valor.Trim()) {
+                    $suspeitas.Add([string]$valor)
+                }
+            }
+        }
+    }
+
+    if (-not $achou) {
+        Write-Info 'Nenhuma configuracao do VMPK encontrada no registro deste usuario.'
+        Write-Info '(Se o VMPK roda com outro usuario do Windows, rode o menu com esse usuario.)'
+        return $null
+    }
+
+    # Entrada habilitada e porta em branco: o VMPK abre normal, o teclado
+    # aparece na lista do Windows, e nada acontece ao tocar. Acontece quando o
+    # programa foi aberto sem o teclado ligado - ele limpa a escolha.
+    $inHab = $null; $inPorta = $null
+    foreach ($raiz in $raizes) {
+        foreach ($sub in @("$raiz\VMPK\Connections", "$raiz\Connections")) {
+            if (-not (Test-Path -LiteralPath $sub)) { continue }
+            $pp = Get-ItemProperty -LiteralPath $sub -ErrorAction SilentlyContinue
+            if ($null -ne $pp.InEnabled) { $inHab = [string]$pp.InEnabled }
+            if ($null -ne $pp.InPort)    { $inPorta = [string]$pp.InPort }
+        }
+    }
+    if ($inHab -match '(?i)true' -and -not ($inPorta -and $inPorta.Trim())) {
+        Write-Host ''
+        Write-Falha 'O VMPK esta com a entrada MIDI habilitada e NENHUMA porta escolhida.'
+        Write-Info  'E por isso que as teclas nao fazem nada: ele nao esta escutando ninguem.'
+        Write-Info  'Isso acontece quando o programa e aberto sem o teclado conectado - a'
+        Write-Info  'escolha se perde. Depois de o teclado voltar a aparecer, refaca em'
+        Write-Info  'Editar > Conexoes MIDI.'
+        Add-Alerta  'VMPK: entrada MIDI habilitada mas sem porta selecionada.'
+    }
+
+    $mortas = New-Object System.Collections.Generic.List[string]
+    foreach ($s in ($suspeitas | Sort-Object -Unique)) {
+        $bate = $false
+        foreach ($p in $PortasReais) { if ($p -and ($p -eq $s -or $s -like "*$p*" -or $p -like "*$s*")) { $bate = $true } }
+        if (-not $bate) { $mortas.Add($s) }
+    }
+    if ($mortas.Count -gt 0) {
+        Write-Host ''
+        foreach ($s in $mortas) {
+            Write-Falha "O VMPK tem salva a porta '$s', e nao existe porta com esse nome agora."
+        }
+        Write-Info 'E a causa classica do "parou de funcionar do nada": o teclado mudou de'
+        Write-Info 'porta USB, ou foi ligado depois de abrir o programa, o nome mudou, e o'
+        Write-Info 'VMPK segue apontando para o nome antigo. Ele nao avisa - so fica mudo.'
+        Add-Alerta ("VMPK aponta para porta(s) MIDI que nao existem mais: " + ($mortas -join ', ') + ". Refazer em Editar > Conexoes MIDI.")
+        return $mortas[0]
+    }
+    return $null
+}
+
+function Repair-MIDI {
+    if ($SomenteRelatorio) {
+        Write-Simul 'Verificaria as portas MIDI, quem esta segurando, e leria o teclado ao vivo.'
+        return [long]0
+    }
+
+    Write-Titulo 'TECLADO MIDI (CONTROLADOR USB) NAO FUNCIONA'
+    Write-Info 'A pergunta que resolve o caso: o teclado esta chegando no Windows?'
+    Write-Info 'Se chegar, o problema e do programa. Se nao chegar, e cabo/porta/driver.'
+
+    if (-not (Initialize-ApiMIDI)) { return [long]0 }
+    $corrigidos = 0
+
+    # --- 1. portas que os programas enxergam ------------------------------
+    Write-Host ''
+    Write-Etapa '1/7  Portas MIDI que o Windows oferece aos programas'
+
+    $qtdIn  = [int][MidiSuporteADV]::midiInGetNumDevs()
+    $qtdOut = [int][MidiSuporteADV]::midiOutGetNumDevs()
+    $entradas = New-Object System.Collections.Generic.List[object]
+
+    if ($qtdIn -eq 0) {
+        Write-Falha 'NENHUMA entrada MIDI. O Windows nao esta vendo o teclado.'
+        Write-Info  'Nao adianta mexer no programa: nao ha o que ele selecionar.'
+    } else {
+        for ($i = 0; $i -lt $qtdIn; $i++) {
+            $nome = [MidiSuporteADV]::NomeEntrada($i)
+            $entradas.Add([pscustomobject]@{ Id = $i; Nome = $nome })
+            Write-Ok ("ENTRADA  [$i]  $nome")
+        }
+    }
+    for ($i = 0; $i -lt $qtdOut; $i++) {
+        Write-Info ("SAIDA    [$i]  " + [MidiSuporteADV]::NomeSaida($i))
+    }
+    if ($qtdOut -eq 0) {
+        Write-Aviso 'Nenhuma saida MIDI - o programa nao tem para onde mandar o som.'
+    }
+
+    # --- 2. o dispositivo no Gerenciador ----------------------------------
+    Write-Host ''
+    Write-Etapa '2/7  O dispositivo no Gerenciador de Dispositivos'
+    $comProblema = New-Object System.Collections.Generic.List[object]
+    try {
+        $devs = @(Get-PnpDevice -ErrorAction Stop | Where-Object {
+            $_.Class -in @('MEDIA', 'AudioEndpoint', 'USB', 'SoftwareDevice') -and
+            ($_.FriendlyName -match '(?i)midi|keyboard controller|usb audio|audio device|keystation|mpk|launchkey|oxygen|impulse|nektar|arturia|akai|novation|m-audio|roland|yamaha|casio|korg|alesis|nord|studiologic|worlde|midiplus')
+        })
+        if ($devs.Count -eq 0) {
+            Write-Aviso 'Nenhum dispositivo com cara de teclado MIDI no Gerenciador.'
+            Write-Info  'Se o teclado esta ligado por USB, isso aponta para CABO ou PORTA.'
+        }
+        foreach ($d in $devs) {
+            $txt = "$($d.FriendlyName)  [$($d.Status)]"
+            if ($d.Status -eq 'OK') { Write-Ok $txt }
+            else {
+                Write-Falha $txt
+                $comProblema.Add($d)
+                $prob = (Get-PnpDeviceProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode' -ErrorAction SilentlyContinue).Data
+                if ($prob) {
+                    $exp = switch ([int]$prob) {
+                        10 { 'o dispositivo nao consegue iniciar (driver ou hardware)' }
+                        28 { 'driver nao instalado' }
+                        43 { 'o Windows parou o dispositivo por erro relatado' }
+                        45 { 'o dispositivo nao esta conectado agora' }
+                        default { "codigo de problema $prob" }
+                    }
+                    Write-Info ("   $exp")
+                }
+            }
+        }
+    } catch {
+        Write-Aviso "Nao foi possivel consultar o Gerenciador de Dispositivos: $($_.Exception.Message)"
+    }
+
+    # --- 2b. as dez vagas de MIDI do Windows ------------------------------
+    Write-Host ''
+    $vagas = @(Get-SlotsMIDI)
+    $vagas64 = @($vagas | Where-Object { $_.Raiz -notmatch 'WOW6432Node' })
+    $usadas = $vagas64.Count
+    $fantasmas = @(Get-PortasMIDIFantasma)
+
+    Write-Info "Vagas de driver MIDI do Windows: $usadas de 10 em uso."
+    foreach ($v in $vagas64) { Write-Info ("   $($v.Nome) = $($v.Valor)") }
+
+    $limiteCheio = ($usadas -ge 9)
+    $codigo10 = @($comProblema | Where-Object {
+        $p = (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode' -ErrorAction SilentlyContinue).Data
+        $p -eq 10
+    })
+
+    if ($fantasmas.Count -gt 0) {
+        Write-Aviso "$($fantasmas.Count) porta(s)/aparelho(s) MIDI registrado(s) que nao estao mais conectados:"
+        foreach ($f in $fantasmas) { Write-Info ("   $($f.FriendlyName)") }
+        Write-Info 'Cada um continua ocupando vaga. Teclado com duas portas ocupa duas.'
+    }
+
+    if ($limiteCheio -and $codigo10.Count -gt 0) {
+        Write-Host ''
+        Write-Falha 'ACHADO: as vagas de MIDI acabaram e por isso o teclado nao inicia.'
+        Write-Info  'O Windows so tem dez vagas de driver MIDI, e elas nao sao devolvidas'
+        Write-Info  'quando um aparelho e desconectado. Com as vagas cheias, o teclado novo'
+        Write-Info  'aparece no Gerenciador com "Codigo 10 - nao pode iniciar" e nenhuma'
+        Write-Info  'porta chega aos programas. Nao ha aviso nenhum sobre o limite.'
+        Add-Alerta  'Vagas de driver MIDI do Windows esgotadas - teclado com Codigo 10.'
+    } elseif ($limiteCheio) {
+        Write-Aviso 'As vagas de MIDI estao quase cheias. Se um teclado novo nao iniciar, e isso.'
+    }
+
+    # --- 3. a porta esta livre? -------------------------------------------
+    Write-Host ''
+    Write-Etapa '3/7  A porta esta livre, ou ja tem programa segurando?'
+    Write-Info 'Porta MIDI no Windows e EXCLUSIVA: so um programa por vez.'
+
+    $ocupadas = New-Object System.Collections.Generic.List[object]
+    foreach ($e in $entradas) {
+        $r = [MidiSuporteADV]::TestarPorta([int]$e.Id)
+        $txt = "[$($e.Id)] $($e.Nome): " + (Get-ErroMIDI -Codigo $r)
+        if ($r -eq 0) { Write-Ok $txt } else { Write-Falha $txt; if ($r -eq 4) { $ocupadas.Add($e) } }
+    }
+
+    $progs = @(Get-ProgramasDeAudio)
+    if ($progs.Count -gt 0) {
+        Write-Host ''
+        Write-Info 'Programas de audio/MIDI abertos agora:'
+        foreach ($p in $progs) {
+            $t = "   $($p.Nome) (PID $($p.Id))"
+            if ($p.Titulo) { $t = "$t - $($p.Titulo)" }
+            Write-Info $t
+        }
+        $vmpks = @($progs | Where-Object { $_.Nome -match '(?i)vmpk' })
+        if ($vmpks.Count -gt 1) {
+            Write-Falha "Ha $($vmpks.Count) instancias do VMPK abertas. A primeira segura a porta e as outras ficam mudas."
+            Add-Alerta 'Mais de uma instancia do VMPK aberta - fechar todas e abrir uma so.'
+        }
+    }
+    if ($ocupadas.Count -gt 0) {
+        Write-Info 'Feche o programa que esta usando o teclado e rode esta opcao de novo.'
+    }
+
+    # --- 4. teste ao vivo --------------------------------------------------
+    Write-Host ''
+    Write-Etapa '4/7  Teste ao vivo: o teclado chega no Windows?'
+
+    $recebeu = $false
+    $testouAoVivo = $false
+    $livres = @($entradas | Where-Object { [MidiSuporteADV]::TestarPorta([int]$_.Id) -eq 0 })
+
+    if ($livres.Count -eq 0) {
+        Write-Aviso 'Nenhuma porta livre para testar agora.'
+    } elseif ($SemInteracao) {
+        Write-Aviso 'Modo desatendido: o teste ao vivo precisa de alguem tocando o teclado.'
+    } else {
+        $alvo = $livres[0]
+        if ($livres.Count -gt 1) {
+            Write-Host ''
+            foreach ($e in $livres) { Write-Host "     [$($e.Id)] $($e.Nome)" -ForegroundColor White }
+            $esc = (Read-Host "  Qual porta e o seu teclado? (numero) [$($livres[0].Id)]").Trim()
+            if ($esc) {
+                $achado = $livres | Where-Object { [string]$_.Id -eq $esc } | Select-Object -First 1
+                if ($achado) { $alvo = $achado }
+            }
+        }
+
+        Write-Host ''
+        Write-Info ("Escutando a porta [$($alvo.Id)] $($alvo.Nome).")
+        Write-Host '  >> TOQUE ALGUMAS TECLAS DO TECLADO AGORA (15 segundos)...' -ForegroundColor Yellow
+
+        $testouAoVivo = $true
+        $r = [MidiSuporteADV]::Abrir([int]$alvo.Id)
+        if ($r -ne 0) {
+            Write-Falha ("Nao foi possivel abrir a porta: " + (Get-ErroMIDI -Codigo $r))
+        } else {
+            $fim = (Get-Date).AddSeconds(15)
+            $ultimo = 0
+            while ((Get-Date) -lt $fim) {
+                Start-Sleep -Milliseconds 300
+                $t = [MidiSuporteADV]::Total
+                if ($t -gt $ultimo) {
+                    $ultimo = $t
+                    $fim = (Get-Date).AddSeconds(3)   # chegou algo: encerra logo
+                }
+            }
+            [MidiSuporteADV]::Fechar()
+
+            $msgs = [MidiSuporteADV]::Mensagens()
+            if ($msgs.Count -gt 0) {
+                $recebeu = $true
+                Write-Ok "$([MidiSuporteADV]::Total) mensagem(ns) recebida(s) do teclado:"
+                foreach ($m in $msgs) { Write-Dest ("   $m") }
+                $canais = @($msgs | ForEach-Object { if ($_ -match 'canal (\d+)') { [int]$Matches[1] } } | Sort-Object -Unique)
+                if ($canais.Count -gt 0) {
+                    Write-Host ''
+                    Write-Info ("O teclado esta enviando no canal MIDI: " + ($canais -join ', '))
+                    if ($canais -notcontains 1) {
+                        Write-Aviso 'O teclado NAO esta no canal 1, que e o que a maioria dos programas escuta.'
+                        Write-Info  'Ou mude o canal no teclado para 1, ou ponha o programa em OMNI (todos).'
+                        Add-Alerta ("Teclado enviando no canal " + ($canais -join ', ') + " - conferir o canal de entrada do programa.")
+                    }
+                }
+            } else {
+                Write-Falha 'Nada chegou. O teclado nao esta mandando nada para o Windows.'
+            }
+        }
+    }
+
+    # --- 5. saida de som ----------------------------------------------------
+    Write-Host ''
+    Write-Etapa '5/7  A outra metade: sai som?'
+    Write-Info 'O VMPK nao gera audio sozinho. Ele manda MIDI para uma SAIDA (em geral o'
+    Write-Info 'Microsoft GS Wavetable Synth), e o sintetizador e que toca na placa de som.'
+    Write-Host ''
+    $probAudio = Test-CadeiaDeAudio
+
+    $ouviu = $null
+    $saidas = @()
+    for ($i = 0; $i -lt $qtdOut; $i++) { $saidas += [pscustomobject]@{ Id = $i; Nome = [MidiSuporteADV]::NomeSaida($i) } }
+
+    if ($qtdOut -eq 0) {
+        Write-Falha 'Nao ha saida MIDI nenhuma - o programa nao tem para onde mandar as notas.'
+    } elseif (-not $SemInteracao) {
+        $alvoOut = $saidas[0]
+        $gs = $saidas | Where-Object { $_.Nome -match '(?i)wavetable|synth' } | Select-Object -First 1
+        if ($gs) { $alvoOut = $gs }
+        if ($saidas.Count -gt 1) {
+            Write-Host ''
+            foreach ($s in $saidas) { Write-Host "     [$($s.Id)] $($s.Nome)" -ForegroundColor White }
+            $esc = (Read-Host "  Testar o som por qual saida? (numero) [$($alvoOut.Id)]").Trim()
+            if ($esc) {
+                $ach = $saidas | Where-Object { [string]$_.Id -eq $esc } | Select-Object -First 1
+                if ($ach) { $alvoOut = $ach }
+            }
+        }
+        Write-Host ''
+        Write-Info ("Tocando do-mi-sol-do por: $($alvoOut.Nome)")
+        Write-Host '  >> ESCUTE AGORA (deixe o volume audivel)...' -ForegroundColor Yellow
+        $rt = [MidiSuporteADV]::Tocar([int]$alvoOut.Id)
+        if ($rt -ne 0) {
+            Write-Falha ("Nao foi possivel abrir a saida: " + (Get-ErroMIDI -Codigo $rt))
+        } else {
+            $r = (Read-Host '  Ouviu as quatro notas? (S/N)').Trim()
+            $ouviu = ($r -match '^[Ss]')
+            if ($ouviu) {
+                Write-Ok 'A cadeia de som esta boa: MIDI de saida, sintetizador e placa de som.'
+                Write-Info 'Se o VMPK nao emite som, e a SAIDA MIDI dele que esta errada.'
+            } else {
+                Write-Falha 'O som nao chega ate a caixa. O problema nao e do teclado.'
+                Write-Info  'Confira, nesta ordem:'
+                Write-Info  '   1. o volume do Windows e o mudo do proprio programa (mixer);'
+                Write-Info  '   2. a saida padrao do Windows - fone, caixa, HDMI do monitor;'
+                Write-Info  '   3. a opcao 40 do menu (Reparar Audio e Microfone) faz o resto.'
+                Add-Alerta 'Saida de audio nao produz som nem pelo sintetizador do Windows - ver opcao 40.'
+            }
+        }
+    }
+
+    # --- 6. VMPK ------------------------------------------------------------
+    Write-Host ''
+    Write-Etapa '6/7  Configuracao salva do VMPK'
+    $nomes = @($entradas | ForEach-Object { $_.Nome }) + @($saidas | ForEach-Object { $_.Nome })
+    $entradaMorta = Show-ConfiguracaoVMPK -PortasReais $nomes
+
+    # --- 7. correcoes --------------------------------------------------------
+    Write-Host ''
+    Write-Etapa '7/7  Correcoes'
+
+    if ($recebeu) {
+        Write-Ok 'O teclado CHEGA no Windows. Hardware, cabo e driver estao bons.'
+        Write-Info 'O que falta e no programa. No VMPK, menu Editar > Conexoes MIDI'
+        Write-Info '(Edit > MIDI Connections):'
+        Write-Info '   1. marque "Habilitar entrada MIDI" (Enable MIDI input);'
+        Write-Info '   2. em ENTRADA MIDI, escolha:'
+        foreach ($e in $entradas) { Write-Dest ("        $($e.Nome)") }
+        Write-Info '   3. em SAIDA MIDI, escolha:'
+        foreach ($s in $saidas) { Write-Dest ("        $($s.Nome)") }
+        if ($ouviu -eq $true) {
+            $gsn = ($saidas | Where-Object { $_.Nome -match '(?i)wavetable|synth' } | Select-Object -First 1)
+            if ($gsn) { Write-Info ("      (o teste de som passou por: $($gsn.Nome))") }
+        }
+        Write-Info '   4. deixe o canal de entrada em OMNI/todos, ou no canal que apareceu acima;'
+        Write-Info '   5. o driver MIDI, nas duas pontas, deve estar em "Windows MM".'
+        Write-Info ''
+        Write-Info 'Importante: o VMPK le a lista de portas UMA VEZ, ao abrir. Conecte o'
+        Write-Info 'teclado ANTES de abrir o programa, sempre. Se ja estava aberto, feche e'
+        Write-Info 'abra de novo depois de conectar - so isso ja resolve muito caso.'
+    } elseif ($qtdIn -eq 0) {
+        Write-Falha 'O Windows nao ve o teclado. Nesta ordem:'
+        Write-Info  '   1. TROQUE O CABO USB. Muito cabo so tem os fios de carga, sem dados -'
+        Write-Info  '      o teclado acende e nao transmite nada. E a causa numero 1;'
+        Write-Info  '   2. ligue direto numa porta do computador, sem hub e sem extensao;'
+        Write-Info  '   3. tente uma porta USB de tras (traseiras costumam ser mais estaveis);'
+        Write-Info  '   4. se o teclado tiver chave USB/MIDI ou fonte externa, confira;'
+        Write-Info  '   5. veja se o fabricante pede driver proprio (muitos sao plug-and-play).'
+    } elseif (-not $testouAoVivo) {
+        Write-Info 'O teste ao vivo nao foi feito nesta execucao, entao nao da para afirmar'
+        Write-Info 'se o teclado chega ou nao. Rode de novo e toque teclas quando for pedido.'
+    } else {
+        Write-Aviso 'Ha porta MIDI, mas nao chegou nota nenhuma no teste.'
+        Write-Info  'Possiveis causas, em ordem: a porta escolhida no teste nao e a do teclado;'
+        Write-Info  'o teclado esta em modo de transporte/local off; ou o cabo transmite mal.'
+    }
+
+    # --- liberar as vagas de MIDI ------------------------------------------
+    if (($limiteCheio -or $codigo10.Count -gt 0) -and -not $SemInteracao) {
+        Write-Host ''
+        Write-Host '  ' -NoNewline
+        Write-Host 'LIBERAR AS VAGAS DE MIDI' -ForegroundColor Yellow
+        Write-Info 'Apaga os valores midi1..midi9 do registro (nas versoes 64 e 32 bits).'
+        Write-Info 'O valor "midi", que e do proprio Windows, fica.'
+        Write-Info 'Isso NAO desinstala driver: as vagas sao refeitas quando cada aparelho'
+        Write-Info 'for conectado de novo - so os que existem de verdade voltam a ocupar.'
+        Write-Info 'Uma copia .reg vai para a pasta de log antes.'
+        Write-Info 'Depois: desconectar e reconectar o teclado (ou reiniciar o computador).'
+        Write-Host ''
+        $r = (Read-Host '  Liberar as vagas agora? (S/N) [S]').Trim()
+        if (-not $r -or $r -match '^[Ss]') {
+            $n = Clear-VagasMIDI
+            if ($n -gt 0) {
+                $corrigidos += $n
+                Write-Ok "$n vaga(s) liberada(s)."
+
+                # Tira tambem os registros dos aparelhos que nao existem mais,
+                # senao eles reocupam vaga na proxima varredura.
+                foreach ($f in $fantasmas) {
+                    & pnputil /remove-device $f.InstanceId 2>&1 | Out-Null
+                }
+                if ($fantasmas.Count -gt 0) { Write-Info "$($fantasmas.Count) registro(s) de aparelho antigo removido(s)." }
+
+                # Reinicia o teclado com problema, que e' o equivalente a
+                # desconectar e reconectar sem levantar da cadeira.
+                foreach ($d in $codigo10) {
+                    try {
+                        Disable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false -ErrorAction Stop
+                        Start-Sleep -Seconds 2
+                        Enable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false -ErrorAction Stop
+                        Write-Ok "Reiniciado: $($d.FriendlyName)"
+                    } catch {
+                        Write-Aviso "Reinicie a mao (desconecte e reconecte o cabo): $($d.FriendlyName)"
+                    }
+                }
+                & pnputil /scan-devices 2>&1 | Out-Null
+                Start-Sleep -Seconds 3
+
+                $agora = [int][MidiSuporteADV]::midiInGetNumDevs()
+                Write-Host ''
+                if ($agora -gt $qtdIn) {
+                    Write-Ok "Resolvido: agora ha $agora entrada(s) MIDI (antes havia $qtdIn)."
+                    for ($i = 0; $i -lt $agora; $i++) { Write-Dest ("   " + [MidiSuporteADV]::NomeEntrada($i)) }
+                    Write-Info 'Abra o VMPK AGORA (com o teclado ja conectado) e escolha a entrada'
+                    Write-Info 'em Editar > Conexoes MIDI.'
+                } else {
+                    Write-Aviso 'Ainda sem entrada MIDI nova nesta janela.'
+                    Write-Info  'Desconecte e reconecte o cabo do teclado. Se nao resolver, REINICIE'
+                    Write-Info  'o computador: as vagas so sao remontadas do zero na inicializacao.'
+                    $script:precisaReiniciar = $true
+                }
+            }
+        }
+    }
+
+    if ($null -ne $entradaMorta) {
+        Write-Host ''
+        Write-Info 'O VMPK tem uma entrada MIDI salva que nao existe mais. Da para limpar a'
+        Write-Info 'configuracao de conexoes para ele perguntar de novo na proxima abertura.'
+        Write-Info 'Uma copia do registro e guardada antes, na pasta de log.'
+        if (-not $SemInteracao) {
+            $r = (Read-Host '  Limpar as conexoes salvas do VMPK? (S/N) [N]').Trim()
+            if ($r -match '^[Ss]') {
+                if (@(Get-Process -Name 'vmpk' -ErrorAction SilentlyContinue).Count -gt 0) {
+                    Write-Aviso 'O VMPK esta aberto - feche antes, senao ele regrava ao sair.'
+                } else {
+                    try {
+                        $bkp = Join-Path $script:pastaExec 'VMPK.reg'
+                        foreach ($rz in @('HKCU\Software\vmpk.sourceforge.net', 'HKCU\Software\VMPK')) {
+                            if (Test-Path -LiteralPath ($rz -replace '^HKCU\\', 'HKCU:\')) {
+                                & reg.exe export $rz $bkp /y 2>&1 | Out-Null
+                                Write-Info ("Copia guardada em: $bkp")
+                                break
+                            }
+                        }
+                        foreach ($sub in @('HKCU:\Software\vmpk.sourceforge.net\VMPK\Connections',
+                                           'HKCU:\Software\VMPK\vmpk\Connections',
+                                           'HKCU:\Software\VMPK\VMPK\Connections')) {
+                            if (Test-Path -LiteralPath $sub) {
+                                Remove-Item -LiteralPath $sub -Recurse -Force -ErrorAction Stop
+                                Write-Ok "Conexoes salvas removidas: $sub"
+                                $corrigidos++
+                            }
+                        }
+                        if ($corrigidos -eq 0) { Write-Aviso 'Nao achei a subchave de conexoes - nada foi removido.' }
+                        else { Write-Info 'Abra o VMPK e refaca em Editar > Conexoes MIDI.' }
+                    } catch {
+                        Write-Falha "Nao foi possivel limpar: $($_.Exception.Message)"
+                    }
+                }
+            }
+        }
+    }
+
+    # economia de energia do USB: desliga o teclado sozinho depois de um tempo
+    if (-not $SemInteracao) {
+        Write-Host ''
+        Write-Info 'O Windows pode desligar portas USB para economizar energia - o teclado'
+        Write-Info 'para de responder depois de um tempo parado e so volta reconectando.'
+        $r = (Read-Host '  Impedir que o Windows desligue as portas USB? (S/N) [S]').Trim()
+        if (-not $r -or $r -match '^[Ss]') {
+            $mexidos = 0
+            try {
+                $todos = @(Get-CimInstance -Namespace 'root\WMI' -ClassName 'MSPower_DeviceEnable' -ErrorAction Stop)
+                foreach ($d in $todos) {
+                    if ($d.InstanceName -notmatch '(?i)USB') { continue }
+                    if (-not $d.Enable) { continue }
+                    try {
+                        Set-CimInstance -InputObject $d -Property @{ Enable = $false } -ErrorAction Stop
+                        $mexidos++
+                    } catch { }
+                }
+                if ($mexidos -gt 0) {
+                    Write-Ok "$mexidos porta(s)/dispositivo(s) USB nao serao mais desligados para economizar energia."
+                    $corrigidos += $mexidos
+                } else {
+                    Write-Info 'Nenhuma porta USB estava configurada para desligar. Nada a fazer.'
+                }
+            } catch {
+                Write-Aviso "Nao foi possivel ajustar a economia de energia do USB: $($_.Exception.Message)"
+            }
+        }
+    }
+
+    # reabilitar o dispositivo com problema
+    if ($comProblema.Count -gt 0 -and -not $SemInteracao) {
+        Write-Host ''
+        Write-Info "$($comProblema.Count) dispositivo(s) com problema no Gerenciador."
+        $r = (Read-Host '  Desabilitar e reabilitar (equivale a desconectar e reconectar)? (S/N) [S]').Trim()
+        if (-not $r -or $r -match '^[Ss]') {
+            foreach ($d in $comProblema) {
+                try {
+                    Disable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false -ErrorAction Stop
+                    Start-Sleep -Seconds 2
+                    Enable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false -ErrorAction Stop
+                    Write-Ok "Reiniciado: $($d.FriendlyName)"
+                    $corrigidos++
+                } catch {
+                    Write-Aviso "Nao foi possivel reiniciar $($d.FriendlyName): $($_.Exception.Message)"
+                    & pnputil /enable-device $d.InstanceId 2>&1 | Out-Null
+                }
+            }
+            Write-Info 'Procurando dispositivos novos...'
+            & pnputil /scan-devices 2>&1 | Out-Null
+        }
+    }
+
+    # --- veredicto ----------------------------------------------------------
+    Write-Host ''
+    Write-Host ('  ' + ('-' * 66)) -ForegroundColor DarkCyan
+    if ($recebeu -and $ouviu -eq $true) {
+        Write-Ok 'VEREDICTO: entrada e saida do Windows estao BOAS.'
+        Write-Info 'O teclado chega e o som sai. O que sobra e a configuracao das conexoes'
+        Write-Info 'dentro do VMPK - refaca as duas pontas em Editar > Conexoes MIDI.'
+    } elseif ($recebeu -and $ouviu -eq $false) {
+        Write-Aviso 'VEREDICTO: o teclado chega, mas nao sai som.'
+        Write-Info  'O controlador esta bom. O problema e na saida de audio da maquina -'
+        Write-Info  'rode a opcao 40 (Reparar Audio e Microfone).'
+    } elseif ($recebeu) {
+        Write-Ok 'VEREDICTO: o teclado chega no Windows - o controlador esta bom.'
+        Write-Info 'Ajuste a entrada MIDI dentro do programa.'
+    } elseif ($qtdIn -eq 0) {
+        Write-Falha 'VEREDICTO: o Windows nao ve o teclado. Comece pelo CABO USB.'
+    } elseif (-not $testouAoVivo) {
+        Write-Info 'VEREDICTO: o teclado aparece para o Windows, mas o teste ao vivo nao foi'
+        Write-Info 'feito - rode de novo e toque algumas teclas quando for pedido.'
+    } else {
+        Write-Aviso 'VEREDICTO: ha porta MIDI, mas nada chegou no teste.'
+    }
+    if ($probAudio -gt 0) { Write-Aviso "$probAudio ponto(s) da cadeia de audio merecem atencao (acima)." }
+    Write-Host ('  ' + ('-' * 66)) -ForegroundColor DarkCyan
+
+    Write-Host ''
+    Write-Info 'Se nada resolveu: teste o teclado em OUTRO computador. Se funcionar la,'
+    Write-Info 'o problema e nesta maquina; se nao funcionar, e o teclado ou o cabo.'
+    return [long]$corrigidos
+}
+
+# =========================================================================
 # PADRONIZAR NAVEGADORES E BARRA DE TAREFAS
 # =========================================================================
 # Todo escritorio tem a mesma cena: o usuario abre o navegador e fica
@@ -14767,6 +15685,7 @@ if ($Ferramenta) {
             'appdata'       { Repair-AcessoAppData | Out-Null }
             'efeitos'       { Set-EfeitosVisuais | Out-Null; Set-DesempenhoEnergia | Out-Null }
             'padraonav'     { Set-PadraoNavegadores | Out-Null }
+            'midi'          { Repair-MIDI | Out-Null }
             'rede'          { Invoke-ManutencaoRede | Out-Null }
             'horario'       { Sync-HorarioSistema }
             'defender'      { Update-Defender | Out-Null }
