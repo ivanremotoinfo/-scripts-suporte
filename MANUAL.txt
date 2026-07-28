@@ -1,7 +1,7 @@
 ﻿================================================================================
                     S U P O R T E A D V  -  M A N U A L
               Ferramentas de suporte técnico - suporte.adv.br
-                        Versão 2026.07.27  |  55 opções
+                        Versão 2026.07.28  |  58 opções
 ================================================================================
 
 
@@ -11,16 +11,16 @@ SUMÁRIO
   2. Como executar
   3. Regras que valem para tudo
   4. Guia rápido: qual opção usar para cada problema
-  5. As 55 opções, uma a uma
+  5. As 58 opções, uma a uma
        DIAGNÓSTICO ................ 1 a 7
        MANUTENÇÃO E LIMPEZA ....... 8 a 19
        SEGURANÇA E ANTIVÍRUS ...... 20 a 24
        REPAROS .................... 25 a 40
        OTIMIZAÇÃO ................. 41 a 44
-       REDE DO ESCRITÓRIO ......... 45 a 48
-       CERTIFICADOS E JURÍDICO .... 49 a 51
-       PROGRAMAS .................. 52 e 53
-       ATALHOS ADMINISTRATIVOS .... 54 e 55
+       REDE DO ESCRITÓRIO ......... 45 a 51
+       CERTIFICADOS E JURÍDICO .... 52 a 54
+       PROGRAMAS .................. 55 e 56
+       ATALHOS ADMINISTRATIVOS .... 57 e 58
   6. A Manutenção Completa em detalhe (16 etapas)
   7. Uso por linha de comando
   8. Onde ficam os logs e como reverter
@@ -38,7 +38,7 @@ digital, token, Java, PJe).
 
 São apenas dois arquivos:
 
-  SuporteADV.ps1            o menu, com as 55 opções
+  SuporteADV.ps1            o menu, com as 58 opções
   ManutencaoCompleta.ps1    o motor, que faz todo o trabalho
 
 O menu baixa o motor uma vez e o mantém em cache local, atualizando só quando
@@ -128,8 +128,8 @@ MODO SIMULAÇÃO
   "Sem internet"                                28
   "Não abre site do tribunal / erro de          29
    certificado"
-  "Não imprime"                                 30, depois 53 se persistir
-  "Não consigo abrir a pasta %appdata%"         31 (reparar) ou 55 (só abrir)
+  "Não imprime"                                 30, depois 56 se persistir
+  "Não consigo abrir a pasta %appdata%"         31 (reparar) ou 58 (só abrir)
   "Ícones sumiram / área de trabalho travou"    32
   "PC desligou na tomada várias vezes"          33 (chkdsk) e 2 (SMART)
   "Apps da Microsoft Store não abrem"           34
@@ -137,8 +137,8 @@ MODO SIMULAÇÃO
                                                 assinatura digital), 4, 29
   "Sem microfone na audiência" (URGENTE)        39
   "Sem câmera na audiência" (URGENTE)           40
-  "PJe não assina / Java não carrega"           51, depois 50
-  "Token não aparece"                           54, depois 4
+  "PJe não assina / Java não carrega"           54, depois 53
+  "Token não aparece"                           57, depois 4
   "Suspeita de vírus"                           20
   "Preciso instalar programa e o antivírus      22 (e 23 depois, sempre)
    bloqueia"
@@ -147,15 +147,21 @@ MODO SIMULAÇÃO
   "PC demora para ligar"                        42
   "Mexi em algo e preciso voltar atrás"         19
   "Quero deixar um comprovante do serviço"      7
-  "Quero montar a rede do escritório"           45 (no PC que guarda os
-                                                arquivos), depois 46 nos demais
-  "A rede parou / sumiu a unidade de rede"      47 (diagnostica antes de mexer)
-  "Não acesso a pasta compartilhada"            47, depois 46
-  "PC vai sair do escritório / foi vendido"     48 (desfaz a rede nele)
+  "Este PC parou de acessar o servidor"         46 (segue a cadeia e diz
+                                                onde quebrou)
+  "As máquinas não se enxergam"                 45 em CADA PC, e compare a
+                                                faixa da rede e o gateway
+  "Não acesso a pasta compartilhada"            46
+  "Internet lenta / não abre nada"              47
+  "Sem internet"                                47
+  "Quero montar a rede do escritório"           48 (no PC que guarda os
+                                                arquivos), depois 49 nos demais
+  "A rede toda parou de funcionar"              50 (diagnóstico da rede local)
+  "PC vai sair do escritório / foi vendido"     51 (desfaz a rede nele)
 
 
 ================================================================================
-5. AS 55 OPÇÕES, UMA A UMA
+5. AS 58 OPÇÕES, UMA A UMA
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -520,11 +526,89 @@ Estas três montam e mantêm a rede de compartilhamento de arquivos entre os
 computadores do escritório. A ideia: **uma** máquina guarda os documentos
 (servidor) e as demais acessam por uma unidade de rede fixa.
 
-Ordem de uso: primeiro a 45 na máquina que vai guardar os arquivos, depois a
-46 em cada computador do escritório. A 47 é para quando algo parar de
-funcionar.
+Dividem-se em duas famílias:
+  45 a 47 — SOLUÇÃO DE PROBLEMAS (rede que parou de funcionar)
+  48 a 51 — MONTAGEM (criar a rede e desfazê-la)
 
-[45] CONFIGURAR SERVIDOR DE ARQUIVOS
+Para montar: primeiro a 48 na máquina que vai guardar os arquivos, depois a
+49 em cada computador. Para resolver problema: comece pela 46.
+
+[45] QUAL REDE ESTOU USANDO
+    NÃO ALTERA NADA. É o cartão de identidade da rede desta máquina, feito
+    para ser rodado em CADA computador e comparado.
+
+    Mostra se a conexão é Wi-Fi (com o nome da rede, sinal, canal e segurança)
+    ou por cabo (placa e velocidade do link), e destaca os dois valores que
+    determinam se as máquinas se enxergam:
+
+        FAIXA DA REDE   ex.: 192.168.15.0/24
+        GATEWAY         ex.: 192.168.15.1
+
+    Se um PC está em 192.168.0.x e outro em 192.168.15.x, eles NÃO se
+    enxergam — mesmo os dois navegando na internet normalmente. Acontece
+    quando um caiu no Wi-Fi de visitantes, quando alguém ligou um roteador
+    extra, ou quando há VPN ativa.
+
+    Separa os adaptadores virtuais (Hyper-V, WSL, VPN, VirtualBox) numa lista
+    à parte marcada como "ignore na comparação" — eles têm IP mas não servem
+    para o compartilhamento e só confundem a leitura.
+
+    Avisa quando o nome da rede Wi-Fi parece de visitantes (rede de visitante
+    normalmente isola os dispositivos entre si) e quando o sinal está fraco a
+    ponto de derrubar a conexão com arquivos em rede.
+
+    Use quando o cliente disser que as máquinas não se veem: rode nas duas e
+    compare as duas linhas destacadas.
+
+[46] NÃO CONECTA NO SERVIDOR
+    Para o chamado mais comum: "esse computador parou de acessar o servidor".
+
+    Percorre a cadeia inteira na ordem em que ela quebra e PARA no primeiro
+    elo com defeito, em vez de despejar tudo de uma vez:
+      1. este computador está em alguma rede?
+      2. o servidor está na MESMA faixa de rede?
+      3. o servidor responde na porta 445?
+      4. a autenticação é aceita?
+      5. as unidades mapeadas estão conectadas?
+      6. a configuração local está correta (perfil, serviços)?
+
+    Descobre sozinho os servidores que a máquina já usou, olhando as unidades
+    mapeadas e as credenciais salvas — você não precisa lembrar o nome.
+
+    Ao final diz qual elo quebrou e o que resolve. Depois oferece a correção
+    guiada:
+      [1] Renovar a credencial — apaga a salva, derruba as conexões abertas
+          (evita o erro 1219 de conflito, que acontece quando a senha muda no
+          servidor) e entra com a senha atual, reconectando as unidades;
+      [2] Reconectar as unidades de rede;
+      [3] Corrigir a configuração local (perfil privado, serviços, firewall);
+      [4] Limpar cache de nomes (DNS e NetBIOS) — resolve quando o servidor
+          trocou de IP e o nome ainda aponta para o antigo.
+
+[47] PROBLEMAS DE CONEXÃO
+    Diagnóstico da conexão em camadas, de baixo para cima, para o problema
+    aparecer na camada certa em vez de virar "a internet caiu":
+      1. placa de rede — cabo desconectado, Wi-Fi fora, placa desativada;
+      2. endereço IP — detecta 169.254.x.x, que significa que o DHCP não
+         respondeu, e avisa quando há mais de um gateway ativo (cabo e Wi-Fi
+         juntos, ou VPN), que deixa a rede instável;
+      3. comunicação com o roteador;
+      4. resolução de nomes (DNS);
+      5. acesso à internet, com latência e perda de pacotes;
+      6. proxy indevido;
+      7. resposta de cada servidor DNS configurado — DNS inalcançável faz cada
+         consulta esperar o tempo limite, e é o que faz "a internet ficar
+         lenta" com a conexão aparentemente boa.
+
+    Distingue um caso importante: se o roteador responde mas a internet não, o
+    problema é do provedor e as pastas compartilhadas continuam funcionando.
+
+    Correções: limpar cache DNS (rápido, não derruba nada), ou o conjunto
+    completo com renovação de IP e reinício da placa. Se houver AnyDesk,
+    TeamViewer ou RDP ativos, avisa em vermelho antes — reiniciar a placa
+    derruba o seu atendimento.
+
+[48] CONFIGURAR SERVIDOR DE ARQUIVOS
     Transforma esta máquina no servidor de arquivos do escritório, em 7 etapas:
       1. mostra a situação atual (nome, grupo de trabalho, IP, SMB);
       2. coloca a rede no perfil PRIVADO (perfil Público bloqueia tudo);
@@ -559,7 +643,7 @@ funcionar.
     A máquina precisa ficar LIGADA para as outras acessarem. E lembre:
     compartilhar pasta NÃO é backup — os arquivos seguem num disco só.
 
-[46] CONECTAR À REDE/SERVIDOR
+[49] CONECTAR À REDE/SERVIDOR
     Prepara um computador do escritório para usar o servidor, em 5 etapas:
     perfil de rede privado, serviços, firewall, grupo de trabalho e a unidade
     de rede.
@@ -572,7 +656,7 @@ funcionar.
     Sugere uma letra livre (Z:, Y:...) e avisa se a escolhida já está em uso.
     Ao terminar, abre a unidade no Explorer para conferir.
 
-[47] DIAGNÓSTICO DA REDE LOCAL
+[50] DIAGNÓSTICO DA REDE LOCAL
     NÃO ALTERA NADA. Percorre, em 8 etapas, as causas que derrubam rede de
     escritório, na ordem em que costumam acontecer:
       1. identificação (nome, grupo de trabalho, IPs);
@@ -590,8 +674,8 @@ funcionar.
     No fim lista o que precisa ser corrigido. Use esta antes de mexer em
     qualquer coisa quando "a rede parou".
 
-[48] DESFAZER REDE NO COMPUTADOR
-    O contrário das opções 45 e 46: tira a máquina da rede de compartilhamento.
+[51] DESFAZER REDE NO COMPUTADOR
+    O contrário das opções 48 e 46: tira a máquina da rede de compartilhamento.
     Use quando o computador sai do escritório, é vendido, ou quando a rede
     precisa ser refeita do zero.
 
@@ -608,7 +692,7 @@ funcionar.
       [4] Só apagar as credenciais salvas
 
     No modo completo ele ainda trata, cada um com sua confirmação:
-      - a conta de acesso criada pela opção 45 — desativar (reversível) ou
+      - a conta de acesso criada pela opção 48 — desativar (reversível) ou
         remover;
       - religar o compartilhamento protegido por senha, se estiver desligado;
       - fechar as regras de firewall, deixando a máquina invisível na rede;
@@ -628,7 +712,7 @@ funcionar.
 CERTIFICADOS E JURÍDICO
 --------------------------------------------------------------------------------
 
-[49] LIMPAR CERTIFICADOS VENCIDOS
+[52] LIMPAR CERTIFICADOS VENCIDOS
     Organiza a loja Pessoal do usuário, separando em três categorias:
       A) ICP-Brasil e ICP-Portugal válidos — sempre MANTIDOS;
       B) ICP vencidos — você decide;
@@ -640,14 +724,14 @@ CERTIFICADOS E JURÍDICO
     lista em CSV e um arquivo .cer de cada certificado. Atenção: o .cer guarda
     apenas a parte pública — a chave privada NÃO é recuperável.
 
-[50] CONFIGURAR JAVA (JURÍDICO)
+[53] CONFIGURAR JAVA (JURÍDICO)
     Prepara o Java 8 para os sistemas jurídicos: localiza a instalação, faz
     backup do deployment.properties, ajusta o nível de segurança, remove os
     bloqueios (.locked) que travam o painel do Java, desativa o aviso de "Java
     desatualizado" que costuma travar o usuário, cadastra as URLs de exceção
     (Shodo, Shomei, PJe, PROJUDI dos estados, eProc) e limpa o cache do Java.
 
-[51] CONFIGURAR AMBIENTE PJE
+[54] CONFIGURAR AMBIENTE PJE
     Versão completa da anterior, aplicada a TODOS os perfis de usuário da
     máquina. Além do Java e das exceções, verifica os serviços Shodo e Shomei
     (necessários para assinatura) e tenta iniciá-los se estiverem parados, e
@@ -658,13 +742,13 @@ CERTIFICADOS E JURÍDICO
 PROGRAMAS
 --------------------------------------------------------------------------------
 
-[52] DESINSTALAR PROGRAMA
+[55] DESINSTALAR PROGRAMA
     Lista os programas instalados igual ao Painel de Controle — sem o lixo de
     componentes de sistema que aparece em outras listagens. Permite filtrar
     por nome, selecionar pelo número e desinstalar. As colunas se ajustam à
     largura da janela para os nomes aparecerem inteiros.
 
-[53] REMOVER IMPRESSORA
+[56] REMOVER IMPRESSORA
     Remoção completa de impressora e do driver: identifica os arquivos do
     driver no registro, remove a impressora, remove o driver (vários métodos),
     limpa a fila (perguntando antes, porque isso descarta documentos pendentes
@@ -677,7 +761,7 @@ PROGRAMAS
 ATALHOS ADMINISTRATIVOS
 --------------------------------------------------------------------------------
 
-[54] DISPOSITIVOS, SERVIÇOS E TOKEN
+[57] DISPOSITIVOS, SERVIÇOS E TOKEN
     Abre de uma vez: Gerenciador de Dispositivos, Serviços do Windows,
     Desinstalar um Programa (Painel de Controle) e o administrador de token de
     certificado (SafeNet, eToken, Gemalto e outros).
@@ -685,7 +769,7 @@ ATALHOS ADMINISTRATIVOS
     Se o app do token não abrir, ele procura pelo atalho no Menu Iniciar. Se
     ainda assim não achar, informe o nome exato do programa para ser incluído.
 
-[55] ABRIR PASTA %APPDATA%
+[58] ABRIR PASTA %APPDATA%
     Abre a pasta Roaming do usuário no Explorer (shell:AppData) e informa o
     caminho da pasta Local.
     NÃO ALTERA NADA.
@@ -867,5 +951,5 @@ ACESSO REMOTO
 
 
 ================================================================================
-                    suporte.adv.br  -  atualizado em 27/07/2026
+                    suporte.adv.br  -  atualizado em 28/07/2026
 ================================================================================
