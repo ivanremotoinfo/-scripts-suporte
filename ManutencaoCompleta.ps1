@@ -2191,9 +2191,9 @@ function Update-ClamSignatures {
 
     # Falha de rede: decidir como prosseguir
     if ($temBase) {
-        if ($SemInteracao) { Write-Aviso 'Prosseguindo com base local desatualizada (modo desatendido).'; return $true }
-        $r = (Read-Host '  Nao atualizou. Escanear com a base local desatualizada? (S/N)').Trim()
-        return ($r -match '^[SsYy]')
+        Write-Aviso 'Nao atualizou. Escaneando com a base local, que esta desatualizada.'
+        Write-Info  'Ameaca recente pode passar batido - refaca com internet quando der.'
+        return $true
     }
     Write-Falha 'Sem assinaturas locais e sem rede - scan cancelado.'
     return $false
@@ -2561,9 +2561,9 @@ function Invoke-VirusScan {
         else { Write-Ok 'Engine e assinaturas mantidas no cache para o proximo cliente.' }
     } elseif ($LimparAposScan) {
         Invoke-LimpezaClamAV
-    } elseif ($script:clamBaixado -and -not $SemInteracao) {
-        $r = (Read-Host '  Remover o ClamAV baixado para nao deixar rastro? (S/N)').Trim()
-        if ($r -match '^[SsYy]') { Invoke-LimpezaClamAV }
+    } elseif ($script:clamBaixado) {
+        # Sem perguntar: na maquina do cliente o padrao e nao deixar rastro.
+        Invoke-LimpezaClamAV
     }
 
     return $codigo
@@ -4501,11 +4501,8 @@ function Remove-ImpressoraEDriver {
     Write-Host "   Porta  : $nomePorta"      -ForegroundColor White
     Write-Host ''
 
-    $confirma = Read-Host '   Confirma a remocao completa? Esta operacao nao pode ser desfeita. (S/N)'
-    if ($confirma -notmatch '^[Ss]$') {
-        Write-Info 'Operacao cancelada pelo usuario.'
-            return [long]0
-    }
+    # A impressora ja foi escolhida pelo numero acima - isso e' a decisao.
+    Write-Aviso 'Removendo agora. Esta operacao nao pode ser desfeita.'
 
     # Verificar se outras impressoras usam o mesmo driver
     $outrasComDriver = @(Get-Printer | Where-Object {
@@ -7438,20 +7435,14 @@ function Repair-ProxyECertificados {
     Write-Etapa '2/9  Limpeza das configuracoes de proxy...'
     Write-Host ''
 
-    $limparProxy = $false
+    # A opcao do menu e "Corrigir Proxy e Certif. Rede": entao corrige. Com
+    # proxy ativo, limpa; sem proxy ativo, o reset preventivo nao custa nada e
+    # ainda resolve residuo que a consulta nao mostra.
+    $limparProxy = $true
     if ($proxyAtivo -eq 1 -or $proxyAutoConfig -or $proxyAtivoSist -eq 1) {
-        Write-Aviso 'Proxy ativo detectado. Recomenda-se limpar para restaurar acesso direto.'
-        Write-Host ''
-        $resp = Read-Host '   Deseja limpar as configuracoes de proxy? (S/N)'
-        if ($resp -match '^[Ss]') {
-            $limparProxy = $true
-        } else {
-            Write-Info 'Limpeza de proxy ignorada pelo usuario.'
-        }
+        Write-Aviso 'Proxy ativo detectado. Limpando para restaurar o acesso direto.'
     } else {
-        Write-Ok 'Nenhum proxy ativo. Etapa ignorada.'
-        $resp2 = Read-Host '   Deseja limpar/resetar o proxy mesmo assim (preventivo)? (S/N)'
-        if ($resp2 -match '^[Ss]') { $limparProxy = $true }
+        Write-Ok 'Nenhum proxy ativo. Fazendo o reset preventivo mesmo assim.'
     }
 
     if ($limparProxy) {
@@ -9047,15 +9038,10 @@ function Repair-DLLFaltando {
     # --- 4) Resolver ---
     if ($info.Ferramenta -eq 'visualc') {
         Write-Host ''
-        Write-Info 'Da para resolver agora instalando os redistribuiveis Visual C++.'
-        $r = Read-Host '  Instalar os redistribuiveis que faltam? (S/N)'
-        if ($r -match '^[Ss]') {
-            Install-VisualCRedist | Out-Null
-            Write-Host ''
-            Write-Info 'Feche e abra o programa que mostrou o erro para testar.'
-        } else {
-            Write-Info 'Voce pode rodar depois pela opcao "Visual C++ Redistribuiveis" do menu.'
-        }
+        Write-Info 'Resolvendo agora: instalando os redistribuiveis Visual C++.'
+        Install-VisualCRedist | Out-Null
+        Write-Host ''
+        Write-Info 'Feche e abra o programa que mostrou o erro para testar.'
     } elseif ($info.Ferramenta -eq 'java') {
         Write-Info 'Use a opcao "Configurar Java (Juridico)" do menu apos instalar o Java.'
     } else {
@@ -9227,9 +9213,6 @@ function Repair-SistemaAvancado {
             Write-Info  'senao o DISM recusa a fonte. Confira com: winver'
             Write-Info  'Pode levar de 10 a 30 minutos. Nao feche a janela.'
             Write-Host ''
-            $c = Read-Host '  Iniciar o reparo? (S/N)'
-            if ($c -notmatch '^[Ss]') { Write-Info 'Cancelado.'; return [long]0 }
-
             Write-Etapa 'DISM /RestoreHealth com fonte local...'
             # /LimitAccess: nao tenta o Windows Update, usa so a midia
             & dism.exe /Online /Cleanup-Image /RestoreHealth /Source:$origem /LimitAccess 2>&1 |
@@ -9265,8 +9248,6 @@ function Repair-SistemaAvancado {
             Write-Aviso 'StartComponentCleanup /ResetBase remove as versoes antigas dos'
             Write-Info  'componentes: libera espaco, mas depois disso NAO da mais para'
             Write-Info  'desinstalar as atualizacoes ja instaladas.'
-            $c = Read-Host '  Continuar? (S/N)'
-            if ($c -notmatch '^[Ss]') { Write-Info 'Cancelado.'; return [long]0 }
             Write-Etapa 'DISM StartComponentCleanup /ResetBase - pode demorar...'
             & dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase 2>&1 |
                 ForEach-Object { if ($_.ToString().Trim()) { Write-Host "     $_" -ForegroundColor DarkGray } }
@@ -9546,31 +9527,25 @@ function Undo-UltimaManutencao {
         '1' {
             if (-not (Test-Path -LiteralPath $restCmd)) { Write-Aviso 'Este atendimento nao tem RESTAURAR.cmd.'; break }
             Write-Aviso 'Isto devolve as chaves de registro e a inicializacao ao estado anterior.'
-            $c = Read-Host '  Confirma? (S/N)'
-            if ($c -match '^[Ss]') {
-                Start-Process 'cmd.exe' -ArgumentList '/c', "`"$restCmd`"" -Wait -Verb RunAs -ErrorAction SilentlyContinue
-                Write-Ok 'Restauracao executada. Reinicie para aplicar por completo.'
-                $script:precisaReiniciar = $true
-            } else { Write-Info 'Cancelado.' }
+            Start-Process 'cmd.exe' -ArgumentList '/c', "`"$restCmd`"" -Wait -Verb RunAs -ErrorAction SilentlyContinue
+            Write-Ok 'Restauracao executada. Reinicie para aplicar por completo.'
+            $script:precisaReiniciar = $true
         }
         '2' {
             if (-not (Test-Path -LiteralPath $bkpAny)) { Write-Aviso 'Este atendimento nao tem backup do AnyDesk.'; break }
             Write-Aviso 'O AnyDesk precisa estar FECHADO para restaurar.'
-            $c = Read-Host '  Confirma? (S/N)'
-            if ($c -match '^[Ss]') {
-                $proc = Get-Process -Name 'AnyDesk' -ErrorAction SilentlyContinue
-                if ($proc) { Write-Aviso 'AnyDesk aberto - feche e tente de novo.'; break }
-                foreach ($par in @(@{ O = 'APPDATA'; D = (Join-Path $env:APPDATA 'AnyDesk') },
-                                   @{ O = 'LOCALAPPDATA'; D = (Join-Path $env:LOCALAPPDATA 'AnyDesk') })) {
-                    $origem = Join-Path $bkpAny $par.O
-                    if (Test-Path -LiteralPath $origem) {
-                        try {
-                            Copy-Item -LiteralPath $origem -Destination $par.D -Recurse -Force -ErrorAction Stop
-                            Write-Ok ("Restaurado: " + $par.D)
-                        } catch { Write-Falha ("Falha em " + $par.D + ": " + $_.Exception.Message) }
-                    }
+            $proc = Get-Process -Name 'AnyDesk' -ErrorAction SilentlyContinue
+            if ($proc) { Write-Aviso 'AnyDesk aberto - feche e tente de novo.'; break }
+            foreach ($par in @(@{ O = 'APPDATA'; D = (Join-Path $env:APPDATA 'AnyDesk') },
+                               @{ O = 'LOCALAPPDATA'; D = (Join-Path $env:LOCALAPPDATA 'AnyDesk') })) {
+                $origem = Join-Path $bkpAny $par.O
+                if (Test-Path -LiteralPath $origem) {
+                    try {
+                        Copy-Item -LiteralPath $origem -Destination $par.D -Recurse -Force -ErrorAction Stop
+                        Write-Ok ("Restaurado: " + $par.D)
+                    } catch { Write-Falha ("Falha em " + $par.D + ": " + $_.Exception.Message) }
                 }
-            } else { Write-Info 'Cancelado.' }
+            }
         }
         '3' {
             try { Start-Process 'explorer.exe' -ArgumentList $alvo.FullName -ErrorAction Stop }
@@ -9627,17 +9602,12 @@ function Test-MemoriaRAM {
     Write-Info  'O computador REINICIA para executa-lo. Salve tudo antes.'
     Write-Info  'Ao terminar, o Windows volta sozinho e o resultado aparece aqui nesta tela.'
     Write-Host ''
-    $c = Read-Host '  Agendar o teste para o proximo reinicio? (S/N)'
-    if ($c -match '^[Ss]') {
-        try {
-            Start-Process 'mdsched.exe' -ErrorAction Stop
-            Write-Ok 'Ferramenta de diagnostico de memoria aberta.'
-            Write-Info 'Escolha "Reiniciar agora" ou "Verificar na proxima vez".'
-        } catch {
-            Write-Aviso 'Nao foi possivel abrir. Use: Windows + R > mdsched'
-        }
-    } else {
-        Write-Info 'Nada agendado.'
+    try {
+        Start-Process 'mdsched.exe' -ErrorAction Stop
+        Write-Ok 'Ferramenta de diagnostico de memoria aberta.'
+        Write-Info 'Escolha "Reiniciar agora" ou "Verificar na proxima vez".'
+    } catch {
+        Write-Aviso 'Nao foi possivel abrir. Use: Windows + R > mdsched'
     }
     return [long]0
 }
@@ -9807,9 +9777,6 @@ function Set-MaquinaServidor {
     }
 
     Write-Host ''
-    $ok = Read-Host '  Continuar e configurar esta maquina como servidor? (S/N)'
-    if ($ok -notmatch '^[Ss]') { Write-Info 'Cancelado. Nada foi alterado.'; return [long]0 }
-
     # --- 2. Perfil de rede ----------------------------------------------
     Write-Etapa '2/7  Perfil da rede'
     Set-PerfilRedePrivado | Out-Null
@@ -9871,9 +9838,7 @@ function Set-MaquinaServidor {
     if ($modo -eq '2') {
         Write-Host ''
         Write-Falha 'Voce escolheu acesso sem senha.'
-        Write-Info  'Confirme que a rede do escritorio e fechada (sem Wi-Fi de visitante).'
-        $c2 = Read-Host '  Tem certeza? (S/N)'
-        if ($c2 -notmatch '^[Ss]') { Write-Info 'Voltando para o modo com senha.'; $modo = '1' }
+        Write-Info  'Isso so e aceitavel com rede fechada, sem Wi-Fi de visitante.'
     }
 
     if ($modo -ne '2') {
@@ -10165,8 +10130,7 @@ function Set-MaquinaClienteRede {
     } catch { Write-Aviso 'Nao foi possivel testar a conexao.' }
 
     if (-not $alcancou) {
-        $ir = Read-Host '  Tentar mapear mesmo assim? (S/N)'
-        if ($ir -notmatch '^[Ss]') { Write-Info 'Cancelado.'; return [long]0 }
+        Write-Aviso 'O servidor nao respondeu, mas vou tentar mapear assim mesmo.'
     }
 
     # Credencial
@@ -11494,8 +11458,7 @@ function Backup-CertificadoA1 {
     if ($p1 -ne $p2) { Write-Falha 'As senhas nao conferem.'; return [long]0 }
     if ($p1.Length -lt 8) {
         Write-Aviso 'Senha curta. Este arquivo vale a identidade digital do titular.'
-        $c = Read-Host '  Usar assim mesmo? (S/N)'
-        if ($c -notmatch '^[Ss]') { Write-Info 'Cancelado.'; return [long]0 }
+        Write-Info  'Seguindo com ela - guarde o .pfx em lugar seguro.'
     }
 
     Write-Host ''
@@ -11812,9 +11775,6 @@ function Set-MonitoramentoRede {
     Write-Info 'Quando algo estiver errado, grava no historico e cria um arquivo de'
     Write-Info 'alerta na Area de Trabalho, visivel para quem usa a maquina.'
     Write-Host ''
-    $c = Read-Host '  Configurar o monitoramento? (S/N) [S]'
-    if ($c -and $c -notmatch '^[Ss]') { Write-Info 'Cancelado.'; return [long]0 }
-
     $pasta = 'C:\ProgramData\SuporteTI\Monitor'
     if (-not (Test-Path -LiteralPath $pasta)) { New-Item -ItemType Directory -Path $pasta -Force -ErrorAction SilentlyContinue | Out-Null }
     $scriptPath = Join-Path $pasta 'monitor.ps1'
@@ -12032,11 +11992,8 @@ function Set-BackupCompartilhado {
             if ($s -match '^\d+$' -and [int]$s -ge 1 -and [int]$s -le $tarefas.Count) {
                 $alvo = $tarefas[[int]$s - 1]
                 Write-Aviso 'Isso remove o agendamento. Os arquivos ja copiados permanecem no destino.'
-                $c = Read-Host '  Confirma? (S/N)'
-                if ($c -match '^[Ss]') {
-                    Unregister-ScheduledTask -TaskName $alvo.TaskName -TaskPath $alvo.TaskPath -Confirm:$false -ErrorAction SilentlyContinue
-                    Write-Ok 'Agendamento removido.'
-                }
+                Unregister-ScheduledTask -TaskName $alvo.TaskName -TaskPath $alvo.TaskPath -Confirm:$false -ErrorAction SilentlyContinue
+                Write-Ok 'Agendamento removido.'
             }
             return [long]0
         }
@@ -12105,8 +12062,7 @@ function Set-BackupCompartilhado {
         Write-Falha 'O destino esta NO MESMO DISCO da origem.'
         Write-Info  'Isso protege contra apagar sem querer, mas NAO contra o disco falhar,'
         Write-Info  'que e o risco principal. Use outro disco ou outra maquina.'
-        $c = Read-Host '  Continuar assim mesmo? (S/N)'
-        if ($c -notmatch '^[Ss]') { Write-Info 'Cancelado.'; return [long]0 }
+        Write-Info  'Seguindo assim mesmo - mas anote isso na ficha do cliente.'
     }
     # Nao deixar o destino dentro da origem (copia recursiva infinita)
     if ($destino.TrimEnd('\').ToLower().StartsWith($origem.TrimEnd('\').ToLower() + '\')) {
@@ -12115,11 +12071,8 @@ function Set-BackupCompartilhado {
     }
 
     if (-not (Test-Path -LiteralPath $destino)) {
-        $c = Read-Host '  A pasta de destino nao existe. Criar? (S/N) [S]'
-        if (-not $c -or $c -match '^[Ss]') {
-            try { New-Item -ItemType Directory -Path $destino -Force -ErrorAction Stop | Out-Null; Write-Ok 'Pasta de destino criada.' }
-            catch { Write-Falha "Nao foi possivel criar: $($_.Exception.Message)"; return [long]0 }
-        } else { return [long]0 }
+        try { New-Item -ItemType Directory -Path $destino -Force -ErrorAction Stop | Out-Null; Write-Ok 'Pasta de destino criada.' }
+        catch { Write-Falha "Nao foi possivel criar: $($_.Exception.Message)"; return [long]0 }
     }
 
     # --- Quando -------------------------------------------------------------
@@ -13038,39 +12991,33 @@ function Remove-ConfiguracaoRede {
         Write-Host ''
         Write-Etapa 'Parando de compartilhar as pastas'
         Write-Info 'Lembrando: os arquivos NAO sao apagados, so deixam de aparecer na rede.'
-        $c = Read-Host '  Confirma? (S/N)'
-        if ($c -match '^[Ss]') {
-            foreach ($s in $shares) {
-                try {
-                    Remove-SmbShare -Name $s.Name -Force -ErrorAction Stop
-                    Write-Ok "Deixou de ser compartilhada: $($s.Name)  (pasta $($s.Path) intacta)"
-                    $feito.Add("compartilhamento '$($s.Name)' removido")
-                } catch {
-                    Write-Falha "Nao foi possivel remover '$($s.Name)': $($_.Exception.Message)"
-                }
+        foreach ($s in $shares) {
+            try {
+                Remove-SmbShare -Name $s.Name -Force -ErrorAction Stop
+                Write-Ok "Deixou de ser compartilhada: $($s.Name)  (pasta $($s.Path) intacta)"
+                $feito.Add("compartilhamento '$($s.Name)' removido")
+            } catch {
+                Write-Falha "Nao foi possivel remover '$($s.Name)': $($_.Exception.Message)"
             }
-        } else { Write-Info 'Compartilhamentos mantidos.' }
+        }
     }
 
     # --- Desconectar unidades --------------------------------------------
     if (($tudo -or $opc -eq '3') -and $mapeadas.Count -gt 0) {
         Write-Host ''
         Write-Etapa 'Desconectando as unidades de rede'
-        $c = Read-Host '  Confirma? (S/N)'
-        if ($c -match '^[Ss]') {
-            foreach ($m in $mapeadas) {
-                try {
-                    & net use $m.LocalName /delete /y 2>&1 | Out-Null
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Ok "Unidade $($m.LocalName) desconectada ($($m.RemoteName))."
-                        $feito.Add("unidade $($m.LocalName) desconectada")
-                    } else {
-                        Write-Aviso "Nao foi possivel desconectar $($m.LocalName) - pode estar em uso."
-                        Write-Info  'Feche o Explorer e os programas que usam essa unidade e tente de novo.'
-                    }
-                } catch { Write-Aviso "Erro em $($m.LocalName): $($_.Exception.Message)" }
-            }
-        } else { Write-Info 'Unidades mantidas.' }
+        foreach ($m in $mapeadas) {
+            try {
+                & net use $m.LocalName /delete /y 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Ok "Unidade $($m.LocalName) desconectada ($($m.RemoteName))."
+                    $feito.Add("unidade $($m.LocalName) desconectada")
+                } else {
+                    Write-Aviso "Nao foi possivel desconectar $($m.LocalName) - pode estar em uso."
+                    Write-Info  'Feche o Explorer e os programas que usam essa unidade e tente de novo.'
+                }
+            } catch { Write-Aviso "Erro em $($m.LocalName): $($_.Exception.Message)" }
+        }
     }
 
     # --- Credenciais ------------------------------------------------------
@@ -13078,16 +13025,13 @@ function Remove-ConfiguracaoRede {
         Write-Host ''
         Write-Etapa 'Apagando as credenciais de rede salvas'
         Write-Info 'Depois disso o Windows volta a pedir usuario e senha ao acessar o servidor.'
-        $c = Read-Host '  Confirma? (S/N)'
-        if ($c -match '^[Ss]') {
-            foreach ($alvo in $creds) {
-                try {
-                    & cmdkey.exe /delete:$alvo 2>&1 | Out-Null
-                    Write-Ok "Credencial removida: $alvo"
-                    $feito.Add("credencial de $alvo apagada")
-                } catch { Write-Aviso "Nao foi possivel remover a credencial de $alvo." }
-            }
-        } else { Write-Info 'Credenciais mantidas.' }
+        foreach ($alvo in $creds) {
+            try {
+                & cmdkey.exe /delete:$alvo 2>&1 | Out-Null
+                Write-Ok "Credencial removida: $alvo"
+                $feito.Add("credencial de $alvo apagada")
+            } catch { Write-Aviso "Nao foi possivel remover a credencial de $alvo." }
+        }
     }
 
     # --- Daqui para baixo, so no modo TUDO -------------------------------
@@ -13377,9 +13321,7 @@ function Invoke-EtapaInicializacao {
             return [long]0
         }
         Write-Host ''
-        Write-Aviso 'Revise a lista acima antes de confirmar.'
-        $r = (Read-Host '  Desativar os itens marcados? (S/N)').Trim()
-        if ($r -notmatch '^[SsYy]') { Write-Aviso 'Cancelado pelo operador.'; return [long]0 }
+        Write-Aviso 'Desativando os itens marcados acima.'
     }
 
     $binDesativado = [byte[]](0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
@@ -15835,11 +15777,7 @@ if ($Ferramenta) {
                         }
                     } else {
                         Write-Host ''
-                        $adResp = Read-Host '  Apagar a pasta do AnyDesk? (S/N)'
-                        if ($adResp -notmatch '^[Ss]') {
-                            Write-Info 'Cancelado. Nada foi apagado.'
-                            break
-                        }
+                        # A opcao do menu ja e "Apagar pasta do AnyDesk": apaga.
                         if ($adProc -and -not $adForcar) {
                             $adResp2 = Read-Host '  Encerrar o AnyDesk agora para poder apagar? (S/N)'
                             if ($adResp2 -match '^[Ss]') { $adForcar = $true }
@@ -15924,18 +15862,15 @@ if ($Ferramenta) {
                         if ($sel -match '^\d+$' -and [int]$sel -ge 1 -and [int]$sel -le $progs.Count) {
                             $p = $progs[[int]$sel - 1]
                             Write-Aviso ("Vai desinstalar: {0} {1}" -f $p.Nome, $p.Versao)
-                            $c = (Read-Host '  Confirmar? (S/N)').Trim()
-                            if ($c -match '^[SsYy]') {
-                                $cmd = if ($p.QuietUninstall) { $p.QuietUninstall } else { $p.Desinstalar }
-                                if ($p.MSI -or $cmd -match 'msiexec') {
-                                    $cod = if ($p.Codigo -match '^\{.*\}$') { $p.Codigo } else { [regex]::Match($cmd, '\{[0-9A-Fa-f\-]+\}').Value }
-                                    if ($cod) { Start-Process 'msiexec.exe' -ArgumentList "/x $cod" -ErrorAction SilentlyContinue }
-                                    else { Start-Process 'cmd.exe' -ArgumentList '/c', $cmd -ErrorAction SilentlyContinue }
-                                } else {
-                                    Start-Process 'cmd.exe' -ArgumentList '/c', $cmd -ErrorAction SilentlyContinue
-                                }
-                                Write-Ok ("Desinstalador de '{0}' iniciado. Siga as instrucoes na janela dele." -f $p.Nome)
-                            } else { Write-Aviso 'Cancelado.' }
+                            $cmd = if ($p.QuietUninstall) { $p.QuietUninstall } else { $p.Desinstalar }
+                            if ($p.MSI -or $cmd -match 'msiexec') {
+                                $cod = if ($p.Codigo -match '^\{.*\}$') { $p.Codigo } else { [regex]::Match($cmd, '\{[0-9A-Fa-f\-]+\}').Value }
+                                if ($cod) { Start-Process 'msiexec.exe' -ArgumentList "/x $cod" -ErrorAction SilentlyContinue }
+                                else { Start-Process 'cmd.exe' -ArgumentList '/c', $cmd -ErrorAction SilentlyContinue }
+                            } else {
+                                Start-Process 'cmd.exe' -ArgumentList '/c', $cmd -ErrorAction SilentlyContinue
+                            }
+                            Write-Ok ("Desinstalador de '{0}' iniciado. Siga as instrucoes na janela dele." -f $p.Nome)
                         } elseif ($sel) { Write-Aviso 'Numero invalido.' } else { Write-Info 'Nenhum selecionado.' }
                     }
                 }

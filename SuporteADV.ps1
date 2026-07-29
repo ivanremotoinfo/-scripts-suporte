@@ -174,7 +174,7 @@ $categorias = @(
     @{ Nome='REPAROS';      Titulo='REPAROS';               Cor='Yellow' }
     @{ Nome='OTIMIZACAO';   Titulo='OTIMIZACAO';            Cor='White' }
     @{ Nome='REDELOCAL';  Titulo='REDE DO ESCRITORIO';    Cor='Cyan' }
-    @{ Nome='CERTIFICADOS'; Titulo='CERTIFICADOS E JURIDICO'; Cor='Magenta' }
+    @{ Nome='CERTIFICADOS'; Titulo='CERTIFICADOS E JURIDICO'; Cor='DarkGray' }
     @{ Nome='PROGRAMAS';    Titulo='PROGRAMAS';             Cor='Blue' }
     @{ Nome='ATALHOS';      Titulo='ATALHOS ADMINISTRATIVOS'; Cor='Cyan' }
 )
