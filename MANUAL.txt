@@ -578,6 +578,24 @@ OTIMIZAÇÃO
         as teclas não fazem nada e não há mensagem de erro nenhuma. A
         ferramenta detecta exatamente esse estado e avisa.
 
+    "SEM MEMÓRIA" É MENTIRA. Quando a entrada MIDI já está aberta por outro
+    programa, o Windows deveria devolver "porta ocupada", mas o driver wdmaud
+    devolve o erro 7, cuja mensagem oficial é "não há memória suficiente para
+    esta tarefa; feche um ou mais aplicativos". Não tem nada a ver com memória:
+    a máquina pode estar com 30 GB livres. Quem seguir a mensagem vai procurar
+    memória e não vai achar nada. A ferramenta traduz o erro 7 pelo que ele
+    realmente significa. O sinal que confirma: a SAÍDA MIDI abre normalmente e
+    só a ENTRADA recusa — se fosse cabo, porta USB ou driver, as duas falhariam
+    juntas. A ferramenta faz essa conferência sozinha e diz.
+
+    E o programa que segura a porta muitas vezes não está à vista: fica só no
+    relógio, ao lado do horário, ou aberto desde ontem atrás de outra janela.
+    Visto em campo: um tocador de samples (sforzando) aberto havia mais de um
+    dia segurava a entrada, e o VMPK abria normal, mostrava o teclado na lista
+    e ficava mudo. Como o Windows não conta quem abriu a porta, a ferramenta
+    lista os programas de áudio/MIDI que estão rodando — feche-os e rode de
+    novo.
+
     Outras correções oferecidas: impedir o Windows de desligar as portas USB
     para economizar energia (o teclado para de responder depois de um tempo
     parado), desabilitar e reabilitar o dispositivo com problema, e limpar as

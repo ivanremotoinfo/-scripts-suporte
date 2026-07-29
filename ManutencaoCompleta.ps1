@@ -13416,6 +13416,16 @@ public static class MidiSuporteADV
         return r;
     }
 
+    // Mesmo teste, do lado da SAIDA, e sem tocar nota nenhuma. Serve para
+    // separar "programa segurando a entrada" de "cabo/porta/driver": se a
+    // saida abre e a entrada nao, o aparelho esta inteiro.
+    public static uint TestarSaida(int id) {
+        IntPtr h;
+        uint r = midiOutOpen(out h, (uint)id, IntPtr.Zero, IntPtr.Zero, 0);
+        if (r == 0) { midiOutClose(h); }
+        return r;
+    }
+
     private static string Nota(int n) {
         string[] nomes = { "Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si" };
         return nomes[n % 12] + (n / 12 - 1).ToString();
@@ -13480,7 +13490,19 @@ public static class MidiSuporteADV
 }
 
 function Get-ErroMIDI {
-    <# Traducao dos codigos do winmm que interessam no diagnostico. #>
+    <#
+      Traducao dos codigos do winmm que interessam no diagnostico.
+
+      ATENCAO ao codigo 7. O nome dele na documentacao e MMSYSERR_NOMEM, e a
+      mensagem que o proprio Windows devolve e "nao ha memoria suficiente para
+      esta tarefa; feche um ou mais aplicativos". Isso e' MENTIRA no caso de
+      MIDI: o driver wdmaud devolve 7 - e nao o 4 (MMSYSERR_ALLOCATED), que
+      seria o correto - quando a porta de ENTRADA ja esta aberta por outro
+      processo. Visto em campo em 29/07/2026: entrada dava 7 com o sforzando
+      aberto e passou a dar 0 assim que ele foi fechado, com a memoria da
+      maquina inteira livre. Quem seguir a mensagem do Windows vai procurar
+      memoria e nao vai achar nada.
+    #>
     param([uint32]$Codigo)
     switch ($Codigo) {
         0  { 'porta livre' }
@@ -13489,10 +13511,16 @@ function Get-ErroMIDI {
         4  { 'PORTA OCUPADA por outro programa' }
         5  { 'identificador invalido' }
         6  { 'sem driver instalado' }
-        7  { 'sem memoria' }
+        7  { 'PORTA OCUPADA por outro programa (o Windows chama isso de "sem memoria")' }
         11 { 'parametro invalido' }
         default { "codigo $Codigo" }
     }
+}
+
+function Test-PortaMIDIOcupada {
+    <# Os dois codigos que, na pratica, significam "tem programa segurando". #>
+    param([uint32]$Codigo)
+    return ($Codigo -eq 4 -or $Codigo -eq 7)
 }
 
 function Get-ProgramasDeAudio {
@@ -13876,8 +13904,25 @@ function Repair-MIDI {
     $ocupadas = New-Object System.Collections.Generic.List[object]
     foreach ($e in $entradas) {
         $r = [MidiSuporteADV]::TestarPorta([int]$e.Id)
-        $txt = "[$($e.Id)] $($e.Nome): " + (Get-ErroMIDI -Codigo $r)
-        if ($r -eq 0) { Write-Ok $txt } else { Write-Falha $txt; if ($r -eq 4) { $ocupadas.Add($e) } }
+        $txt = ("[$($e.Id)] $($e.Nome): " + (Get-ErroMIDI -Codigo $r))
+        if ($r -eq 0) { Write-Ok $txt }
+        else {
+            Write-Falha $txt
+            if (Test-PortaMIDIOcupada -Codigo $r) { $ocupadas.Add($e) }
+        }
+    }
+
+    # A saida abrir e a entrada nao e' a assinatura de "programa segurando":
+    # se fosse cabo, porta ou driver, as duas falhariam juntas.
+    if ($ocupadas.Count -gt 0 -and $qtdOut -gt 0) {
+        $saidaAbre = $false
+        for ($i = 0; $i -lt $qtdOut; $i++) {
+            if ([MidiSuporteADV]::TestarSaida($i) -eq 0) { $saidaAbre = $true; break }
+        }
+        if ($saidaAbre) {
+            Write-Info 'A SAIDA MIDI abre normalmente e so a ENTRADA recusa. Isso descarta'
+            Write-Info 'cabo, porta USB e driver: e programa segurando a entrada.'
+        }
     }
 
     $progs = @(Get-ProgramasDeAudio)
@@ -13896,7 +13941,16 @@ function Repair-MIDI {
         }
     }
     if ($ocupadas.Count -gt 0) {
+        Write-Host ''
         Write-Info 'Feche o programa que esta usando o teclado e rode esta opcao de novo.'
+        Write-Info 'O Windows nao diz quem abriu a porta - por isso a lista acima.'
+        Write-Info 'Cuidado com os que ficam so no relogio, ao lado do horario: eles'
+        Write-Info 'seguram a porta sem janela aparecendo na tela.'
+        if ($progs.Count -gt 0) {
+            Add-Alerta ('Entrada MIDI ocupada. Programas de audio abertos: ' + (($progs | ForEach-Object { $_.Nome }) -join ', ') + '. Fechar e testar de novo.')
+        } else {
+            Add-Alerta 'Entrada MIDI ocupada por algum programa, e nenhum conhecido foi encontrado aberto.'
+        }
     }
 
     # --- 4. teste ao vivo --------------------------------------------------
