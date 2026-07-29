@@ -1330,13 +1330,49 @@ function Invoke-GPUpdate {
     catch { Write-Aviso "gpupdate falhou: $($_.Exception.Message)" }
 }
 
+function Test-AcessoRemotoAtivo {
+    <#
+      Alguem esta atendendo esta maquina de longe AGORA?
+
+      O Ivan trabalha por acesso remoto: qualquer coisa que largue o endereco
+      IP, resete o TCP/IP ou derrube a placa encerra o atendimento e deixa a
+      maquina inacessivel ate alguem ir ate ela. Toda funcao que mexe em
+      conectividade tem de consultar isto ANTES.
+
+      Cobre os programas de acesso remoto usados no dia a dia e a sessao de
+      Area de Trabalho Remota do proprio Windows.
+    #>
+    try {
+        $remotos = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+            $_.ProcessName -match '(?i)^(anydesk|teamviewer|rustdesk|hoptodesk|dwagent|dwagsvc|dwaglnc|supremo|ammyy|winvnc|tvnserver|quickassist)'
+        })
+        if ($remotos.Count -gt 0) { return $true }
+    } catch { }
+    if ($env:SESSIONNAME -match '(?i)^RDP') { return $true }
+    return $false
+}
+
 function Update-EnderecoIP {
     if ($SomenteRelatorio) { Write-Simul 'Renovaria o endereco IP (DHCP).'; return }
+
+    # 'ipconfig /release' larga o endereco NA HORA e derruba quem esta atendendo
+    # de longe. Com sessao remota ativa, faz so o /renew: renova a concessao sem
+    # soltar o IP, e a sessao continua de pe. Nao pergunta nada - resolve
+    # escolhendo o caminho que nao derruba.
+    if (Test-AcessoRemotoAtivo) {
+        Write-Aviso 'Acesso remoto ativo: renovando SEM soltar o endereco (sem /release).'
+        Write-Info  'Soltar o IP encerraria esta sessao e ninguem reconectaria de fora.'
+        Write-Info  'Para a renovacao completa, rode direto na maquina do cliente.'
+        try { & ipconfig.exe /renew | Out-Null; Write-Ok 'Concessao DHCP renovada.' }
+        catch { Write-Aviso ("Falha ao renovar IP: " + $_.Exception.Message) }
+        return
+    }
+
     try {
         & ipconfig.exe /release | Out-Null
         & ipconfig.exe /renew   | Out-Null
         Write-Ok 'Endereco IP renovado via DHCP.'
-    } catch { Write-Aviso "Falha ao renovar IP: $($_.Exception.Message)" }
+    } catch { Write-Aviso ("Falha ao renovar IP: " + $_.Exception.Message) }
 }
 
 function Restart-AnyDesk {
@@ -13139,6 +13175,12 @@ function Remove-ConfiguracaoRede {
             Write-Etapa 'Perfil da rede'
             Write-Info 'Voltar para PUBLICO esconde a maquina das outras e e o mais seguro'
             Write-Info 'para notebook que sai do escritorio (Wi-Fi de hotel, aeroporto).'
+            if (Test-AcessoRemotoAtivo) {
+                Write-Falha 'ACESSO REMOTO ATIVO NESTA MAQUINA.'
+                Write-Info  'No perfil Publico o firewall fecha as regras de entrada. AnyDesk e'
+                Write-Info  'parecidos costumam sobreviver (saem de dentro para fora), mas Area'
+                Write-Info  'de Trabalho Remota (RDP) CAI e voce nao reconecta.'
+            }
             $c = Read-Host '  Mudar o perfil para Publico? (S/N)'
             if ($c -match '^[Ss]') {
                 foreach ($p in $privados) {
@@ -15429,10 +15471,20 @@ function Invoke-ManutencaoRede {
     }
 
     if ($ResetarRede) {
-        & netsh winsock reset | Out-Null
-        & netsh int ip reset  | Out-Null
-        Write-Aviso 'Winsock e TCP/IP resetados - REINICIALIZACAO NECESSARIA.'
-        $script:precisaReiniciar = $true
+        # Resetar Winsock/TCP-IP derruba a sessao remota e a maquina so volta
+        # depois que alguem no local reiniciar. Nao executa nesse cenario.
+        if (Test-AcessoRemotoAtivo) {
+            Write-Falha 'ACESSO REMOTO ATIVO - reset de Winsock/TCP-IP NAO executado.'
+            Write-Info  'Ele derrubaria esta sessao e a maquina ficaria inacessivel ate'
+            Write-Info  'alguem no local reiniciar. Rode direto na maquina do cliente, ou'
+            Write-Info  'pela opcao "Corrigir Rede e Internet" no modo PROFUNDO, que avisa.'
+            Add-Alerta 'Reset de rede PULADO: havia acesso remoto ativo na maquina.'
+        } else {
+            & netsh winsock reset | Out-Null
+            & netsh int ip reset  | Out-Null
+            Write-Aviso 'Winsock e TCP/IP resetados - REINICIALIZACAO NECESSARIA.'
+            $script:precisaReiniciar = $true
+        }
     }
     return [long]0
 }
