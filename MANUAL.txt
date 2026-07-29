@@ -1041,16 +1041,33 @@ CERTIFICADOS E JURÍDICO
     cópia presta.
 
 [61] LIMPAR CERTIFICADOS VENCIDOS
-    Organiza a loja Pessoal do usuário, separando em três categorias:
-      A) ICP-Brasil e ICP-Portugal válidos — sempre MANTIDOS;
-      B) ICP vencidos — você decide;
-      C) Desconhecidos — você decide.
-    NADA é removido sem a sua confirmação. Certificados com CHAVE PRIVADA (A1)
-    são sinalizados em vermelho e exigem um S/N adicional, porque remover é
-    PERMANENTE se o cliente não tiver o arquivo .pfx guardado.
-    Antes de qualquer remoção, exporta para a Área de Trabalho uma pasta com a
-    lista em CSV e um arquivo .cer de cada certificado. Atenção: o .cer guarda
-    apenas a parte pública — a chave privada NÃO é recuperável.
+    Limpa a loja Pessoal do usuário. NÃO PERGUNTA NADA: escolher a opção no
+    menu já é a confirmação. A regra é uma só, sem exceção:
+
+      FICA  — ICP-Brasil ou ICP-Portugal DENTRO DA VALIDADE;
+      SAI   — todo VENCIDO, de qualquer origem, inclusive ICP;
+      SAI   — todo certificado que NÃO É ICP, mesmo dentro da validade.
+
+    Portugal segue exatamente a mesma regra do Brasil: Cartão de Cidadão e
+    demais certificados ICP-PT válidos ficam, e só saem se estiverem vencidos.
+
+    O que torna essa regra segura o bastante para rodar sem perguntar é que
+    todo certificado ICP-Brasil traz "O=ICP-Brasil" no próprio emissor. Então
+    "não reconhecido" significa mesmo "não é ICP", e não "emissor que faltou
+    na minha lista". O mesmo vale para os marcadores de ICP-Portugal.
+
+    Antes de remover, exporta para a Área de Trabalho uma pasta com a lista em
+    CSV e um arquivo .cer de cada certificado — em silêncio, sem perguntar, e
+    se o backup falhar a limpeza continua assim mesmo. Atenção ao limite: o
+    .cer guarda apenas a parte PÚBLICA, então certificado A1 removido não
+    volta. Na prática o custo disso é baixo, porque o que sai é vencido ou não
+    é ICP; o que tem valor (ICP dentro da validade) nunca é tocado.
+
+    A tela desta opção é toda em tom escuro, por escolha do Ivan — nada de
+    fonte clara quando o assunto é certificado.
+
+    Se algum certificado não puder ser removido, quase sempre é porque está em
+    uso: feche o PJeOffice, o navegador e o Java, e rode de novo.
 
 [62] CONFIGURAR JAVA (JURÍDICO)
     Prepara o Java 8 para os sistemas jurídicos: localiza a instalação, faz
