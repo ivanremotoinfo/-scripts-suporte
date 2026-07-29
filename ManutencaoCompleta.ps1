@@ -1977,17 +1977,20 @@ function Invoke-GerenciarProtecao {
     # Backup do estado antes de qualquer mudanca
     Backup-EstadoProtecao -Destino $script:pastaExec
 
-    # Confirmacao para desativar (acao que reduz seguranca)
+    # Desativar NAO pergunta (decisao do Ivan, 29/07/2026): escolher a opcao no
+    # menu ja e a confirmacao. O aviso continua na tela porque vale como
+    # registro no log do atendimento - mas e' informacao, nao pergunta.
+    #
+    # A trava do modo desatendido continua de pe, e por outro motivo: la nao
+    # existe menu nem operador: e linha de comando, possivelmente agendada.
+    # -ConfirmarProtecao evita que uma tarefa agendada desative o antivirus
+    # sozinha, sem ninguem ver.
     if ($vaiDesativar -and -not $SomenteRelatorio) {
         Write-Falha 'ATENCAO: desativar a protecao expoe a maquina a virus e ataques de rede.'
-        if ($SemInteracao) {
-            if (-not $ConfirmarProtecao) {
-                Write-Falha 'Modo desatendido: use -ConfirmarProtecao para autorizar a desativacao. Cancelado.'
-                return
-            }
-        } else {
-            $r = (Read-Host '  Desativar a protecao agora? (S/N)').Trim()
-            if ($r -notmatch '^[SsYy]') { Write-Aviso 'Cancelado pelo operador.'; return }
+        Write-Info  'Rode a opcao "Reativar Antivirus+Firewall" assim que terminar o servico.'
+        if ($SemInteracao -and -not $ConfirmarProtecao) {
+            Write-Falha 'Modo desatendido: use -ConfirmarProtecao para autorizar a desativacao. Cancelado.'
+            return
         }
     }
 

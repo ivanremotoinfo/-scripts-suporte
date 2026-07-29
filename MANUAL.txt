@@ -374,7 +374,9 @@ SEGURANÇA E ANTIVÍRUS
 
 [23] DESATIVAR ANTIVÍRUS + FIREWALL
     Desativa firewall, SmartScreen, proteção por reputação, bloqueio de PUA e
-    acesso controlado a pastas. Pede confirmação S/N.
+    acesso controlado a pastas. NÃO PERGUNTA NADA: escolher a opção no menu já
+    é a confirmação. O aviso continua aparecendo na tela, mas como registro no
+    log do atendimento — não é pergunta.
     LIMITE IMPORTANTE: se a Proteção contra Adulteração (Tamper Protection)
     estiver ligada — e por padrão está —, o NÚCLEO do Defender (proteção em
     tempo real) NÃO pode ser desligado por script. Nenhum programa consegue.
