@@ -2583,31 +2583,48 @@ function Remove-Ameacas {
     $alvos = @($Registros | Where-Object { $_.ClamInfectado -or $_.VTMalicioso -ge $VTLimiarRemocao })
     if ($alvos.Count -eq 0) { Write-Ok 'Nenhuma ameaca elegivel para remocao.'; return 0 }
 
+    # A LISTA E A DECISAO. Nao ha pergunta aqui (nem S/N nem palavra digitada):
+    # a lista abaixo mostra exatamente o que sai, de onde, o tamanho e por que
+    # foi marcado. Antivirus da falso positivo, entao o que protege o cliente
+    # nao e uma pergunta - e a quarentena, que devolve o arquivo inteiro.
     Write-Host ''
-    Write-Aviso "Arquivos marcados para remocao: $($alvos.Count)"
+    Write-Aviso ("Arquivos marcados para remocao: " + $alvos.Count)
+    Write-Host ''
+    $i = 0
+    $totalBytes = 0
     foreach ($a in $alvos) {
+        $i++
         $motivo = @()
-        if ($a.ClamInfectado)               { $motivo += ($a.ClamAV -replace '^INFECTADO: ', 'ClamAV=') }
-        if ($a.VTMalicioso -ge $VTLimiarRemocao) { $motivo += "VT=$($a.VTMalicioso)" }
-        Write-Falha "   $($a.Arquivo)   [$($motivo -join ', ')]"
+        if ($a.ClamInfectado)                    { $motivo += ($a.ClamAV -replace '^INFECTADO: ', 'ClamAV=') }
+        if ($a.VTMalicioso -ge $VTLimiarRemocao) { $motivo += ("VirusTotal=" + $a.VTMalicioso + " engines") }
+
+        $tam = ''
+        try {
+            $fi = Get-Item -LiteralPath $a.Arquivo -ErrorAction Stop
+            $totalBytes += $fi.Length
+            $tam = Format-Tamanho $fi.Length
+        } catch { $tam = '(nao encontrado agora)' }
+
+        Write-Falha ("[$i] " + (Split-Path $a.Arquivo -Leaf))
+        Write-Info  ("     pasta  : " + (Split-Path $a.Arquivo -Parent))
+        Write-Info  ("     tamanho: " + $tam)
+        Write-Info  ("     motivo : " + ($motivo -join '  +  '))
     }
 
     $acao = if ($ApagarDefinitivo) { 'APAGAR DEFINITIVAMENTE' } else { 'mover para quarentena' }
     Write-Host ''
-    Write-Aviso "Acao: $acao"
+    Write-Aviso ("Total: " + $alvos.Count + " arquivo(s), " + (Format-Tamanho $totalBytes) + "  ->  " + $acao)
 
     if ($SomenteRelatorio) { Write-Simul "Removeria $($alvos.Count) arquivo(s) ($acao)."; return 0 }
 
-    # Autorizacao explicita
-    if ($SemInteracao) {
-        if (-not $ConfirmarRemocao) {
-            Write-Falha 'Modo desatendido: use -ConfirmarRemocao para autorizar a remocao. Nada foi removido.'
-            return 0
-        }
-    } else {
-        $palavra = if ($ApagarDefinitivo) { 'APAGAR' } else { 'QUARENTENA' }
-        $r = (Read-Host "  Digite $palavra para confirmar a remocao").Trim()
-        if ($r -ne $palavra) { Write-Aviso 'Cancelado pelo operador. Nada foi removido.'; return 0 }
+    # Apagar de vez nao vem do menu - so da linha de comando, com
+    # -ApagarDefinitivo, e ai exige -ConfirmarRemocao junto. Sem os dois, em vez
+    # de cancelar e deixar a ameaca solta, cai para a quarentena: neutraliza
+    # agora e o arquivo continua recuperavel.
+    if ($ApagarDefinitivo -and -not $ConfirmarRemocao) {
+        Write-Aviso 'Exclusao definitiva exige -ConfirmarRemocao junto. Usando a quarentena.'
+        $ApagarDefinitivo = $false
+        $acao = 'mover para quarentena'
     }
 
     # Prepara quarentena (se nao for exclusao definitiva)
@@ -2650,8 +2667,11 @@ function Remove-Ameacas {
         Write-Info  'ou reinicie em Modo de Seguranca para remover arquivos travados por malware ativo.'
     }
     if (-not $ApagarDefinitivo -and $removidos -gt 0) {
-        Write-Info "Quarentena em: $pastaQ"
-        Write-Info "Para restaurar um arquivo: mova-o de volta e remova a extensao .vir (ver $manifesto)."
+        Write-Host ''
+        Write-Dest  "   Nada foi apagado - os arquivos estao inteiros na quarentena."
+        Write-Info  "Quarentena em: $pastaQ"
+        Write-Info  'Se algum era falso positivo, a opcao "Restaurar Quarentena" do menu'
+        Write-Info  ("devolve o arquivo ao lugar de origem (manifesto em $manifesto).")
     }
     return $removidos
 }

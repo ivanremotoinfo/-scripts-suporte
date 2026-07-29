@@ -368,6 +368,16 @@ SEGURANÇA E ANTIVÍRUS
     Use para segunda opinião, quando o antivírus do cliente não acusa nada mas
     a máquina se comporta de forma suspeita.
 
+    NÃO PERGUNTA NADA. Antes de mexer, LISTA na tela cada arquivo que vai sair:
+    nome, pasta, tamanho e o motivo (assinatura do ClamAV e/ou quantos motores
+    do VirusTotal acusaram), com o total ao final. A lista é a decisão.
+
+    Antivírus dá falso positivo, e o que protege o cliente aqui não é uma
+    pergunta — é a QUARENTENA: o arquivo é movido inteiro, renomeado para .vir
+    (assim não executa), e fica registrado num manifesto com o caminho de
+    origem. Se algum era falso positivo, a opção 22 devolve ao lugar.
+    Nada é apagado.
+
 [22] RESTAURAR QUARENTENA
     Devolve ao lugar original arquivos que a opção 21 colocou em quarentena.
     Use quando um falso positivo tirou do ar um sistema do cliente.
