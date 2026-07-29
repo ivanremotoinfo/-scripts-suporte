@@ -383,9 +383,32 @@ SEGURANÇA E ANTIVÍRUS
     sozinho depois de algum tempo.
     SEMPRE rode a opção 24 ao terminar o serviço.
 
+    Quando há antivírus de TERCEIROS instalado, ela também tenta parar os
+    serviços dele. Essa parte tem três travas, porque já causou dano real: o
+    nome tem que bater com um nome distintivo de fabricante, o programa NÃO
+    pode morar dentro da pasta do Windows, e o serviço não pode estar na lista
+    de intocáveis (rede, energia, registro, log, agendador). Antivírus de
+    verdade instala em Arquivos de Programas; serviço do Windows roda de
+    dentro do C:\Windows. É essa diferença que separa os dois.
+
 [24] REATIVAR ANTIVÍRUS + FIREWALL
     Religa tudo que a opção 23 desativou.
     Não deixe a máquina do cliente desprotegida: rode sempre ao final.
+
+    REPARA TAMBÉM O ESTRAGO DA VERSÃO ANTIGA. Até 29/07/2026 a opção 23 tinha
+    um defeito que desabilitava serviços do próprio Windows — entre eles o
+    WlanSvc, que é a Configuração Automática de WLAN. Com ele desabilitado, a
+    máquina fica COMO SE NÃO TIVESSE PLACA WI-FI, e não volta sozinha ao
+    reiniciar. A opção 24 agora procura esses serviços, restaura o tipo de
+    início correto e sobe os que precisam estar rodando. Roda mesmo quando não
+    há antivírus de terceiros na máquina — que era justamente o caso em que o
+    reparo nunca acontecia.
+
+    Se a máquina do cliente ficou sem Wi-Fi e você não consegue nem baixar o
+    menu por falta de internet, o conserto mínimo, num PowerShell como
+    Administrador, é:
+        Set-Service WlanSvc -StartupType Automatic
+        Start-Service WlanSvc
 
 [25] ABRIR PROTEÇÃO VÍRUS/AMEAÇAS
     Abre direto a tela de Proteção contra vírus e ameaças do Windows, onde

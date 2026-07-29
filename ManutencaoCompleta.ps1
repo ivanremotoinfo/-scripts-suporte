@@ -1651,56 +1651,178 @@ function Enable-DefenderCompleto {
     else { Write-Aviso 'Comandos enviados, mas a protecao em tempo real ainda consta inativa. Reinicie e confira.' }
 }
 
+# Nomes de servico que NUNCA podem ser parados ou desabilitados por casamento
+# de padrao. Rede, energia, registro, log e o proprio agendador. Segunda linha
+# de defesa: a primeira e' Test-ServicoDoWindows, abaixo.
+$script:ServicosIntocaveis = @(
+    'WlanSvc', 'WwanSvc', 'nsi', 'Dnscache', 'SENS', 'hns', 'Schedule',
+    'LanmanServer', 'LanmanWorkstation', 'Netman', 'netprofm', 'NlaSvc',
+    'Dhcp', 'DPS', 'WdiServiceHost', 'WinHttpAutoProxySvc', 'iphlpsvc',
+    'DeviceInstall', 'DeviceAssociationService', 'PlugPlay', 'TrustedInstaller',
+    'RpcSs', 'DcomLaunch', 'EventLog', 'Winmgmt', 'ProfSvc', 'Power',
+    'CryptSvc', 'BITS', 'wuauserv', 'InstallService', 'WpnService',
+    'LicenseManager', 'AudioSrv', 'Audiosrv', 'AudioEndpointBuilder',
+    'BFE', 'mpssvc', 'WinDefend', 'SecurityHealthService', 'wscsvc',
+    'Themes', 'ShellHWDetection', 'UserManager', 'SystemEventsBroker'
+)
+
+function Test-ServicoDoWindows {
+    <#
+      O servico e do proprio Windows?
+
+      Criterio: onde mora o binario. Servico do Windows roda de dentro de
+      %SystemRoot% (quase sempre svchost.exe); antivirus de terceiro instala em
+      Program Files. Essa e a barreira que faltava - com ela, nenhum padrao,
+      por mais curto que seja, alcanca servico de sistema.
+
+      Na duvida (nao achou o servico, nao leu o caminho) devolve $true, ou
+      seja, PROTEGE. Errar protegendo custa "o antivirus nao parou"; errar
+      liberando custa a placa de rede do cliente.
+    #>
+    param([string]$Nome)
+    try {
+        $filtro = "Name='" + ($Nome -replace "'", "''") + "'"
+        $w = Get-CimInstance Win32_Service -Filter $filtro -ErrorAction Stop
+        if (-not $w -or -not $w.PathName) { return $true }
+        $exe = $w.PathName.Trim()
+        if ($exe -match '^"([^"]+)"') { $exe = $Matches[1] } else { $exe = ($exe -split '\s+')[0] }
+        $win = [Environment]::GetFolderPath('Windows')
+        if ([string]::IsNullOrWhiteSpace($win)) { return $true }
+        return ($exe -like ($win + '\*'))
+    } catch {
+        return $true
+    }
+}
+
+function Get-PadroesAntivirus {
+    <#
+      Nomes de servico/processo de antivirus de terceiros.
+
+      REGRA DESTA LISTA: cada entrada tem que ser um nome DISTINTIVO do
+      fabricante - nunca um pedaco de palavra comum. O casamento e por curinga
+      dos dois lados ("*padrao*"), entao fragmento generico vira rede de
+      arrasto sobre o Windows inteiro. Curto pode, desde que distintivo:
+      'ekrn' e 'egui' sao da ESET e nao aparecem em mais nada.
+
+      Custou caro aprender isso. Em 29/07/2026 esta lista tinha 'ns' - que
+      pegava 31 servicos do Windows, incluindo o WlanSvc (Configuracao
+      Automatica de WLAN). A ferramenta desabilitava o WlanSvc e a maquina do
+      cliente ficava como se nao tivesse placa Wi-Fi. Aconteceu tres vezes no
+      mesmo dia, no mesmo cliente. Tinha tambem 'sched', que pegava o Agendador
+      de Tarefas. Os dois eram abreviacao: 'ns' era do Norton e 'sched' do
+      agendador do Avira. Agora vao pelo nome inteiro.
+
+      NAO colocar sufixo .exe: nem Get-Service -Name nem Get-Process -Name
+      enxergam a extensao, entao 'ekrn.exe' nao casaria com nada e a detecao
+      morreria em silencio.
+    #>
+    return @(
+        # Avast / AVG
+        'avastsvc', 'avastui', 'aswbIDSAgent', 'avgsvc', 'avgui', 'avgnt',
+        # Bitdefender
+        'bdservicehost', 'vsserv', 'bitdefender', 'bdagent',
+        # Kaspersky
+        'kavfs', 'klnagent', 'kaspersky', 'avpsus',
+        # ESET  (ekrn = ESET Service, egui = interface)
+        'ekrn', 'egui', 'esets', 'eamonm',
+        # McAfee
+        'macmnsvc', 'masvc', 'mcshield', 'mfemms', 'mfevtp', 'mcafee',
+        # Norton / Symantec
+        'nortonsecurity', 'nsservice', 'navapsvc', 'symantec', 'ccSvcHst',
+        'SepMasterService', 'SmcService',
+        # Sophos
+        'sophos', 'savservice', 'swi_service',
+        # Webroot
+        'webroot', 'wrsa', 'wrcoreservice',
+        # Panda
+        'pandasecurity', 'psanhost', 'psanservice',
+        # Trend Micro
+        'trendmicro', 'tmlisten', 'ntrtscan', 'tmbmserver',
+        # Avira
+        'avira', 'avguard', 'antivirservice', 'antivirschedulerservice',
+        # EDR / corporativos
+        'CylanceSvc', 'SentinelAgent', 'CSFalconService', 'CarbonBlack', 'cbdefense'
+    )
+}
+
 function Disable-AntivirusTerceiros {
     <#
       Melhor esforco para AV de terceiros. A autoprotecao da maioria bloqueia
       parar o servico externamente - o script tenta e relata o que resistiu.
+
+      Tres barreiras antes de tocar em qualquer servico, nesta ordem:
+        1. o padrao tem que ser nome de verdade (Get-PadroesAntivirus);
+        2. o binario NAO pode morar em %SystemRoot% (Test-ServicoDoWindows);
+        3. o nome nao pode estar em $script:ServicosIntocaveis.
+      Qualquer uma das tres barrando, o servico e' pulado.
     #>
     $st = Get-EstadoProtecao
     $avs = @($st.AntivirusRegistrados | Where-Object { -not $_.EhDefender })
     if ($avs.Count -eq 0) { Write-Info 'Nenhum antivirus de terceiros instalado.'; return }
 
-    Write-Etapa "Antivirus de terceiros detectado(s): $($avs.Nome -join ', ')"
+    Write-Etapa ("Antivirus de terceiros detectado(s): " + ($avs.Nome -join ', '))
 
-    # Servicos e processos por fabricante conhecido
-    $padroes = @(
-        'avast', 'avg', 'aswbIDSAgent', 'bdservicehost', 'vsserv', 'bitdefender',
-        'avp', 'kavfs', 'klnagent', 'kaspersky', 'ekrn', 'egui', 'eset',
-        'mfe', 'macmnsvc', 'masvc', 'mcshield', 'mfemms', 'McAfee',
-        'nortonsecurity', 'nsservice', 'ns', 'symantec', 'ccSvcHst', 'SepMasterService',
-        'sophos', 'savservice', 'swi_service', 'webroot', 'wrsa',
-        'msmpsvc', 'panda', 'psanhost', 'trendmicro', 'tmlisten', 'ntrtscan',
-        'avira', 'avguard', 'sched', 'CylanceSvc', 'SentinelAgent', 'CSFalconService'
-    )
+    $padroes = Get-PadroesAntivirus
 
     if ($SomenteRelatorio) {
         Write-Simul 'Tentaria parar servicos e processos dos antivirus de terceiros.'
         return
     }
 
-    $parados = 0; $resistiram = 0
+    # Junta primeiro, aplica depois: assim o mesmo servico nao e' processado
+    # duas vezes quando casa com mais de um padrao.
+    $alvos = New-Object System.Collections.Generic.List[object]
+    $protegidos = New-Object System.Collections.Generic.List[string]
+
     foreach ($p in $padroes) {
-        foreach ($svc in @(Get-Service -Name "*$p*" -ErrorAction SilentlyContinue)) {
-            if ($svc.Status -eq 'Running') {
-                try {
-                    Set-Service -Name $svc.Name -StartupType Disabled -ErrorAction SilentlyContinue
-                    Stop-Service -Name $svc.Name -Force -ErrorAction Stop
-                    Write-Ok "Servico parado: $($svc.Name)"
-                    $parados++
-                } catch {
-                    Write-Aviso "Autoprotecao bloqueou: $($svc.Name)"
-                    $resistiram++
-                }
-            } else {
-                try { Set-Service -Name $svc.Name -StartupType Disabled -ErrorAction SilentlyContinue } catch { }
+        foreach ($svc in @(Get-Service -Name ('*' + $p + '*') -ErrorAction SilentlyContinue)) {
+            if ($alvos.Name -contains $svc.Name) { continue }
+            if ($script:ServicosIntocaveis -contains $svc.Name) {
+                if ($protegidos -notcontains $svc.Name) { $protegidos.Add($svc.Name) }
+                continue
             }
+            if (Test-ServicoDoWindows -Nome $svc.Name) {
+                if ($protegidos -notcontains $svc.Name) { $protegidos.Add($svc.Name) }
+                continue
+            }
+            $alvos.Add($svc)
         }
-        foreach ($proc in @(Get-Process -Name "*$p*" -ErrorAction SilentlyContinue)) {
+    }
+
+    if ($protegidos.Count -gt 0) {
+        Write-Info ('Servicos do Windows ignorados de proposito: ' + ($protegidos -join ', '))
+    }
+
+    $parados = 0; $resistiram = 0
+    foreach ($svc in $alvos) {
+        if ($svc.Status -eq 'Running') {
+            try {
+                Set-Service -Name $svc.Name -StartupType Disabled -ErrorAction SilentlyContinue
+                Stop-Service -Name $svc.Name -Force -ErrorAction Stop
+                Write-Ok ("Servico parado: " + $svc.Name)
+                $parados++
+            } catch {
+                Write-Aviso ("Autoprotecao bloqueou: " + $svc.Name)
+                $resistiram++
+            }
+        } else {
+            try { Set-Service -Name $svc.Name -StartupType Disabled -ErrorAction SilentlyContinue } catch { }
+        }
+    }
+
+    # Processos: mesma protecao. Processo do Windows mora em %SystemRoot%.
+    $win = [Environment]::GetFolderPath('Windows')
+    foreach ($p in $padroes) {
+        foreach ($proc in @(Get-Process -Name ('*' + $p + '*') -ErrorAction SilentlyContinue)) {
+            $caminho = $null
+            try { $caminho = $proc.Path } catch { }
+            if (-not $caminho) { continue }                        # sem caminho = nao mexe
+            if ($caminho -like ($win + '\*')) { continue }         # do Windows = nao mexe
             try { Stop-Process -Id $proc.Id -Force -ErrorAction Stop } catch { $resistiram++ }
         }
     }
 
-    Write-Ok "AV de terceiros: $parados servico(s) parado(s), $resistiram bloqueado(s) pela autoprotecao."
+    Write-Ok ("AV de terceiros: $parados servico(s) parado(s), $resistiram bloqueado(s) pela autoprotecao.")
     if ($resistiram -gt 0) {
         Write-Aviso 'A autoprotecao impede a desativacao por script. Desative pela interface do antivirus.'
         Write-Info  'Normalmente: clique-direito no icone da bandeja > Desativar / Pausar protecao.'
@@ -1708,19 +1830,116 @@ function Disable-AntivirusTerceiros {
     Add-Alerta 'Tentativa de desativar AV de terceiros - CONFIRME na interface e reative depois.'
 }
 
+function Repair-ServicosDesabilitadosPorEngano {
+    <#
+      Conserta a maquina que rodou a versao da opcao 23 anterior a 29/07/2026.
+
+      Aquela versao casava servicos por padrao curto ('ns', 'sched') com
+      curinga dos dois lados, e desabilitava tudo o que casasse - inclusive
+      WlanSvc, que e a Configuracao Automatica de WLAN. Com ele desabilitado a
+      maquina fica SEM PLACA WI-FI aos olhos do Windows, e nao volta sozinha
+      no boot, porque o StartupType ficou Disabled.
+
+      O reparo e' cirurgico de proposito: so mexe em servico que esteja
+      Disabled AGORA, que seja do Windows, E que casaria com um dos padroes
+      antigos. Assim nao pisa em servico que o proprio Windows deixa
+      desabilitado de fabrica (RemoteRegistry, RemoteAccess, ssh-agent,
+      NetTcpPortSharing e outros) nem no que o cliente desligou de proposito.
+    #>
+    if ($SomenteRelatorio) {
+        Write-Simul 'Procuraria servicos do Windows desabilitados pela versao antiga da opcao 23.'
+        return 0
+    }
+
+    # Os padroes da versao com defeito. Existem aqui SO para reconhecer o
+    # estrago - nao sao mais usados para desativar nada.
+    $padroesAntigos = @('ns', 'sched', 'avg', 'mfe', 'avp', 'eset', 'panda', 'webroot')
+
+    # Como cada servico deve voltar. O que nao estiver na tabela volta como
+    # Manual, que e o padrao seguro: o Windows aciona por gatilho quando
+    # precisa, e nada fica travado.
+    $padraoDeInicio = @{
+        'WlanSvc'    = 'Automatic'; 'nsi'          = 'Automatic'; 'Dnscache'  = 'Automatic'
+        'SENS'       = 'Automatic'; 'LanmanServer' = 'Automatic'; 'Schedule'  = 'Automatic'
+        'WpnService' = 'Automatic'; 'Winmgmt'      = 'Automatic'; 'ProfSvc'   = 'Automatic'
+        'RpcSs'      = 'Automatic'; 'DcomLaunch'   = 'Automatic'; 'EventLog'  = 'Automatic'
+        'CryptSvc'   = 'Automatic'; 'BFE'          = 'Automatic'; 'mpssvc'    = 'Automatic'
+        'NlaSvc'     = 'Automatic'; 'Dhcp'         = 'Automatic'; 'iphlpsvc'  = 'Automatic'
+        'ClickToRunSvc' = 'Automatic'
+    }
+
+    # Servicos que precisam estar RODANDO para a maquina funcionar de verdade.
+    $precisamRodar = @('WlanSvc', 'nsi', 'Dnscache', 'SENS', 'Schedule', 'LanmanServer',
+                       'NlaSvc', 'Dhcp', 'iphlpsvc', 'Winmgmt', 'RpcSs', 'EventLog')
+
+    $achados = New-Object System.Collections.Generic.List[object]
+    foreach ($svc in @(Get-Service -ErrorAction SilentlyContinue)) {
+        $casa = $false
+        foreach ($p in $padroesAntigos) { if ($svc.Name -like ('*' + $p + '*')) { $casa = $true; break } }
+        if (-not $casa) { continue }
+        if (-not (Test-ServicoDoWindows -Nome $svc.Name)) { continue }
+        $filtro = "Name='" + ($svc.Name -replace "'", "''") + "'"
+        $w = Get-CimInstance Win32_Service -Filter $filtro -ErrorAction SilentlyContinue
+        if (-not $w -or $w.StartMode -ne 'Disabled') { continue }
+        $achados.Add($svc)
+    }
+
+    if ($achados.Count -eq 0) { return 0 }
+
+    Write-Host ''
+    Write-Falha ("$($achados.Count) servico(s) do Windows estao DESABILITADOS e nao deveriam estar.")
+    Write-Info  'Assinatura da versao antiga desta ferramenta (anterior a 29/07/2026),'
+    Write-Info  'que desabilitava servico de sistema por casamento de nome parecido.'
+    Write-Host ''
+
+    $consertados = 0
+    foreach ($svc in $achados) {
+        $alvo = if ($padraoDeInicio.ContainsKey($svc.Name)) { $padraoDeInicio[$svc.Name] } else { 'Manual' }
+        try {
+            Set-Service -Name $svc.Name -StartupType $alvo -ErrorAction Stop
+            $consertados++
+            $extra = ''
+            if ($precisamRodar -contains $svc.Name) {
+                try {
+                    Start-Service -Name $svc.Name -ErrorAction Stop
+                    $extra = ' e iniciado'
+                } catch {
+                    $extra = ' (nao iniciou agora; volta no proximo boot)'
+                }
+            }
+            $rotulo = if ($svc.Name -eq 'WlanSvc') { ' <- este e o Wi-Fi' } else { '' }
+            Write-Ok ("$($svc.Name): inicio restaurado para $alvo$extra$rotulo")
+        } catch {
+            Write-Falha ("Nao consegui restaurar " + $svc.Name + ": " + $_.Exception.Message)
+        }
+    }
+
+    if ($achados.Name -contains 'WlanSvc') {
+        Write-Host ''
+        Write-Dest '   O Wi-Fi (WlanSvc) foi restaurado. A placa deve reaparecer em segundos.'
+        Write-Info  'Se nao aparecer, reinicie a maquina - agora ela volta sozinha no boot.'
+    }
+    Add-Alerta ("Reparo: $consertados servico(s) do Windows tinham sido desabilitados indevidamente e foram restaurados.")
+    return $consertados
+}
+
 function Enable-AntivirusTerceiros {
+    # Antes de qualquer coisa, desfaz o estrago da versao antiga - isso vale
+    # mesmo quando nao existe antivirus de terceiros na maquina, que e' o caso
+    # mais comum e era exatamente onde o reparo nunca acontecia.
+    $null = Repair-ServicosDesabilitadosPorEngano
+
     $st = Get-EstadoProtecao
     $avs = @($st.AntivirusRegistrados | Where-Object { -not $_.EhDefender })
     if ($avs.Count -eq 0) { Write-Info 'Nenhum antivirus de terceiros instalado.'; return }
     if ($SomenteRelatorio) { Write-Simul 'Reativaria os servicos dos antivirus de terceiros.'; return }
 
-    $padroes = @('avast', 'avg', 'aswbIDSAgent', 'bdservicehost', 'vsserv', 'avp', 'kavfs',
-                 'ekrn', 'mfemms', 'masvc', 'nsservice', 'SepMasterService', 'savservice',
-                 'swi_service', 'wrsa', 'tmlisten', 'ntrtscan', 'avguard', 'sched',
-                 'CylanceSvc', 'SentinelAgent', 'CSFalconService')
+    $padroes = Get-PadroesAntivirus
     $religados = 0
     foreach ($p in $padroes) {
-        foreach ($svc in @(Get-Service -Name "*$p*" -ErrorAction SilentlyContinue)) {
+        foreach ($svc in @(Get-Service -Name ('*' + $p + '*') -ErrorAction SilentlyContinue)) {
+            if ($script:ServicosIntocaveis -contains $svc.Name) { continue }
+            if (Test-ServicoDoWindows -Nome $svc.Name) { continue }
             try {
                 Set-Service -Name $svc.Name -StartupType Automatic -ErrorAction SilentlyContinue
                 Start-Service -Name $svc.Name -ErrorAction SilentlyContinue
@@ -1728,7 +1947,7 @@ function Enable-AntivirusTerceiros {
             } catch { }
         }
     }
-    Write-Ok "AV de terceiros: $religados servico(s) religado(s)."
+    Write-Ok ("AV de terceiros: $religados servico(s) religado(s).")
     Write-Info 'Reinicie a maquina para garantir a reativacao completa; confirme o icone na bandeja.'
 }
 
