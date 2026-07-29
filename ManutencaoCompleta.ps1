@@ -1352,6 +1352,60 @@ function Test-AcessoRemotoAtivo {
     return $false
 }
 
+function Restart-DispositivoPnp {
+    <#
+      Desabilita e reabilita um dispositivo - o equivalente a desconectar e
+      reconectar sem levantar da cadeira.
+
+      NENHUM lugar do motor deve chamar Disable-PnpDevice direto. Tudo passa
+      por aqui, por dois motivos:
+
+      1. RECUSA dispositivo de REDE. Classe Net e as irmas nao passam, com nome
+         nenhum. Desabilitar a placa deixa a maquina sem internet, e quem
+         atende de longe NAO TEM COMO REABILITAR: o atendimento acaba ali e
+         alguem precisa ir fisicamente ate a maquina. Foi assim que o cliente
+         ficou sem Wi-Fi em 29/07/2026 (por outro caminho, o WlanSvc).
+
+      2. GARANTE o reabilitar. O Enable vai num finally: se o Disable der certo
+         e qualquer coisa falhar depois, o dispositivo volta assim mesmo. Sem
+         isso, um erro no meio deixa o aparelho desligado para sempre - que e
+         exatamente o estrago que se quer evitar.
+    #>
+    param([string]$InstanceId, [string]$Nome)
+
+    $dev = Get-PnpDevice -InstanceId $InstanceId -ErrorAction SilentlyContinue
+    if (-not $dev) { Write-Aviso ("Dispositivo nao encontrado: " + $Nome); return $false }
+
+    if ($dev.Class -in @('Net', 'NetTrans', 'NetClient', 'NetService')) {
+        Write-Falha ("RECUSADO: '" + $Nome + "' e dispositivo de REDE.")
+        Write-Info  'Placa de rede nao se desabilita por script: se o atendimento e remoto,'
+        Write-Info  'ninguem consegue reabilitar de fora.'
+        Add-Alerta ("Tentativa de desabilitar dispositivo de rede recusada pelo motor: " + $Nome)
+        return $false
+    }
+
+    $desabilitou = $false
+    try {
+        Disable-PnpDevice -InstanceId $InstanceId -Confirm:$false -ErrorAction Stop
+        $desabilitou = $true
+        Start-Sleep -Seconds 2
+    } catch {
+        Write-Aviso ("Nao foi possivel desabilitar " + $Nome + ": " + $_.Exception.Message)
+        return $false
+    } finally {
+        if ($desabilitou) {
+            try {
+                Enable-PnpDevice -InstanceId $InstanceId -Confirm:$false -ErrorAction Stop
+            } catch {
+                Write-Falha ("ATENCAO: '" + $Nome + "' ficou DESABILITADO e nao voltou.")
+                Write-Info  'Reabilite no Gerenciador de Dispositivos (Win+X > Gerenciador).'
+                Add-Alerta ("Dispositivo ficou desabilitado apos falha ao reabilitar: " + $Nome)
+            }
+        }
+    }
+    return $true
+}
+
 function Update-EnderecoIP {
     if ($SomenteRelatorio) { Write-Simul 'Renovaria o endereco IP (DHCP).'; return }
 
@@ -5021,14 +5075,9 @@ function Repair-Webcam {
             foreach ($cam in $camerasErro) {
                 $probDesc = Descricao-ProblemCode -Code ([int]$cam.ProblemCode)
                 Write-Info "Reinstalando driver: $($cam.FriendlyName) - $probDesc"
-                try {
-                    Disable-PnpDevice -InstanceId $cam.InstanceId -Confirm:$false -ErrorAction SilentlyContinue
-                    Start-Sleep -Milliseconds 1000
-                    Enable-PnpDevice -InstanceId $cam.InstanceId -Confirm:$false -ErrorAction Stop
+                if (Restart-DispositivoPnp -InstanceId $cam.InstanceId -Nome $cam.FriendlyName) {
                     Write-Ok "Driver recarregado: $($cam.FriendlyName)"
                     $acoesTomadas.Add("Driver reinstalado: $($cam.FriendlyName)")
-                } catch {
-                    Write-Aviso "Falha no ciclo disable/enable: $_"
                 }
             }
             Write-Info 'Aguardando recarregamento do driver...'
@@ -14267,12 +14316,9 @@ function Repair-MIDI {
                 # Reinicia o teclado com problema, que e' o equivalente a
                 # desconectar e reconectar sem levantar da cadeira.
                 foreach ($d in $codigo10) {
-                    try {
-                        Disable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false -ErrorAction Stop
-                        Start-Sleep -Seconds 2
-                        Enable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false -ErrorAction Stop
+                    if (Restart-DispositivoPnp -InstanceId $d.InstanceId -Nome $d.FriendlyName) {
                         Write-Ok "Reiniciado: $($d.FriendlyName)"
-                    } catch {
+                    } else {
                         Write-Aviso "Reinicie a mao (desconecte e reconecte o cabo): $($d.FriendlyName)"
                     }
                 }
@@ -14372,14 +14418,10 @@ function Repair-MIDI {
         $r = (Read-Host '  Desabilitar e reabilitar (equivale a desconectar e reconectar)? (S/N) [S]').Trim()
         if (-not $r -or $r -match '^[Ss]') {
             foreach ($d in $comProblema) {
-                try {
-                    Disable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false -ErrorAction Stop
-                    Start-Sleep -Seconds 2
-                    Enable-PnpDevice -InstanceId $d.InstanceId -Confirm:$false -ErrorAction Stop
+                if (Restart-DispositivoPnp -InstanceId $d.InstanceId -Nome $d.FriendlyName) {
                     Write-Ok "Reiniciado: $($d.FriendlyName)"
                     $corrigidos++
-                } catch {
-                    Write-Aviso "Nao foi possivel reiniciar $($d.FriendlyName): $($_.Exception.Message)"
+                } else {
                     & pnputil /enable-device $d.InstanceId 2>&1 | Out-Null
                 }
             }
