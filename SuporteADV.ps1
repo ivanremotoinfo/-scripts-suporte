@@ -141,7 +141,7 @@ $menu = @(
 
     # --- CERTIFICADOS E JURIDICO ---
     @{ Cat='CERTIFICADOS';Label='Backup do Certificado A1';      Tipo='v2';     Args=@{ Ferramenta='backupcert' } }
-    @{ Cat='CERTIFICADOS';Label='Limpar Certificados Vencidos';  Tipo='v2';     Args=@{ Ferramenta='limparcerts' } }
+    @{ Cat='CERTIFICADOS';Label='Limpar Certificados Inuteis';   Tipo='v2';     Args=@{ Ferramenta='limparcerts' } }
     @{ Cat='CERTIFICADOS';Label='Configurar Java (Juridico)';    Tipo='v2';     Args=@{ Ferramenta='java' } }
     @{ Cat='CERTIFICADOS';Label='Configurar Ambiente PJe';       Tipo='v2';     Args=@{ Ferramenta='pje' } }
 

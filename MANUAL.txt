@@ -1040,7 +1040,7 @@ CERTIFICADOS E JURÍDICO
     Teste de verdade: reinstalar o `.pfx` numa máquina de teste comprova que a
     cópia presta.
 
-[61] LIMPAR CERTIFICADOS VENCIDOS
+[61] LIMPAR CERTIFICADOS INÚTEIS
     Limpa a loja Pessoal do usuário. NÃO PERGUNTA NADA: escolher a opção no
     menu já é a confirmação. A regra é uma só, sem exceção:
 
